@@ -76,6 +76,23 @@ PASS: native retired lock intent observation revalidates exact creator death and
 
 - [ ] Commit/push implementation and run focused history plus Windows Contracts on one SHA. Verify all nineteen prior receipts plus the two new executed receipts; record actual red/green SHA/run/job evidence and push it.
 
+## Executed evidence
+
+- Test-only `6d443fa4`: focused run `40441017121`, job `121981117806`,
+  failed in the distinct third actor because the native retirement-observation
+  module did not exist, after both real publisher/bridge deaths and exact
+  retained-intent checks. Actual missing-module diagnostics were downloaded.
+- Implementation `5c67842b938a0ac1c6b0f6b4c7e5d372845ed50e`:
+  focused run `40443085394`, job `121987801632`, and Windows Contracts
+  `40443088004`, job `121987807189`, both passed on that exact SHA.
+- Actual focused logs contain all twenty-one required executed receipts.
+  At `2026-10-27T03:36:58Z`, both new receipts confirmed real second-publisher
+  death and distinct third-actor native observation, including wrong intent
+  inode, identical-byte owner replacement refusal and preserved ordinary gates.
+- Actual Contracts logs confirm closed helper inventory, strict native JSON
+  binding and zero failures. All execution ran in Actions; no local validation,
+  server, production lock deletion or continuation authority was introduced.
+
 ## Next guarded deletion gate
 
 The validated intent supplies durable evidence for future exact owner removal, but observation itself cannot delete. Native owner deletion must retain/reopen the exact file identity through the existing retirement handle API and support a fresh actor when that owner has already been removed. Directory deletion needs its own exact retained identity and a surviving intent, with explicit settlement after it disappears. Real actor death at both deletion boundaries remains mandatory; directory-only states lacking a validated intent stay blocked. No public routing, state write or worker authority follows from this increment.
