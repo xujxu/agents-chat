@@ -51,8 +51,9 @@ export async function holdLockRetirementSettlement({ source, control, pwsh, prev
 }
 
 export async function assertLockRetirementSettlementAfterDeath({
-  source, control, pwsh, admission, previous, state, completionBytes,
+  source, control, pwsh, admission, previous, state, completionBytes, stage = 'complete',
 }) {
+  assert.ok(['complete', 'proof', 'publication'].includes(stage));
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
   const identity = await processIdentity(process.pid);
@@ -103,45 +104,45 @@ export async function assertLockRetirementSettlementAfterDeath({
   const first = await observe(args);
   assert.equal(first.stderr, '');
   assert.deepEqual(JSON.parse(first.stdout), expected);
-  const wrong = args.slice();
-  wrong[wrong.indexOf('-TerminalIno') + 1] = previous.terminal.ino === '1' ? '2' : '1';
   const refused = error => error.message.includes('Lock settlement observation failed; retain evidence.');
-  await assert.rejects(observe(wrong), refused);
-  const original = snapshots[3];
-  const held = path.join(control, 'fixture-held-lock-terminal.json');
-  await rename(original.file, held);
-  let replacement;
-  try {
-    await writeFile(original.file, original.bytes, { flag: 'wx' });
-    replacement = await lstat(original.file, { bigint: true });
-    assert.notEqual(replacement.ino, original.identity.ino);
-    await assert.rejects(observe(args), refused);
-    assert.deepEqual(await readFile(original.file), original.bytes);
-  } finally {
-    if (replacement) {
-      const current = await lstat(original.file, { bigint: true });
-      assert.equal(current.dev, replacement.dev);
-      assert.equal(current.ino, replacement.ino);
+  if (stage !== 'publication') {
+    const wrong = args.slice();
+    wrong[wrong.indexOf('-TerminalIno') + 1] = previous.terminal.ino === '1' ? '2' : '1';
+    await assert.rejects(observe(wrong), refused);
+    const original = snapshots[3];
+    const held = path.join(control, 'fixture-held-lock-terminal.json');
+    await rename(original.file, held);
+    let replacement;
+    try {
+      await writeFile(original.file, original.bytes, { flag: 'wx' });
+      replacement = await lstat(original.file, { bigint: true });
+      assert.notEqual(replacement.ino, original.identity.ino);
+      await assert.rejects(observe(args), refused);
       assert.deepEqual(await readFile(original.file), original.bytes);
-      await unlink(original.file);
+    } finally {
+      if (replacement) {
+        const current = await lstat(original.file, { bigint: true });
+        assert.equal(current.dev, replacement.dev);
+        assert.equal(current.ino, replacement.ino);
+        assert.deepEqual(await readFile(original.file), original.bytes);
+        await unlink(original.file);
+      }
+      await rename(held, original.file);
     }
-    await rename(held, original.file);
+    const directory = path.join(control, 'lock');
+    await mkdir(directory);
+    const foreign = await lstat(directory, { bigint: true });
+    try {
+      await assert.rejects(observe(args), refused);
+      const current = await lstat(directory, { bigint: true });
+      assert.equal(current.dev, foreign.dev);
+      assert.equal(current.ino, foreign.ino);
+      assert.deepEqual(await readdir(directory), []);
+    } finally { await rmdir(directory); }
+    const revalidated = await observe(args);
+    assert.equal(revalidated.stderr, '');
+    assert.deepEqual(JSON.parse(revalidated.stdout), expected);
   }
-  const directory = path.join(control, 'lock');
-  await mkdir(directory);
-  const foreign = await lstat(directory, { bigint: true });
-  try {
-    await assert.rejects(observe(args), refused);
-    const current = await lstat(directory, { bigint: true });
-    assert.equal(current.dev, foreign.dev);
-    assert.equal(current.ino, foreign.ino);
-    assert.deepEqual(await readdir(directory), []);
-  } finally { await rmdir(directory); }
-  const revalidated = await observe(args);
-  assert.equal(revalidated.stderr, '');
-  assert.deepEqual(JSON.parse(revalidated.stdout), expected);
-  const successorResult = await observe([...args, '-PrepareSuccessor']);
-  assert.equal(successorResult.stderr, '');
   const assertSuccessor = successor => {
     const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
     for (const value of [successor.attemptId, successor.newOwner.operationId, successor.newOwner.token]) {
@@ -166,30 +167,36 @@ export async function assertLockRetirementSettlementAfterDeath({
       },
     });
   };
-  assertSuccessor(JSON.parse(successorResult.stdout));
-  const publicationResult = await observe([...args, '-PrepareSuccessor', '-PublishSuccessor']);
-  assert.equal(publicationResult.stderr, '');
-  const publication = JSON.parse(publicationResult.stdout);
-  assert.deepEqual(Object.keys(publication).sort(), ['observation', 'prepared', 'record']);
-  assertSuccessor(publication.record);
-  assert.deepEqual(Object.keys(publication.prepared).sort(), ['bytes', 'dev', 'ino', 'path', 'sha256']);
-  assert.equal(publication.prepared.path, `inactive-handoff-${publication.record.attemptId}-prepared.json`);
-  const publishedFile = path.join(control, publication.prepared.path);
-  const publishedBytes = await readFile(publishedFile);
-  const publishedIdentity = await lstat(publishedFile, { bigint: true });
-  assert.equal(publishedBytes.length, publication.prepared.bytes);
-  assert.equal(createHash('sha256').update(publishedBytes).digest('hex'), publication.prepared.sha256);
-  assert.equal(publishedIdentity.dev.toString(), publication.prepared.dev);
-  assert.equal(publishedIdentity.ino.toString(), publication.prepared.ino);
-  assert.deepEqual(JSON.parse(publishedBytes), publication.record);
-  assert.deepEqual(publication.observation, {
-    status: 'successor-prepared', attemptId: publication.record.attemptId,
-    previousAttemptId: previous.attemptId, previousOperationId: prepared.previousOperationId,
-    project: prepared.project, prepared: publication.prepared, predecessor: publication.record.predecessor,
-    runtimeAuthority: false, lockAuthority: false,
-  });
-  snapshots.push({ file: publishedFile, bytes: publishedBytes, identity: publishedIdentity });
-  await assert.rejects(observe(args), refused);
+  if (stage !== 'publication') {
+    const successorResult = await observe([...args, '-PrepareSuccessor']);
+    assert.equal(successorResult.stderr, '');
+    assertSuccessor(JSON.parse(successorResult.stdout));
+  }
+  if (stage !== 'proof') {
+    const publicationResult = await observe([...args, '-PrepareSuccessor', '-PublishSuccessor']);
+    assert.equal(publicationResult.stderr, '');
+    const publication = JSON.parse(publicationResult.stdout);
+    assert.deepEqual(Object.keys(publication).sort(), ['observation', 'prepared', 'record']);
+    assertSuccessor(publication.record);
+    assert.deepEqual(Object.keys(publication.prepared).sort(), ['bytes', 'dev', 'ino', 'path', 'sha256']);
+    assert.equal(publication.prepared.path, `inactive-handoff-${publication.record.attemptId}-prepared.json`);
+    const publishedFile = path.join(control, publication.prepared.path);
+    const publishedBytes = await readFile(publishedFile);
+    const publishedIdentity = await lstat(publishedFile, { bigint: true });
+    assert.equal(publishedBytes.length, publication.prepared.bytes);
+    assert.equal(createHash('sha256').update(publishedBytes).digest('hex'), publication.prepared.sha256);
+    assert.equal(publishedIdentity.dev.toString(), publication.prepared.dev);
+    assert.equal(publishedIdentity.ino.toString(), publication.prepared.ino);
+    assert.deepEqual(JSON.parse(publishedBytes), publication.record);
+    assert.deepEqual(publication.observation, {
+      status: 'successor-prepared', attemptId: publication.record.attemptId,
+      previousAttemptId: previous.attemptId, previousOperationId: prepared.previousOperationId,
+      project: prepared.project, prepared: publication.prepared, predecessor: publication.record.predecessor,
+      runtimeAuthority: false, lockAuthority: false,
+    });
+    snapshots.push({ file: publishedFile, bytes: publishedBytes, identity: publishedIdentity });
+    await assert.rejects(observe(args), refused);
+  }
   const { acquireLock, releaseLock } = await load('state.mjs');
   await assert.rejects(acquireLock(control, { pwsh, admission, project: prepared.project, operationId: randomUUID() }));
   await assert.rejects(releaseLock(control, prepared.newOwner, { pwsh, admission }));
@@ -200,8 +207,7 @@ export async function assertLockRetirementSettlementAfterDeath({
     assert.equal(current.ino, snapshot.identity.ino);
   }
   assert.deepEqual((await readdir(control)).filter(name => name.toLowerCase().startsWith('inactive-handoff-')).sort(),
-    [previous.prepared.path, previous.committed.path, previous.retirement.path,
-      previous.terminal.path, publication.prepared.path].sort());
+    snapshots.map(snapshot => path.basename(snapshot.file)).sort());
   for (const [file, bytes, originalIdentity] of [
     [stateFile, state, stateIdentity], [completionFile, completionBytes, completionIdentity],
   ]) {
@@ -210,9 +216,12 @@ export async function assertLockRetirementSettlementAfterDeath({
     assert.equal(current.dev, originalIdentity.dev);
     assert.equal(current.ino, originalIdentity.ino);
   }
-  await assert.rejects(lstat(directory), { code: 'ENOENT' });
-  console.log('PASS: fresh native successor preparation derives a distinct live owner from settled evidence without publication or authority');
+  await assert.rejects(lstat(path.join(control, 'lock')), { code: 'ENOENT' });
+  if (stage !== 'publication') {
+    console.log('PASS: fresh native successor preparation derives a distinct live owner from settled evidence without publication or authority');
+    console.log('PASS: actual lock settlement publisher death preserves exact terminal evidence for a distinct sixth native actor without continuation authority');
+  }
+  if (stage === 'proof') return;
   console.log('PASS: native successor publication retains every predecessor and creates one exact preparation without continuation authority');
   for (const snapshot of snapshots.reverse()) await unlink(snapshot.file);
-  console.log('PASS: actual lock settlement publisher death preserves exact terminal evidence for a distinct sixth native actor without continuation authority');
 }

@@ -773,6 +773,21 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                                 Assert ($ownerChecker.ExitCode -eq 0) 'Fresh owner-retired proof actor failed'
                             } finally { $ownerChecker.Dispose() }
                         }
+                        if ($historyBoundary -ceq 'lock-settled-history') {
+                            $settlementChecker = [Deployment.WindowsControllerProcess]::Start($node,
+                                @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
+                                    $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
+                                    'check-lock-settled-history', $historyActor), $control, $environment)
+                            try {
+                                $output = $settlementChecker.StandardOutput.ReadToEndAsync()
+                                $diagnostic = $settlementChecker.StandardError.ReadToEndAsync()
+                                Assert ($settlementChecker.WaitForExit(120000)) 'Fresh settlement proof actor timed out'
+                                Write-Output $output.GetAwaiter().GetResult()
+                                $errors = $diagnostic.GetAwaiter().GetResult()
+                                if ($errors) { [Console]::Error.WriteLine($errors) }
+                                Assert ($settlementChecker.ExitCode -eq 0) 'Fresh settlement proof actor failed'
+                            } finally { $settlementChecker.Dispose() }
+                        }
                         $historyResumer = [Deployment.WindowsControllerProcess]::Start($node,
                             @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
                                 $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,

@@ -51,10 +51,21 @@ or an earlier failure.
 - [ ] Extract `Get-AgentsChatStoppedHistoryHandoffSuccessorBinding` with the
   current scalar parameters and unchanged role, GUID, owner, time, size and
   original-binding checks. Derive predecessor descriptors directly from
-  retained native files after strict terminal assertion. It must not call
-  full settlement observation or namespace verification. Keep
+  retained native files after strict terminal assertion. Read the original
+  fourteen-field template only from the actual pinned prepared file;
+  validate its exact schema and derive the previous state timestamp from
+  its pinned `oldState` bytes. Replace only phase, attempt and native live
+  owner, then add predecessor descriptors. It must not call full settlement
+  observation, namespace verification or `Get-AgentsChatStoppedHistoryHandoffBinding`:
+  the latter opens state files and runs full cleanup, which is not an
+  appropriate callback for repeated namespace assertions. Keep
   `Get-AgentsChatStoppedHistoryHandoffSuccessorRecord` as the full getter:
-  recheck settlement around the binding helper and recheck the live owner.
+  validate scalar inputs through the binding helper, recheck full settlement,
+  rederive the binding and recheck full settlement again before returning.
+  The full settlement getter still invokes the existing retired prepared
+  binding verifier, which rederives actual task/state/configuration/runtime
+  evidence. Thus the template is not trusted caller JSON or a replacement
+  for original native proof, and namespace assertions add no state handles.
 - [ ] Add `Assert-AgentsChatStoppedHistoryHandoffSuccessorPrepared(Context)`.
   Require both independent preparer/publisher roles and retained successor
   file/request. Match actual descriptor and strict fifteen-field JSON
@@ -108,3 +119,22 @@ Actual successor-publisher death and explicit five-record native reopening
 must pass before new-lock publication. Neither this fifth file nor its
 prospective owner is a continuation capability. State continuity, release,
 public routing and actual repeat application lifecycle remain unimplemented.
+
+## Fixture budget correction before valid red
+
+Test-only `90134a4fa0b957dafc22385a8270a0e1a9e467c9`, focused run
+`40479237413`, job `122105078348`, timed out in the sixth actor at
+`2026-10-27T09:46:44.4788061Z`. It combined all accepted settlement
+negative cases, derivation and the added publication invocation in the
+existing 120-second takeover budget. This is not accepted publication red.
+
+Keep all checks but separate responsibilities: a sixth
+`check-lock-settled-history` actor runs settlement proof and derivation,
+checks unchanged evidence and ordinary refusal, then exits without deleting
+records or restoring the archive fixture. A seventh
+`resume-lock-settled-history` actor independently reopens the full native
+settlement and runs publication, duplicate/refusal checks and original
+fixture restoration. Both actors retain their individual 120-second host
+budgets, native invocations retain 45 seconds, and all bridge-death waits
+remain 15 seconds. Push this fixture split with the native publication
+module still absent; require actual missing-module red before implementation.

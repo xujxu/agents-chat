@@ -480,6 +480,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   const directoryRetirementResume = mode === 'resume-lock-directory-retired-history';
   const settlementCrash = mode === 'crash-lock-settled-history';
   const settlementResume = mode === 'resume-lock-settled-history';
+  const settlementCheck = mode === 'check-lock-settled-history';
   const lockStages = {
     'crash-lock-directory-history': 'Directory', 'resume-lock-directory-history': 'Directory',
     'crash-lock-owner-history': 'Owner', 'resume-lock-owner-history': 'Owner',
@@ -489,12 +490,13 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     'check-lock-owner-retired-history': 'Committed',
     'crash-lock-directory-retired-history': 'Committed', 'resume-lock-directory-retired-history': 'Committed',
     'crash-lock-settled-history': 'Committed', 'resume-lock-settled-history': 'Committed',
+    'check-lock-settled-history': 'Committed',
   };
   const lockStage = lockStages[mode];
   const lockCrash = Boolean(lockStage && mode.startsWith('crash-') &&
     !retirementCrash && !ownerRetirementCrash && !directoryRetirementCrash && !settlementCrash);
   const lockResume = Boolean(lockStage &&
-    (mode.startsWith('resume-') || retirementCrash || ownerRetirementCrash || directoryRetirementCrash || ownerRetirementCheck || settlementCrash));
+    (mode.startsWith('resume-') || retirementCrash || ownerRetirementCrash || directoryRetirementCrash || ownerRetirementCheck || settlementCrash || settlementCheck));
   if (['crash-history', 'resume-history', 'crash-finalized-history', 'resume-finalized-history',
     'resume-history-saved', 'crash-completed-history', 'resume-completed-history',
     'crash-prepared-history', 'resume-prepared-history',
@@ -639,10 +641,12 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     if (settlementCrash) {
       await holdLockRetirementSettlement({ source, control, pwsh, previous: JSON.parse(crashStep) });
       throw new Error('Held lock settlement publisher unexpectedly returned.');
-    } else if (settlementResume) {
+    } else if (settlementResume || settlementCheck) {
       await assertLockRetirementSettlementAfterDeath({
         source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
+        stage: settlementCheck ? 'proof' : 'publication',
       });
+      if (settlementCheck) return;
     } else if (directoryRetirementCrash) {
       await holdLockDirectoryRetirement({ source, control, pwsh, previous: JSON.parse(crashStep) });
       throw new Error('Held directory retirement executor unexpectedly returned.');
