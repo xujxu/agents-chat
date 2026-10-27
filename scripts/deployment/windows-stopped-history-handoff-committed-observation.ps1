@@ -136,6 +136,10 @@ function Get-AgentsChatStoppedHistoryHandoffCommittedNamespace([hashtable]$Conte
         Assert-AgentsChatStoppedHistoryHandoffLockSettlement $Context
         $names += $Context.HistoryHandoffLockSettlement.Descriptor.path
     }
+    if ($Context.ContainsKey('HistoryHandoffSuccessorPrepared')) {
+        Assert-AgentsChatStoppedHistoryHandoffSuccessorPrepared $Context
+        $names += $Context.HistoryHandoffSuccessorPrepared.Descriptor.path
+    }
     return $names
 }
 

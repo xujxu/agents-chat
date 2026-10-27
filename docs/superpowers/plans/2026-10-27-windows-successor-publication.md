@@ -138,3 +138,10 @@ fixture restoration. Both actors retain their individual 120-second host
 budgets, native invocations retain 45 seconds, and all bridge-death waits
 remain 15 seconds. Push this fixture split with the native publication
 module still absent; require actual missing-module red before implementation.
+
+Accepted split-actor red: `201374614797ae4029f57476686edc4959d599a1`,
+focused run `40483783166`, job `122120379623`. The sixth actor's preparation
+and actual terminal-publisher-death receipts passed at
+`2026-10-27T10:09:54Z`. The separate seventh actor reached publication and
+failed on missing `windows-stopped-history-handoff-successor-publication.ps1`
+at `2026-10-27T10:10:28.8665440Z`. No time budget or assertion was relaxed.
