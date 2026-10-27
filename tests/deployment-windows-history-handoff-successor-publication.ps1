@@ -5,17 +5,6 @@ function Test-AgentsChatStoppedHistoryHandoffSuccessorPublication(
     . (Join-Path $Source 'windows-stopped-history-handoff-successor-publication.ps1')
     $trace = [Environment]::GetEnvironmentVariable('AGENTS_CHAT_TEST_SUCCESSOR_TRACE')
     if ($trace) {
-        $global:AgentsChatSuccessorPublicationTrace = $trace
-        $null = Set-PSBreakpoint -Command @(
-            'Get-AgentsChatStoppedHistoryHandoffSuccessorRecord',
-            'Get-AgentsChatStoppedHistoryHandoffSuccessorBinding',
-            'Get-AgentsChatStoppedHistoryHandoffLockSettlementObservation',
-            'Assert-AgentsChatStoppedHistoryHandoffSuccessorPrepared',
-            'Get-AgentsChatStoppedHistoryHandoffSuccessorPreparedObservation'
-        ) -Action {
-            [IO.File]::AppendAllText($global:AgentsChatSuccessorPublicationTrace,
-                "$([DateTime]::UtcNow.ToString('O')) $($PSDebugContext.InvocationInfo.MyCommand.Name)`n")
-        }
         [IO.File]::AppendAllText($trace, "$([DateTime]::UtcNow.ToString('O')) publication-fixture-entered`n")
     }
     $request = @{

@@ -199,3 +199,27 @@ and stderr remains empty. Always remove the temporary trace. This diagnostic
 increment changes no production code, proof or time budget. Determine the
 actual slow phase before choosing the next correction; nested native proof
 passes are a hypothesis, not yet measured evidence.
+
+## Measured fixture-only bootstrap duplication
+
+Diagnostic `f3e6a951843b53ce0a8819d0dd31a4147269022f`, run
+`40498781338` / job `122170894698`, confirmed entry to the publication
+fixture at `2026-10-27T12:12:30.4684223Z` and successful return from the
+real native publisher at `12:12:53.3581648Z`. The 45-second invocation
+ended at `12:13:00Z` before the subsequent observation returned. The
+publisher itself completes; the combined bootstrap, publication and
+additional observation exceed one invocation's budget. Command breakpoint
+tracing produced no entries and is removed; retain explicit phase tracing.
+
+Only the publication fixture now opens the committed observation directly
+with explicit retirement and terminal descriptors. That existing native
+opener initializes and pins all four records and runs its full committed
+proof. The fixture no longer wraps that bootstrap in a terminal getter and
+then repeats the same terminal getter immediately before invoking the
+publisher, which already performs complete terminal proofs before and
+after publication. The actual publisher's two full pre-publication proofs,
+two post-publication proofs, independent observation's two full proofs,
+duplicate refusal, every JS assertion and the 45/120/15-second budgets
+remain unchanged. Preparation-only and read-only observation fixtures keep
+their original bootstrap and observation paths. This correction is still
+subject to same-SHA Actions acceptance.

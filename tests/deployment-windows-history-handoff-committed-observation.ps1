@@ -71,10 +71,16 @@ try {
                 path="inactive-handoff-$AttemptId-lock-retired.json"
                 dev=$TerminalDev; ino=$TerminalIno; bytes=$TerminalBytes; sha256=$TerminalSha256
             }
-            $scope = Open-AgentsChatStoppedHistoryHandoffLockSettlementObservation $Control `
-                $ControllerPid $ControllerIdentity $AttemptId $prepared $committed $retirement $terminal
-            $observation = Get-AgentsChatStoppedHistoryHandoffLockSettlementObservation $scope `
-                $ControllerPid $ControllerIdentity
+            if ($PublishSuccessor) {
+                $scope = Open-AgentsChatStoppedHistoryHandoffCommittedObservation $Control `
+                    $ControllerPid $ControllerIdentity $AttemptId $prepared $committed `
+                    -Retirement $retirement -Terminal $terminal
+            } else {
+                $scope = Open-AgentsChatStoppedHistoryHandoffLockSettlementObservation $Control `
+                    $ControllerPid $ControllerIdentity $AttemptId $prepared $committed $retirement $terminal
+                $observation = Get-AgentsChatStoppedHistoryHandoffLockSettlementObservation $scope `
+                    $ControllerPid $ControllerIdentity
+            }
         } else {
             $scope = Open-AgentsChatStoppedHistoryHandoffLockRetirementObservation $Control `
                 $ControllerPid $ControllerIdentity $AttemptId $prepared $committed $retirement
