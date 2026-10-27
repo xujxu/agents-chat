@@ -145,3 +145,21 @@ and actual terminal-publisher-death receipts passed at
 `2026-10-27T10:09:54Z`. The separate seventh actor reached publication and
 failed on missing `windows-stopped-history-handoff-successor-publication.ps1`
 at `2026-10-27T10:10:28.8665440Z`. No time budget or assertion was relaxed.
+
+## Nullable prepared template correction
+
+Implementation `adbfadc1161f8daf5fd98cc058cfe0ff958e29bc` passed Windows
+Contracts run `40486888306`, job `122130808817`, but focused run
+`40486884215`, job `122130795123`, failed at the valid successor derivation
+with `Unsupported retirement JSON value.` at `2026-10-27T10:43:18Z`.
+The original native prepared record intentionally contains
+`observation.runtime=null`; the reused retirement converter rejects null
+by default.
+
+Add an explicit, recursively propagated `AllowNull` switch to that
+converter/reader, enabled only when decoding the pinned prepared template.
+Keep default rejection and duplicate-key rejection unchanged. Add focused
+fixture checks for nested null preservation, unchanged default refusal and
+duplicate refusal in nullable mode. Do not replace strict parsing with
+PowerShell's permissive JSON conversion or weaken original native binding.
+This failed focused run is not accepted publication evidence.

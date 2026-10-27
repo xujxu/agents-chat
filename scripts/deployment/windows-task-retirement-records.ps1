@@ -1,21 +1,25 @@
-function ConvertFrom-AgentsChatRetirementJson([Text.Json.JsonElement]$Value) {
+function ConvertFrom-AgentsChatRetirementJson([Text.Json.JsonElement]$Value, [switch]$AllowNull) {
     switch ($Value.ValueKind) {
         'Object' {
             $result = [ordered]@{}
             foreach ($property in $Value.EnumerateObject()) {
                 if ($result.Contains($property.Name)) { throw 'Duplicate retirement field.' }
-                $result[$property.Name] = ConvertFrom-AgentsChatRetirementJson $property.Value
+                $result[$property.Name] = ConvertFrom-AgentsChatRetirementJson $property.Value -AllowNull:$AllowNull
             }
             return $result
         }
         'Array' {
-            $items = @($Value.EnumerateArray() | ForEach-Object { ConvertFrom-AgentsChatRetirementJson $_ })
+            $items = @($Value.EnumerateArray() | ForEach-Object { ConvertFrom-AgentsChatRetirementJson $_ -AllowNull:$AllowNull })
             return ,$items
         }
         'String' { return $Value.GetString() }
         'Number' { return $Value.GetInt32() }
         'True' { return $true }
         'False' { return $false }
+        'Null' {
+            if (-not $AllowNull) { throw 'Unsupported retirement JSON value.' }
+            return $null
+        }
         default { throw 'Unsupported retirement JSON value.' }
     }
 }
@@ -29,9 +33,9 @@ function Assert-AgentsChatRetirementFields($Value, [string[]]$Names) {
     }
 }
 
-function Read-AgentsChatRetirementJson([string]$Text) {
+function Read-AgentsChatRetirementJson([string]$Text, [switch]$AllowNull) {
     $document = [Text.Json.JsonDocument]::Parse($Text)
-    try { return ConvertFrom-AgentsChatRetirementJson $document.RootElement }
+    try { return ConvertFrom-AgentsChatRetirementJson $document.RootElement -AllowNull:$AllowNull }
     finally { $document.Dispose() }
 }
 

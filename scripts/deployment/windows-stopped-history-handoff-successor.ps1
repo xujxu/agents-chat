@@ -25,7 +25,7 @@ function Get-AgentsChatStoppedHistoryHandoffSuccessorBinding(
     }
     Assert-AgentsChatStoppedHistoryHandoffLockRetirementTime $CreatedAt $Context.HistoryHandoffLockSettlement.SettledAt
     Assert-AgentsChatStoppedHistoryHandoffLockSettlement $Context
-    $record = Read-AgentsChatRetirementJson ($previous.Prepared.ReadText())
+    $record = Read-AgentsChatRetirementJson ($previous.Prepared.ReadText()) -AllowNull
     Assert-AgentsChatRetirementFields $record @(
         'version', 'phase', 'attemptId', 'control', 'project', 'controlIdentity',
         'previousOperationId', 'operation', 'oldState', 'state', 'intent',

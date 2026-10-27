@@ -2,6 +2,22 @@ function Test-AgentsChatStoppedHistoryHandoffSuccessor(
     [string]$Source, [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity
 ) {
     . (Join-Path $Source 'windows-stopped-history-handoff-successor.ps1')
+    $nullable = Read-AgentsChatRetirementJson '{"observation":{"runtime":null}}' -AllowNull
+    if (-not $nullable.observation.Contains('runtime') -or $null -ne $nullable.observation.runtime) {
+        throw 'Successor template parser lost its explicit null runtime.'
+    }
+    foreach ($case in @(
+        @{ text='{"runtime":null}'; nullable=$false; message='Unsupported retirement JSON value.' },
+        @{ text='{"runtime":null,"runtime":null}'; nullable=$true; message='Duplicate retirement field.' }
+    )) {
+        $refused = $false
+        try { $null = Read-AgentsChatRetirementJson $case.text -AllowNull:$case.nullable }
+        catch {
+            if ($_.Exception.Message -cne $case.message) { throw }
+            $refused = $true
+        }
+        if (-not $refused) { throw 'Successor nullable parsing weakened strict default or duplicate-field refusal.' }
+    }
     $request = @{
         Context=$Context; ControllerPid=$ControllerPid; ControllerIdentity=$ControllerIdentity
         AttemptId=[guid]::NewGuid().ToString(); OperationId=[guid]::NewGuid().ToString()
