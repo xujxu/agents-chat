@@ -48,7 +48,12 @@ function Assert-AgentsChatStoppedHistoryHandoffLock([hashtable]$Context) {
     if ($root.Count -ne 1 -or $root[0].Name -cne 'lock' -or -not $root[0].PSIsContainer) {
         throw 'Handoff lock root inventory differs.'
     }
-    $children = @(Get-ChildItem -LiteralPath (Join-Path $Context.Control 'lock') -Force)
+    if ($directoryTarget) {
+        $lock.DirectoryRetirement.CheckEmpty()
+        $children = @()
+    } else {
+        $children = @(Get-ChildItem -LiteralPath (Join-Path $Context.Control 'lock') -Force)
+    }
     if ($null -ne $lock.OwnerRetirement) {
         if (-not $observer -or $lock.OwnerRetired -or $null -ne $lock.OwnerFile -or
             -not $Context.ContainsKey('HistoryHandoffLockRetirementObserver') -or

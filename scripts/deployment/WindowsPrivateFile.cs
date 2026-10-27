@@ -83,6 +83,10 @@ namespace Deployment
         static extern bool GetFileInformationByHandle(SafeFileHandle file, out FileInformation information);
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool GetFileInformationByHandleEx(SafeFileHandle file, int informationClass,
+            IntPtr information, uint bytes);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
         static extern bool SetFileInformationByHandle(SafeFileHandle file, int informationClass,
             ref byte information, uint bytes);
         [DllImport("kernel32.dll", EntryPoint = "SetFileInformationByHandle", SetLastError = true)]
@@ -507,6 +511,44 @@ namespace Deployment
                 parent.Check();
                 original.CheckPublicationDirectory();
                 parent.Check();
+            }
+            public void CheckEmpty()
+            {
+                Check();
+                const int bufferBytes = 4096, nameOffset = 68;
+                IntPtr buffer = Marshal.AllocHGlobal(bufferBytes);
+                try
+                {
+                    // FILE_FULL_DIR_INFO enumeration must use the exclusive retained handle.
+                    int informationClass = 15;
+                    while (true)
+                    {
+                        if (!GetFileInformationByHandleEx(original.handle, informationClass, buffer, bufferBytes))
+                        {
+                            int error = Marshal.GetLastWin32Error();
+                            if (error == 18) break;
+                            throw new Win32Exception(error, "Enumerate original private directory");
+                        }
+                        informationClass = 14;
+                        int offset = 0;
+                        while (true)
+                        {
+                            int next = Marshal.ReadInt32(buffer, offset);
+                            int length = Marshal.ReadInt32(buffer, offset + 60);
+                            if (length <= 0 || (length & 1) != 0 || length > bufferBytes - offset - nameOffset ||
+                                next < 0 || (next != 0 && ((next & 7) != 0 || next < nameOffset + length ||
+                                    next > bufferBytes - offset - nameOffset)))
+                                throw new InvalidDataException("Original directory enumeration is malformed.");
+                            string name = Marshal.PtrToStringUni(IntPtr.Add(buffer, offset + nameOffset), length / 2);
+                            if (name != "." && name != "..")
+                                throw new InvalidDataException("Original retirement directory is not empty.");
+                            if (next == 0) break;
+                            offset += next;
+                        }
+                    }
+                }
+                finally { Marshal.FreeHGlobal(buffer); }
+                Check();
             }
             public void Delete()
             {
