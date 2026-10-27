@@ -92,7 +92,7 @@ export async function assertLockRetirementSettlementAfterDeath({
     ...descriptorArgs('Retirement', previous.retirement), '-ObserveSettlement',
     ...descriptorArgs('Terminal', previous.terminal)];
   const observe = input => promisify(execFile)(pwsh, input,
-    { timeout: 45000, maxBuffer: 131072, windowsHide: true });
+    { timeout: 45000, maxBuffer: 2097152, windowsHide: true });
   const expected = {
     status: 'lock-retirement-settled', attemptId: previous.attemptId,
     previousOperationId: prepared.previousOperationId, project: prepared.project,
@@ -140,6 +140,31 @@ export async function assertLockRetirementSettlementAfterDeath({
   const revalidated = await observe(args);
   assert.equal(revalidated.stderr, '');
   assert.deepEqual(JSON.parse(revalidated.stdout), expected);
+  const successorResult = await observe([...args, '-PrepareSuccessor']);
+  assert.equal(successorResult.stderr, '');
+  const successor = JSON.parse(successorResult.stdout);
+  const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  for (const value of [successor.attemptId, successor.newOwner.operationId, successor.newOwner.token]) {
+    assert.match(value, guid);
+    assert.ok(![prepared.previousOperationId, previous.attemptId,
+      prepared.newOwner.operationId, prepared.newOwner.token].includes(value));
+  }
+  assert.equal(new Set([successor.attemptId, successor.newOwner.operationId, successor.newOwner.token]).size, 3);
+  assert.equal(new Date(successor.newOwner.createdAt).toISOString(), successor.newOwner.createdAt);
+  assert.ok(successor.newOwner.createdAt >= terminal.settledAt);
+  assert.deepEqual(successor, {
+    ...prepared, phase: 'stopped-history-handoff-successor-prepared',
+    attemptId: successor.attemptId,
+    newOwner: {
+      version: 1, token: successor.newOwner.token, project: prepared.project,
+      operationId: successor.newOwner.operationId, pid: process.pid,
+      processIdentity: identity, createdAt: successor.newOwner.createdAt,
+    },
+    predecessor: {
+      attemptId: previous.attemptId, prepared: previous.prepared, committed: previous.committed,
+      retirement: previous.retirement, terminal: previous.terminal,
+    },
+  });
   const { acquireLock, releaseLock } = await load('state.mjs');
   await assert.rejects(acquireLock(control, { pwsh, admission, project: prepared.project, operationId: randomUUID() }));
   await assert.rejects(releaseLock(control, prepared.newOwner, { pwsh, admission }));
@@ -160,6 +185,7 @@ export async function assertLockRetirementSettlementAfterDeath({
     assert.equal(current.ino, originalIdentity.ino);
   }
   await assert.rejects(lstat(directory), { code: 'ENOENT' });
+  console.log('PASS: fresh native successor preparation derives a distinct live owner from settled evidence without publication or authority');
   for (const snapshot of snapshots.reverse()) await unlink(snapshot.file);
   console.log('PASS: actual lock settlement publisher death preserves exact terminal evidence for a distinct sixth native actor without continuation authority');
 }

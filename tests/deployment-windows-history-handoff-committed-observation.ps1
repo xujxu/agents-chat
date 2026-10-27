@@ -19,6 +19,7 @@ param(
     [switch]$RetireDirectory,
     [switch]$SettleRetirement,
     [switch]$ObserveSettlement,
+    [switch]$PrepareSuccessor,
     [string]$TerminalDev,
     [string]$TerminalIno,
     [int]$TerminalBytes,
@@ -32,7 +33,8 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $scope = $watch = $failure = $null
 try {
-    if (($Hold -and -not ($PrepareRetirement -or $RetireOwner -or $RetireDirectory -or $SettleRetirement)) -or
+    if (($PrepareSuccessor -and -not $ObserveSettlement) -or
+        ($Hold -and -not ($PrepareRetirement -or $RetireOwner -or $RetireDirectory -or $SettleRetirement)) -or
         ($ObserveRetirement -and $PrepareRetirement) -or ($RetireOwner -and -not $ObserveRetirement) -or
         ($RetireDirectory -and (-not $ObserveRetirement -or $RetireOwner)) -or
         ($SettleRetirement -and (-not $ObserveRetirement -or $RetireOwner -or $RetireDirectory -or $ObserveSettlement)) -or
@@ -168,6 +170,10 @@ try {
             }
         } finally { $document.Dispose() }
     }
+    if ($PrepareSuccessor) {
+        . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-successor.ps1')
+        $observation = Test-AgentsChatStoppedHistoryHandoffSuccessor $Source $scope $ControllerPid $ControllerIdentity
+    }
     if ($Hold) {
         [Console]::Out.WriteLine((@{
             type='ready'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
@@ -177,7 +183,7 @@ try {
         $null = [Console]::In.ReadLine()
         throw 'Held lock retirement fixture received unexpected controller input.'
     }
-    [Console]::Out.WriteLine(($observation | ConvertTo-Json -Depth 8 -Compress))
+    [Console]::Out.WriteLine(($observation | ConvertTo-Json -Depth 12 -Compress))
 } catch {
     $failure = $_.Exception
     [Console]::Error.WriteLine("Native committed handoff observation fixture failed: $($failure.Message) $($failure.GetBaseException().Message)")
