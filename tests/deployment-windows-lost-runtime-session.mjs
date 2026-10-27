@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { holdLockRetirementIntent, holdLockOwnerRetirement, assertLockRetirementIntentAfterDeath } from './deployment-windows-lock-retirement-observation.mjs';
 import { holdLockDirectoryRetirement, assertLockDirectoryRetirementAfterDeath } from './deployment-windows-directory-retirement-observation.mjs';
+import { holdLockRetirementSettlement, assertLockRetirementSettlementAfterDeath } from './deployment-windows-lock-settlement-observation.mjs';
 
 const [source, control, pwsh, mode = 'complete', crashStep = 'task-restored', terminalCrashStep = ''] = process.argv.slice(2);
 const load = name => import(pathToFileURL(path.join(source, name)).href);
@@ -477,6 +478,8 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   const ownerRetirementCheck = mode === 'check-lock-owner-retired-history';
   const directoryRetirementCrash = mode === 'crash-lock-directory-retired-history';
   const directoryRetirementResume = mode === 'resume-lock-directory-retired-history';
+  const settlementCrash = mode === 'crash-lock-settled-history';
+  const settlementResume = mode === 'resume-lock-settled-history';
   const lockStages = {
     'crash-lock-directory-history': 'Directory', 'resume-lock-directory-history': 'Directory',
     'crash-lock-owner-history': 'Owner', 'resume-lock-owner-history': 'Owner',
@@ -485,12 +488,13 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     'crash-lock-owner-retired-history': 'Committed', 'resume-lock-owner-retired-history': 'Committed',
     'check-lock-owner-retired-history': 'Committed',
     'crash-lock-directory-retired-history': 'Committed', 'resume-lock-directory-retired-history': 'Committed',
+    'crash-lock-settled-history': 'Committed', 'resume-lock-settled-history': 'Committed',
   };
   const lockStage = lockStages[mode];
   const lockCrash = Boolean(lockStage && mode.startsWith('crash-') &&
-    !retirementCrash && !ownerRetirementCrash && !directoryRetirementCrash);
+    !retirementCrash && !ownerRetirementCrash && !directoryRetirementCrash && !settlementCrash);
   const lockResume = Boolean(lockStage &&
-    (mode.startsWith('resume-') || retirementCrash || ownerRetirementCrash || directoryRetirementCrash || ownerRetirementCheck));
+    (mode.startsWith('resume-') || retirementCrash || ownerRetirementCrash || directoryRetirementCrash || ownerRetirementCheck || settlementCrash));
   if (['crash-history', 'resume-history', 'crash-finalized-history', 'resume-finalized-history',
     'resume-history-saved', 'crash-completed-history', 'resume-completed-history',
     'crash-prepared-history', 'resume-prepared-history',
@@ -632,7 +636,14 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       try { await new Promise(() => {}); } finally { clearInterval(timer); }
     }
     const completionBytes = await readFile(completionFile);
-    if (directoryRetirementCrash) {
+    if (settlementCrash) {
+      await holdLockRetirementSettlement({ source, control, pwsh, previous: JSON.parse(crashStep) });
+      throw new Error('Held lock settlement publisher unexpectedly returned.');
+    } else if (settlementResume) {
+      await assertLockRetirementSettlementAfterDeath({
+        source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
+      });
+    } else if (directoryRetirementCrash) {
       await holdLockDirectoryRetirement({ source, control, pwsh, previous: JSON.parse(crashStep) });
       throw new Error('Held directory retirement executor unexpectedly returned.');
     } else if (directoryRetirementResume) {

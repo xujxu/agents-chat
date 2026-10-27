@@ -476,8 +476,8 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     $historyHash = (Get-FileHash -LiteralPath $historyIntent -Algorithm SHA256).Hash
                     $historyStateHash = (Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash
                     foreach ($historyBoundary in @('history', 'finalized-history', 'saved-history', 'completed-history', 'prepared-history', 'abandoned-history',
-                        'lock-directory-history', 'lock-owner-history', 'lock-committed-history', 'lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history')) {
-                        $lockBoundary = $historyBoundary -cin @('lock-directory-history', 'lock-owner-history', 'lock-committed-history', 'lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history')
+                        'lock-directory-history', 'lock-owner-history', 'lock-committed-history', 'lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history')) {
+                        $lockBoundary = $historyBoundary -cin @('lock-directory-history', 'lock-owner-history', 'lock-committed-history', 'lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history')
                         $crashMode = switch ($historyBoundary) {
                             'finalized-history' { 'crash-finalized-history' }
                             'completed-history' { 'crash-completed-history' }
@@ -486,7 +486,8 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                             'lock-retirement-history' { 'crash-lock-committed-history' }
                             'lock-owner-retired-history' { 'crash-lock-committed-history' }
                             'lock-directory-retired-history' { 'crash-lock-committed-history' }
-                            { $lockBoundary -and $_ -cnotin @('lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history') } { "crash-$historyBoundary" }
+                            'lock-settled-history' { 'crash-lock-committed-history' }
+                            { $lockBoundary -and $_ -cnotin @('lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history') } { "crash-$historyBoundary" }
                             default { 'crash-history' }
                         }
                         $resumeMode = if ($historyBoundary -ceq 'saved-history') { 'resume-history-saved' } else { "resume-$historyBoundary" }
@@ -586,7 +587,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                                 $abandonedHeld.completionSha256) 'Abandonment publisher death changed original completion receipt'
                             $resumeMode = 'resume-abandoned-history'
                         }
-                        if ($historyBoundary -cin @('lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history')) {
+                        if ($historyBoundary -cin @('lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history')) {
                             $retirer = [Deployment.WindowsControllerProcess]::Start($node,
                                 @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
                                     $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
@@ -628,7 +629,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                                 $historyStateHash) 'Lock retirement publisher death changed original state'
                             $resumeMode = 'resume-lock-retirement-history'
                         }
-                        if ($historyBoundary -cin @('lock-owner-retired-history', 'lock-directory-retired-history')) {
+                        if ($historyBoundary -cin @('lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history')) {
                             $executor = [Deployment.WindowsControllerProcess]::Start($node,
                                 @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
                                     $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
@@ -672,7 +673,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                                 $historyStateHash) 'Owner retirement executor death changed original state'
                             $resumeMode = 'resume-lock-owner-retired-history'
                         }
-                        if ($historyBoundary -ceq 'lock-directory-retired-history') {
+                        if ($historyBoundary -cin @('lock-directory-retired-history', 'lock-settled-history')) {
                             $directoryExecutor = [Deployment.WindowsControllerProcess]::Start($node,
                                 @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
                                     $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
@@ -713,6 +714,49 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                             Assert ((Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash -ceq
                                 $historyStateHash) 'Directory executor death changed original state'
                             $resumeMode = 'resume-lock-directory-retired-history'
+                        }
+                        if ($historyBoundary -ceq 'lock-settled-history') {
+                            $settler = [Deployment.WindowsControllerProcess]::Start($node,
+                                @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
+                                    $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
+                                    'crash-lock-settled-history', $historyActor), $control, $environment)
+                            try {
+                                $diagnostic = $settler.StandardError.ReadToEndAsync()
+                                $clock = [Diagnostics.Stopwatch]::StartNew()
+                                while ($true) {
+                                    $line = $settler.StandardOutput.ReadLineAsync()
+                                    $remaining = [Math]::Max(1, 120000 - $clock.ElapsedMilliseconds)
+                                    Assert ($line.Wait([int]$remaining)) 'Lock settler did not reach actual terminal publication'
+                                    $text = $line.GetAwaiter().GetResult()
+                                    if ($null -eq $text) {
+                                        Assert ($settler.WaitForExit(15000)) 'Lock settler closed output without exiting'
+                                        [Console]::Error.WriteLine($diagnostic.GetAwaiter().GetResult())
+                                        throw 'Lock settler exited before held terminal publication'
+                                    }
+                                    if ($text.StartsWith('INACTIVE_HISTORY_LOCK_SETTLED_HELD ')) { break }
+                                    Write-Output $text
+                                    Assert ($clock.ElapsedMilliseconds -lt 120000) 'Lock settler exceeded actor budget'
+                                }
+                                $historyActor = $text.Substring('INACTIVE_HISTORY_LOCK_SETTLED_HELD '.Length)
+                                $settledHeld = $historyActor | ConvertFrom-Json
+                                Assert ([Deployment.WindowsWorkerJob]::ProcessIdentity($settledHeld.pid) -ceq
+                                    $settledHeld.processIdentity) 'Lock settlement native bridge changed'
+                                $bridge = [Diagnostics.Process]::GetProcessById($settledHeld.pid)
+                                try {
+                                    $null = $bridge.Handle
+                                    $settler.Kill()
+                                    Assert ($settler.WaitForExit(15000)) 'Lock settler survived actual death'
+                                    Assert ($bridge.WaitForExit(15000)) 'Lock settlement native bridge survived publisher death'
+                                } finally { $bridge.Dispose() }
+                                $errors = $diagnostic.GetAwaiter().GetResult()
+                                if ($errors) { [Console]::Error.WriteLine($errors) }
+                            } finally { $settler.Dispose() }
+                            Assert ((Get-FileHash -LiteralPath (Join-Path $control $settledHeld.terminal.path) -Algorithm SHA256).Hash.ToLowerInvariant() -ceq
+                                $settledHeld.terminal.sha256) 'Settler death changed original terminal record'
+                            Assert (-not (Test-Path -LiteralPath (Join-Path $control 'lock'))) 'Settler death restored the retired lock'
+                            Assert ((Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash -ceq
+                                $historyStateHash) 'Settler death changed original state'
+                            $resumeMode = 'resume-lock-settled-history'
                         }
                         if ($historyBoundary -ceq 'lock-owner-retired-history') {
                             $ownerChecker = [Deployment.WindowsControllerProcess]::Start($node,
