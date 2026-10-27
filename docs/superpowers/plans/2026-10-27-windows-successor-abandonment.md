@@ -102,3 +102,29 @@ frame. Earlier failure or timeout is not valid red.
 This terminal does not permit fresh-attempt reuse, new lock creation,
 state writes, public deployment or task/runtime authority. Its own publisher
 death and fresh read-only reopening remain the next interruption boundary.
+
+## Valid settlement red and implementation
+
+Test-only `cca62122b7aaf5e0bd80a93b2de63d38e21ca479`, focused
+`40524912950` / job `122261736137`, completed the seventh observer's
+31st receipt at `2026-10-27T15:28:27.4214226Z` and emitted its actual
+identity frame. The distinct eighth actor reopened the native five-record
+proof and acknowledged the sealing request, then failed specifically on
+missing `windows-stopped-history-handoff-successor-abandonment.ps1` at
+`15:29:00.9129102Z`. No timeout preceded this failure.
+
+Implement a separate native successor abandoner with a ten-field
+create-only terminal, native canonical settlement time and exact watched
+Node/bridge creator. Its nonrecursive record binding requires the
+independent dead-successor observer, rederives the exact prepared file and
+rejects live preparation/publication roles. The publisher runs the existing
+complete successor observation before and after the write; each observation
+still performs both full terminal proofs. Strictly verify the retained
+terminal descriptor and JSON after publication and through namespace
+callbacks, without recursively opening new full scopes.
+
+Only the retained, independently authorized publishing scope gains the
+sixth namespace member. Ordinary bootstrap requests still refuse it.
+Duplicate and other publication failures poison the scope and preserve all
+files. No new lock, worker/task authority, original-state write or fresh
+attempt admission is introduced. Require same-SHA Actions acceptance.
