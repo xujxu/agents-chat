@@ -835,6 +835,26 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                                 Assert ($settlementChecker.ExitCode -eq 0) 'Fresh settlement proof actor failed'
                             } finally { $settlementChecker.Dispose() }
                         }
+                        if ($historyBoundary -ceq 'successor-prepared-history') {
+                            $successorChecker = [Deployment.WindowsControllerProcess]::Start($node,
+                                @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
+                                    $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
+                                    'check-successor-prepared-history', $historyActor), $control, $environment)
+                            try {
+                                $output = $successorChecker.StandardOutput.ReadToEndAsync()
+                                $diagnostic = $successorChecker.StandardError.ReadToEndAsync()
+                                Assert ($successorChecker.WaitForExit(120000)) 'Fresh successor proof actor timed out'
+                                $successorProofOutput = $output.GetAwaiter().GetResult()
+                                Write-Output $successorProofOutput
+                                $errors = $diagnostic.GetAwaiter().GetResult()
+                                if ($errors) { [Console]::Error.WriteLine($errors) }
+                                Assert ($successorChecker.ExitCode -eq 0) 'Fresh successor proof actor failed'
+                                $successorProofFrames = @($successorProofOutput -split '\r?\n' |
+                                    Where-Object { $_.StartsWith('INACTIVE_HISTORY_SUCCESSOR_OBSERVED ') })
+                                Assert ($successorProofFrames.Count -eq 1) 'Fresh successor proof identity frame differs'
+                                $historyActor = $successorProofFrames[0].Substring('INACTIVE_HISTORY_SUCCESSOR_OBSERVED '.Length)
+                            } finally { $successorChecker.Dispose() }
+                        }
                         $historyResumer = [Deployment.WindowsControllerProcess]::Start($node,
                             @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
                                 $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,

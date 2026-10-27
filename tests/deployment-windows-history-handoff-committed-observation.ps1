@@ -23,6 +23,7 @@ param(
     [switch]$PublishSuccessor,
     [switch]$PhasedPublication,
     [switch]$ObserveSuccessor,
+    [switch]$SealSuccessor,
     [string]$SuccessorAttemptId,
     [string]$SuccessorDev,
     [string]$SuccessorIno,
@@ -43,6 +44,7 @@ $scope = $watch = $failure = $null
 try {
     if (($ObserveSuccessor -and (-not $ObserveSettlement -or $PrepareSuccessor -or $PublishSuccessor)) -or
         ($PhasedPublication -and -not $PublishSuccessor) -or
+        ($SealSuccessor -and -not $ObserveSuccessor) -or
         ($PublishSuccessor -and -not $PrepareSuccessor) -or
         ($PrepareSuccessor -and -not $ObserveSettlement) -or
         ($Hold -and -not ($PrepareRetirement -or $RetireOwner -or $RetireDirectory -or $SettleRetirement -or $PublishSuccessor)) -or
@@ -113,6 +115,20 @@ try {
                         $refused = $true
                     }
                     if (-not $refused) { throw 'Successor reader accepted a preparation or publication mutation.' }
+                }
+                if ($SealSuccessor) {
+                    [Console]::Out.WriteLine((@{
+                        type='successor-observed'; pid=$PID
+                        processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+                        control=$Control; controllerIdentity=$ControllerIdentity; value=$observation
+                    } | ConvertTo-Json -Depth 8 -Compress))
+                    [Console]::Out.Flush()
+                    if ([Console]::In.ReadLine() -cne '{"type":"seal"}') {
+                        throw 'Successor settlement requires its exact sealing command.'
+                    }
+                    . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-successor-abandonment.ps1')
+                    $observation = Test-AgentsChatStoppedHistoryHandoffSuccessorAbandonment $Source $scope `
+                        $ControllerPid $ControllerIdentity
                 }
             } elseif ($PublishSuccessor) {
                 $scope = Open-AgentsChatStoppedHistoryHandoffCommittedObservation $Control `

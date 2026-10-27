@@ -484,6 +484,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   const settlementCheck = mode === 'check-lock-settled-history';
   const successorCrash = mode === 'crash-successor-prepared-history';
   const successorResume = mode === 'resume-successor-prepared-history';
+  const successorCheck = mode === 'check-successor-prepared-history';
   const lockStages = {
     'crash-lock-directory-history': 'Directory', 'resume-lock-directory-history': 'Directory',
     'crash-lock-owner-history': 'Owner', 'resume-lock-owner-history': 'Owner',
@@ -495,12 +496,13 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     'crash-lock-settled-history': 'Committed', 'resume-lock-settled-history': 'Committed',
     'check-lock-settled-history': 'Committed',
     'crash-successor-prepared-history': 'Committed', 'resume-successor-prepared-history': 'Committed',
+    'check-successor-prepared-history': 'Committed',
   };
   const lockStage = lockStages[mode];
   const lockCrash = Boolean(lockStage && mode.startsWith('crash-') &&
     !retirementCrash && !ownerRetirementCrash && !directoryRetirementCrash && !settlementCrash && !successorCrash);
   const lockResume = Boolean(lockStage &&
-    (mode.startsWith('resume-') || retirementCrash || ownerRetirementCrash || directoryRetirementCrash || ownerRetirementCheck || settlementCrash || settlementCheck || successorCrash));
+    (mode.startsWith('resume-') || retirementCrash || ownerRetirementCrash || directoryRetirementCrash || ownerRetirementCheck || settlementCrash || settlementCheck || successorCrash || successorCheck));
   if (['crash-history', 'resume-history', 'crash-finalized-history', 'resume-finalized-history',
     'resume-history-saved', 'crash-completed-history', 'resume-completed-history',
     'crash-prepared-history', 'resume-prepared-history',
@@ -645,10 +647,12 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     if (successorCrash) {
       await holdSuccessorPrepared({ source, control, pwsh, previous: JSON.parse(crashStep) });
       throw new Error('Held successor preparation publisher unexpectedly returned.');
-    } else if (successorResume) {
+    } else if (successorResume || successorCheck) {
       await assertSuccessorAfterDeath({
         source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
+        stage: successorCheck ? 'proof' : 'abandonment',
       });
+      if (successorCheck) return;
     } else if (settlementCrash) {
       await holdLockRetirementSettlement({ source, control, pwsh, previous: JSON.parse(crashStep) });
       throw new Error('Held lock settlement publisher unexpectedly returned.');
