@@ -170,3 +170,18 @@ grants neither lock nor runtime authority. Ordinary bootstrap shapes
 remain unchanged. No lock, state, task or evidence mutation is introduced.
 Require same-SHA focused 31-receipt and Contracts validation before
 acceptance.
+
+## Accepted five-record reopening
+
+Accepted SHA `434f47dc8fe3067aa5340a5cb7546cd3387fa1d8`.
+Focused run `40517678797`, job `122235438643`, succeeded and all
+31 required receipts from this exact SHA's workflow matched actual
+timestamped output. The new seventh-observer receipt occurred at
+`2026-10-27T14:42:46.0617401Z`. Same-SHA Windows Contracts
+`40517683485`, job `122235457299`, succeeded. Both job logs are retained
+in the session artifacts.
+
+This accepts actual successor publisher/bridge death and independent
+five-record reopening, including replacement/refusal cases and unchanged
+original state. It does not settle that dead prepared attempt, create a
+fresh lock or grant production continuation.
