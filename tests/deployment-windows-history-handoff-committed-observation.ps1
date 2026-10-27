@@ -17,6 +17,12 @@ param(
     [switch]$ObserveRetirement,
     [switch]$RetireOwner,
     [switch]$RetireDirectory,
+    [switch]$SettleRetirement,
+    [switch]$ObserveSettlement,
+    [string]$TerminalDev,
+    [string]$TerminalIno,
+    [int]$TerminalBytes,
+    [string]$TerminalSha256,
     [string]$RetirementDev,
     [string]$RetirementIno,
     [int]$RetirementBytes,
@@ -28,7 +34,9 @@ $scope = $watch = $failure = $null
 try {
     if (($Hold -and -not ($PrepareRetirement -or $RetireOwner -or $RetireDirectory)) -or
         ($ObserveRetirement -and $PrepareRetirement) -or ($RetireOwner -and -not $ObserveRetirement) -or
-        ($RetireDirectory -and (-not $ObserveRetirement -or $RetireOwner))) {
+        ($RetireDirectory -and (-not $ObserveRetirement -or $RetireOwner)) -or
+        ($SettleRetirement -and (-not $ObserveRetirement -or $RetireOwner -or $RetireDirectory -or $Hold -or $ObserveSettlement)) -or
+        ($ObserveSettlement -and (-not $ObserveRetirement -or $RetireOwner -or $RetireDirectory -or $Hold))) {
         throw 'Invalid native retirement fixture mode.'
     }
     Add-Type -Path @(
@@ -53,10 +61,22 @@ try {
             path="inactive-handoff-$AttemptId-lock-retirement.json"
             dev=$RetirementDev; ino=$RetirementIno; bytes=$RetirementBytes; sha256=$RetirementSha256
         }
-        $scope = Open-AgentsChatStoppedHistoryHandoffLockRetirementObservation $Control `
-            $ControllerPid $ControllerIdentity $AttemptId $prepared $committed $retirement
-        $observation = Get-AgentsChatStoppedHistoryHandoffLockRetirementObservation $scope `
-            $ControllerPid $ControllerIdentity
+        if ($ObserveSettlement) {
+            . (Join-Path $Source 'windows-stopped-history-handoff-lock-settlement-observation.ps1')
+            $terminal = @{
+                path="inactive-handoff-$AttemptId-lock-retired.json"
+                dev=$TerminalDev; ino=$TerminalIno; bytes=$TerminalBytes; sha256=$TerminalSha256
+            }
+            $scope = Open-AgentsChatStoppedHistoryHandoffLockSettlementObservation $Control `
+                $ControllerPid $ControllerIdentity $AttemptId $prepared $committed $retirement $terminal
+            $observation = Get-AgentsChatStoppedHistoryHandoffLockSettlementObservation $scope `
+                $ControllerPid $ControllerIdentity
+        } else {
+            $scope = Open-AgentsChatStoppedHistoryHandoffLockRetirementObservation $Control `
+                $ControllerPid $ControllerIdentity $AttemptId $prepared $committed $retirement
+            $observation = Get-AgentsChatStoppedHistoryHandoffLockRetirementObservation $scope `
+                $ControllerPid $ControllerIdentity
+        }
     } else {
         $scope = Open-AgentsChatStoppedHistoryHandoffCommittedObservation $Control `
             $ControllerPid $ControllerIdentity $AttemptId $prepared $committed
@@ -123,6 +143,30 @@ try {
             (Test-Path -LiteralPath (Join-Path $Control 'lock'))) {
             throw 'Native directory retirement did not preserve its exact absent stage.'
         }
+    }
+    if ($SettleRetirement) {
+        . (Join-Path $Source 'windows-stopped-history-handoff-lock-settlement.ps1')
+        $refused = $false
+        try {
+            $null = Publish-AgentsChatStoppedHistoryHandoffLockSettlement $scope $ControllerPid $ControllerIdentity
+        } catch {
+            if ($_.Exception.Message -cne 'Handoff lock settlement requires its independent native role.') { throw }
+            $refused = $true
+        }
+        if (-not $refused) { throw 'Lock settlement accepted a scope without its independent role.' }
+        $scope.HistoryHandoffLockSettler = $true
+        $terminal = Publish-AgentsChatStoppedHistoryHandoffLockSettlement $scope $ControllerPid $ControllerIdentity
+        . (Join-Path $Source 'windows-stopped-history-handoff-lock-settlement-observation.ps1')
+        $observation = Get-AgentsChatStoppedHistoryHandoffLockSettlementObservation $scope $ControllerPid $ControllerIdentity
+        $document = [Text.Json.JsonDocument]::Parse([IO.File]::ReadAllText((Join-Path $Control $terminal.path)))
+        try {
+            $creator = $document.RootElement.GetProperty('creator')
+            if ($creator.GetProperty('bridgePid').GetInt32() -ne $PID -or
+                $creator.GetProperty('bridgeIdentity').GetString() -cne
+                    [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)) {
+                throw 'Lock settlement does not identify its actual native publisher.'
+            }
+        } finally { $document.Dispose() }
     }
     if ($Hold) {
         [Console]::Out.WriteLine((@{

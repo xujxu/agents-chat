@@ -127,6 +127,52 @@ export async function assertLockDirectoryRetirementAfterDeath({
   const { acquireLock, releaseLock } = await load('state.mjs');
   await assert.rejects(acquireLock(control, { pwsh, admission, project: prepared.project, operationId: randomUUID() }));
   await assert.rejects(releaseLock(control, prepared.newOwner, { pwsh, admission }));
+  const settledResult = await invoke(['-SettleRetirement']);
+  assert.equal(settledResult.stderr, '');
+  const settled = JSON.parse(settledResult.stdout);
+  const terminal = settled.terminal;
+  assert.deepEqual(settled, { ...expected, status: 'lock-retirement-settled', terminal });
+  assert.deepEqual(Object.keys(terminal).sort(), ['path', 'dev', 'ino', 'bytes', 'sha256'].sort());
+  assert.equal(terminal.path, `inactive-handoff-${previous.attemptId}-lock-retired.json`);
+  const terminalFile = path.join(control, terminal.path);
+  const terminalBytes = await readFile(terminalFile);
+  const terminalIdentity = await lstat(terminalFile, { bigint: true });
+  assert.equal(terminalBytes.length, terminal.bytes);
+  assert.equal(createHash('sha256').update(terminalBytes).digest('hex'), terminal.sha256);
+  assert.equal(terminalIdentity.dev.toString(), terminal.dev);
+  assert.equal(terminalIdentity.ino.toString(), terminal.ino);
+  const record = JSON.parse(terminalBytes);
+  assert.deepEqual(Object.keys(record).sort(), [
+    'version', 'phase', 'attemptId', 'control', 'project', 'controlIdentity', 'previousOperationId',
+    'prepared', 'committed', 'retirement', 'newOwner', 'lockIdentity', 'lock', 'creator', 'settledAt',
+  ].sort());
+  assert.equal(record.version, 1);
+  assert.equal(record.phase, 'stopped-history-handoff-lock-retired');
+  assert.equal(record.attemptId, previous.attemptId);
+  assert.equal(record.control, control);
+  assert.equal(record.project, prepared.project);
+  assert.deepEqual(record.controlIdentity, prepared.controlIdentity);
+  assert.equal(record.previousOperationId, prepared.previousOperationId);
+  assert.deepEqual(record.prepared, previous.prepared);
+  assert.deepEqual(record.committed, previous.committed);
+  assert.deepEqual(record.retirement, previous.retirement);
+  assert.deepEqual(record.newOwner, prepared.newOwner);
+  assert.deepEqual(record.lockIdentity, previous.lockIdentity);
+  assert.deepEqual(record.lock, previous.owner);
+  assert.equal(record.creator.pid, process.pid);
+  assert.equal(record.creator.processIdentity, identity);
+  assert.notEqual(await processIdentity(record.creator.bridgePid), record.creator.bridgeIdentity);
+  assert.match(record.settledAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  assert.ok(Date.parse(record.settledAt) >= Date.parse(intent.createdAt));
+  for (const extra of [[], ['-SettleRetirement']]) {
+    await assert.rejects(invoke(extra),
+      error => error.message.includes('Lock retirement observation failed; retain evidence.'));
+  }
+  await assert.rejects(invoke(['-ObserveSettlement', ...descriptorArgs('Terminal', terminal)]),
+    error => error.message.includes('Lock settlement observation failed; retain evidence.'));
+  snapshots.push({ file: terminalFile, bytes: terminalBytes, identity: terminalIdentity });
+  await assert.rejects(acquireLock(control, { pwsh, admission, project: prepared.project, operationId: randomUUID() }));
+  await assert.rejects(releaseLock(control, prepared.newOwner, { pwsh, admission }));
   for (const snapshot of snapshots) {
     assert.deepEqual(await readFile(snapshot.file), snapshot.bytes);
     const current = await lstat(snapshot.file, { bigint: true });
@@ -134,7 +180,7 @@ export async function assertLockDirectoryRetirementAfterDeath({
     assert.equal(current.ino, snapshot.identity.ino);
   }
   assert.deepEqual((await readdir(control)).filter(name => name.toLowerCase().startsWith('inactive-handoff-')).sort(),
-    [previous.prepared.path, previous.committed.path, previous.retirement.path].sort());
+    [previous.prepared.path, previous.committed.path, previous.retirement.path, terminal.path].sort());
   for (const [file, bytes, original] of [
     [stateFile, state, stateIdentity], [completionFile, completionBytes, completionIdentity],
   ]) {
@@ -145,5 +191,6 @@ export async function assertLockDirectoryRetirementAfterDeath({
   }
   await assert.rejects(lstat(path.join(control, 'lock')), { code: 'ENOENT' });
   for (const snapshot of snapshots.reverse()) await unlink(snapshot.file);
+  console.log('PASS: native lock retirement settlement seals one exact terminal without changing evidence or granting continuation');
   console.log('PASS: actual directory retirement executor death leaves exact immutable evidence for a distinct fifth native actor without authority');
 }
