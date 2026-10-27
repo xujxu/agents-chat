@@ -84,3 +84,17 @@ PASS: actual lock settlement publisher death preserves exact terminal evidence f
   manufacture a missing-function red. Persist SHA/run/job evidence.
   Fresh-attempt admission, state continuity and public repeat lifecycle
   remain separate gates.
+
+## Accepted evidence
+
+- Test increment: `3dc7c396f89acf2ae8e466464ac2ad016ac4e722`.
+- Same-SHA focused run `40468746459`, job `122070434774`, passed.
+  All 28 required receipts from the committed workflow were individually
+  matched to actual timestamped `Z PASS:` output in its downloaded log.
+- The real terminal-publisher death / distinct sixth-actor receipt occurred
+  at `2026-10-27T08:14:47.7420723Z`.
+- Same-SHA Windows Contracts run `40468749739`, job `122070444137`,
+  passed; its actual job log is retained separately.
+- This accepts terminal observation after actual publisher death, not
+  successor preparation/publication, continuation authority, state
+  replacement or public deploy/update admission.
