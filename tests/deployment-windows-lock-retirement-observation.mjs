@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { readFile, readdir, lstat, rename, writeFile, unlink, rmdir } from 'node:fs/promises';
+import { readFile, readdir, lstat, rename, writeFile, unlink, rmdir, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
@@ -290,11 +290,63 @@ export async function assertLockRetirementIntentAfterDeath({
   const completionAfter = await lstat(completionFile, { bigint: true });
   assert.equal(completionAfter.dev, completionIdentity.dev);
   assert.equal(completionAfter.ino, completionIdentity.ino);
+  if (ownerRetired) {
+    const retireArgs = [...observeArgs, '-RetirementIno', previous.retirement.ino, '-RetireDirectory'];
+    const retire = () => promisify(execFile)(pwsh, retireArgs,
+      { timeout: 45000, maxBuffer: 131072, windowsHide: true });
+    const removed = await retire();
+    assert.equal(removed.stderr, '');
+    const retired = JSON.parse(removed.stdout);
+    assert.deepEqual(retired, { ...observed, status: 'lock-retirement-directory-retired' });
+    await assert.rejects(lstat(directory), { code: 'ENOENT' });
+    console.log('PASS: native exact handoff directory retirement deletes only its original empty directory under immutable intent');
+    const reopened = await observe(previous.retirement.ino);
+    assert.equal(reopened.stderr, '');
+    assert.deepEqual(JSON.parse(reopened.stdout), retired);
+    const retry = await retire();
+    assert.equal(retry.stderr, '');
+    assert.deepEqual(JSON.parse(retry.stdout), retired);
+    await mkdir(directory);
+    const replacement = await lstat(directory, { bigint: true });
+    assert.notEqual(replacement.ino, directoryIdentity.ino);
+    try {
+      for (const action of [() => observe(previous.retirement.ino), retire]) {
+        await assert.rejects(action(),
+          error => error.message.includes('Lock retirement observation failed; retain evidence.'));
+        const current = await lstat(directory, { bigint: true });
+        assert.equal(current.dev, replacement.dev);
+        assert.equal(current.ino, replacement.ino);
+        assert.deepEqual(await readdir(directory), []);
+      }
+    } finally { await rmdir(directory); }
+    const afterReplacement = await observe(previous.retirement.ino);
+    assert.equal(afterReplacement.stderr, '');
+    assert.deepEqual(JSON.parse(afterReplacement.stdout), retired);
+    for (const snapshot of snapshots) {
+      assert.deepEqual(await readFile(snapshot.file), snapshot.bytes);
+      const current = await lstat(snapshot.file, { bigint: true });
+      assert.equal(current.dev, snapshot.identity.dev);
+      assert.equal(current.ino, snapshot.identity.ino);
+    }
+    assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
+    const stateRetired = await lstat(path.join(control, 'state.json'), { bigint: true });
+    assert.equal(stateRetired.dev, stateIdentity.dev);
+    assert.equal(stateRetired.ino, stateIdentity.ino);
+    assert.deepEqual(await readFile(completionFile), completionBytes);
+    const completionRetired = await lstat(completionFile, { bigint: true });
+    assert.equal(completionRetired.dev, completionIdentity.dev);
+    assert.equal(completionRetired.ino, completionIdentity.ino);
+    await assert.rejects(lstat(directory), { code: 'ENOENT' });
+    await assert.rejects(api.openWindowsInactiveRollbackHistoryArchive({ control, pwsh, admission }));
+    await assert.rejects(acquireLock(control, { pwsh, admission, project: prepared.project, operationId: randomUUID() }));
+    await assert.rejects(releaseLock(control, owner, { pwsh, admission }));
+    console.log('PASS: fresh native directory-retired observation and idempotent retry preserve immutable evidence and reject replacement directories');
+  }
   await unlink(snapshots.at(-1).file);
   await unlink(snapshots[1].file);
   if (!ownerRetired) await unlink(ownerFile);
   else await assert.rejects(lstat(ownerFile), { code: 'ENOENT' });
-  await rmdir(directory);
+  if (!ownerRetired) await rmdir(directory);
   await unlink(snapshots[0].file);
   assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
   if (ownerRetired) {

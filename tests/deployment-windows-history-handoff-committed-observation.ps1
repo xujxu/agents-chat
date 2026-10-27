@@ -16,6 +16,7 @@ param(
     [switch]$Hold,
     [switch]$ObserveRetirement,
     [switch]$RetireOwner,
+    [switch]$RetireDirectory,
     [string]$RetirementDev,
     [string]$RetirementIno,
     [int]$RetirementBytes,
@@ -26,7 +27,8 @@ Set-StrictMode -Version Latest
 $scope = $watch = $failure = $null
 try {
     if (($Hold -and -not ($PrepareRetirement -or $RetireOwner)) -or
-        ($ObserveRetirement -and $PrepareRetirement) -or ($RetireOwner -and -not $ObserveRetirement)) {
+        ($ObserveRetirement -and $PrepareRetirement) -or ($RetireOwner -and -not $ObserveRetirement) -or
+        ($RetireDirectory -and (-not $ObserveRetirement -or $RetireOwner -or $Hold))) {
         throw 'Invalid native retirement fixture mode.'
     }
     Add-Type -Path @(
@@ -103,6 +105,23 @@ try {
         $identity = $scope.HistoryHandoffLock.Directory.CaptureIdentity()
         if ($identity.Dev -cne $observation.lockIdentity.dev -or $identity.Ino -cne $observation.lockIdentity.ino) {
             throw 'Native owner retirement changed its original directory identity.'
+        }
+    }
+    if ($RetireDirectory) {
+        . (Join-Path $Source 'windows-stopped-history-handoff-lock-retirement-directory.ps1')
+        $refused = $false
+        try {
+            $null = Remove-AgentsChatStoppedHistoryHandoffLockDirectory $scope $ControllerPid $ControllerIdentity
+        } catch {
+            if ($_.Exception.Message -cne 'Handoff directory retirement requires its independent native role.') { throw }
+            $refused = $true
+        }
+        if (-not $refused) { throw 'Directory retirement accepted a scope without its independent role.' }
+        $scope.HistoryHandoffLockDirectoryRetirementExecutor = $true
+        $observation = Remove-AgentsChatStoppedHistoryHandoffLockDirectory $scope $ControllerPid $ControllerIdentity
+        if ($observation.status -cne 'lock-retirement-directory-retired' -or
+            (Test-Path -LiteralPath (Join-Path $Control 'lock'))) {
+            throw 'Native directory retirement did not preserve its exact absent stage.'
         }
     }
     if ($Hold) {
