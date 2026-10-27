@@ -24,6 +24,11 @@ param(
     [switch]$PhasedPublication,
     [switch]$ObserveSuccessor,
     [switch]$SealSuccessor,
+    [switch]$ObserveSuccessorAbandoned,
+    [string]$AbandonedDev,
+    [string]$AbandonedIno,
+    [int]$AbandonedBytes,
+    [string]$AbandonedSha256,
     [string]$SuccessorAttemptId,
     [string]$SuccessorDev,
     [string]$SuccessorIno,
@@ -43,16 +48,17 @@ Set-StrictMode -Version Latest
 $scope = $watch = $failure = $null
 try {
     if (($ObserveSuccessor -and (-not $ObserveSettlement -or $PrepareSuccessor -or $PublishSuccessor)) -or
+        ($ObserveSuccessorAbandoned -and (-not $ObserveSuccessor -or $SealSuccessor)) -or
         ($PhasedPublication -and -not $PublishSuccessor) -or
         ($SealSuccessor -and -not $ObserveSuccessor) -or
         ($PublishSuccessor -and -not $PrepareSuccessor) -or
         ($PrepareSuccessor -and -not $ObserveSettlement) -or
-        ($Hold -and -not ($PrepareRetirement -or $RetireOwner -or $RetireDirectory -or $SettleRetirement -or $PublishSuccessor)) -or
+        ($Hold -and -not ($PrepareRetirement -or $RetireOwner -or $RetireDirectory -or $SettleRetirement -or $PublishSuccessor -or $SealSuccessor)) -or
         ($ObserveRetirement -and $PrepareRetirement) -or ($RetireOwner -and -not $ObserveRetirement) -or
         ($RetireDirectory -and (-not $ObserveRetirement -or $RetireOwner)) -or
         ($SettleRetirement -and (-not $ObserveRetirement -or $RetireOwner -or $RetireDirectory -or $ObserveSettlement)) -or
         ($ObserveSettlement -and (-not $ObserveRetirement -or $RetireOwner -or $RetireDirectory -or
-            ($Hold -and -not $PublishSuccessor)))) {
+            ($Hold -and -not ($PublishSuccessor -or $SealSuccessor))))) {
         throw 'Invalid native retirement fixture mode.'
     }
     Add-Type -Path @(
@@ -89,10 +95,33 @@ try {
                     path="inactive-handoff-$SuccessorAttemptId-prepared.json"
                     dev=$SuccessorDev; ino=$SuccessorIno; bytes=$SuccessorBytes; sha256=$SuccessorSha256
                 }
-                $scope = Open-AgentsChatStoppedHistoryHandoffSuccessorObservation $Control `
-                    $ControllerPid $ControllerIdentity $AttemptId $prepared $committed $retirement $terminal $successor
-                $observation = Get-AgentsChatStoppedHistoryHandoffSuccessorPreparedObservation $scope `
-                    $ControllerPid $ControllerIdentity
+                if ($ObserveSuccessorAbandoned) {
+                    . (Join-Path $Source 'windows-stopped-history-handoff-successor-abandoned-observation.ps1')
+                    $abandoned = @{
+                        path="inactive-handoff-$SuccessorAttemptId-abandoned.json"
+                        dev=$AbandonedDev; ino=$AbandonedIno; bytes=$AbandonedBytes; sha256=$AbandonedSha256
+                    }
+                    $scope = Open-AgentsChatStoppedHistoryHandoffSuccessorAbandonedObservation $Control `
+                        $ControllerPid $ControllerIdentity $AttemptId $prepared $committed $retirement $terminal $successor $abandoned
+                    $observation = Get-AgentsChatStoppedHistoryHandoffSuccessorAbandonedObservation $scope `
+                        $ControllerPid $ControllerIdentity
+                    if ($scope.ContainsKey('HistoryHandoffSuccessorAbandoner') -or
+                        $scope.HistoryHandoffSuccessorAbandonedObserver -ne $true) {
+                        throw 'Abandoned successor reader gained a mutation role.'
+                    }
+                    $refused = $false
+                    try { $null = Publish-AgentsChatStoppedHistoryHandoffSuccessorAbandoned $scope $ControllerPid $ControllerIdentity }
+                    catch {
+                        if ($_.Exception.Message -cne 'Successor abandonment requires its independent native role.') { throw }
+                        $refused = $true
+                    }
+                    if (-not $refused) { throw 'Abandoned successor reader accepted terminal publication.' }
+                } else {
+                    $scope = Open-AgentsChatStoppedHistoryHandoffSuccessorObservation $Control `
+                        $ControllerPid $ControllerIdentity $AttemptId $prepared $committed $retirement $terminal $successor
+                    $observation = Get-AgentsChatStoppedHistoryHandoffSuccessorPreparedObservation $scope `
+                        $ControllerPid $ControllerIdentity
+                }
                 if ($scope.ContainsKey('HistoryHandoffSuccessorPreparer') -or
                     $scope.ContainsKey('HistoryHandoffSuccessorPublisher') -or
                     $scope.HistoryHandoffSuccessorObserver -ne $true) {
@@ -128,7 +157,7 @@ try {
                     }
                     . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-successor-abandonment.ps1')
                     $observation = Test-AgentsChatStoppedHistoryHandoffSuccessorAbandonment $Source $scope `
-                        $ControllerPid $ControllerIdentity
+                        $ControllerPid $ControllerIdentity -Hold:$Hold
                 }
             } elseif ($PublishSuccessor) {
                 $scope = Open-AgentsChatStoppedHistoryHandoffCommittedObservation $Control `

@@ -263,7 +263,8 @@ jobs:
             'PASS: fresh native successor preparation derives a distinct live owner from settled evidence without publication or authority',
             'PASS: native successor publication retains every predecessor and creates one exact preparation without continuation authority',
             'PASS: actual successor publisher death preserves five exact records for a distinct seventh native observer without continuation authority',
-            'PASS: native successor abandonment seals only the exact dead preparation and preserves every predecessor without continuation authority'
+            'PASS: native successor abandonment seals only the exact dead preparation and preserves every predecessor without continuation authority',
+            'PASS: actual successor abandonment publisher death preserves six exact records for a distinct ninth native observer without continuation authority'
           )) {
             if ($historyOutput -cnotcontains $receipt) { throw "Missing stopped-history acceptance receipt: $receipt" }
           }

@@ -1,5 +1,6 @@
 function Test-AgentsChatStoppedHistoryHandoffSuccessorAbandonment(
-    [string]$Source, [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity
+    [string]$Source, [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity,
+    [switch]$Hold
 ) {
     . (Join-Path $Source 'windows-stopped-history-handoff-successor-abandonment.ps1')
     $refused = $false
@@ -14,6 +15,7 @@ function Test-AgentsChatStoppedHistoryHandoffSuccessorAbandonment(
     $file = Join-Path $Context.Control $descriptor.path
     $bytes = [IO.File]::ReadAllBytes($file)
     $record = Read-AgentsChatRetirementJson ([IO.File]::ReadAllText($file))
+    if ($Hold) { return [ordered]@{ abandoned=$descriptor; record=$record } }
     $refused = $false
     try { $null = Publish-AgentsChatStoppedHistoryHandoffSuccessorAbandoned $Context $ControllerPid $ControllerIdentity }
     catch {
