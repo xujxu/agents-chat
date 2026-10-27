@@ -11,7 +11,8 @@ param(
     [Parameter(Mandatory)][string]$CommittedDev,
     [Parameter(Mandatory)][string]$CommittedIno,
     [Parameter(Mandatory)][int]$CommittedBytes,
-    [Parameter(Mandatory)][string]$CommittedSha256
+    [Parameter(Mandatory)][string]$CommittedSha256,
+    [switch]$PrepareRetirement
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -37,6 +38,28 @@ try {
         $ControllerPid $ControllerIdentity $AttemptId $prepared $committed
     $observation = Get-AgentsChatStoppedHistoryHandoffCommittedObservation $scope `
         $ControllerPid $ControllerIdentity
+    if ($PrepareRetirement) {
+        . (Join-Path $Source 'windows-stopped-history-handoff-lock-retirement-intent.ps1')
+        $refused = $false
+        try {
+            $null = Publish-AgentsChatStoppedHistoryHandoffLockRetirementIntent $scope $ControllerPid $ControllerIdentity
+        } catch {
+            if ($_.Exception.Message -cne 'Handoff lock retirement preparation requires its independent native role.') { throw }
+            $refused = $true
+        }
+        if (-not $refused) { throw 'Lock retirement preparation accepted a scope without its independent role.' }
+        $scope.HistoryHandoffLockRetirer = $true
+        $observation = Publish-AgentsChatStoppedHistoryHandoffLockRetirementIntent $scope $ControllerPid $ControllerIdentity
+        $document = [Text.Json.JsonDocument]::Parse([IO.File]::ReadAllText((Join-Path $Control $observation.path)))
+        try {
+            $creator = $document.RootElement.GetProperty('creator')
+            if ($creator.GetProperty('bridgePid').GetInt32() -ne $PID -or
+                $creator.GetProperty('bridgeIdentity').GetString() -cne
+                    [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)) {
+                throw 'Lock retirement intent does not identify its actual native bridge.'
+            }
+        } finally { $document.Dispose() }
+    }
     [Console]::Out.WriteLine(($observation | ConvertTo-Json -Depth 8 -Compress))
 } catch {
     $failure = $_.Exception

@@ -625,6 +625,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.notEqual(await processIdentity(previous.pid), previous.processIdentity);
       assert.equal(previous.prepared.path, `inactive-handoff-${previous.attemptId}-prepared.json`);
       const snapshots = [];
+      let retirement;
       const capture = async descriptor => {
         const file = path.join(control, descriptor.path);
         const bytes = await readFile(file);
@@ -722,8 +723,44 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
           await rename(heldOwner, ownerFile);
         }
         console.log('PASS: native dead committed handoff observation pins exact lock and original archive under a distinct actor without authority');
+        const retirementResult = await promisify(execFile)(pwsh,
+          [...observeArgs, '-CommittedIno', previous.committed.ino, '-PrepareRetirement'],
+          { timeout: 45000, maxBuffer: 131072, windowsHide: true });
+        assert.equal(retirementResult.stderr, '');
+        retirement = JSON.parse(retirementResult.stdout);
+        assert.equal(retirement.path, `inactive-handoff-${previous.attemptId}-lock-retirement.json`);
+        const intent = JSON.parse((await capture(retirement)).bytes);
+        assert.deepEqual(Object.keys(intent).sort(), [
+          'version', 'phase', 'attemptId', 'control', 'project', 'controlIdentity', 'previousOperationId',
+          'prepared', 'committed', 'newOwner', 'lockIdentity', 'lock', 'creator', 'createdAt',
+        ].sort());
+        assert.equal(intent.version, 1);
+        assert.equal(intent.phase, 'stopped-history-handoff-lock-retirement-prepared');
+        assert.equal(intent.attemptId, previous.attemptId);
+        assert.equal(intent.control, control);
+        assert.equal(intent.project, prepared.project);
+        assert.deepEqual(intent.controlIdentity, prepared.controlIdentity);
+        assert.equal(intent.previousOperationId, prepared.previousOperationId);
+        assert.deepEqual(intent.prepared, previous.prepared);
+        assert.deepEqual(intent.committed, previous.committed);
+        assert.deepEqual(intent.newOwner, prepared.newOwner);
+        assert.deepEqual(intent.lockIdentity, previous.lockIdentity);
+        assert.deepEqual(intent.lock, previous.owner);
+        assert.deepEqual(Object.keys(intent.creator).sort(),
+          ['pid', 'processIdentity', 'bridgePid', 'bridgeIdentity'].sort());
+        assert.equal(intent.creator.pid, process.pid);
+        assert.equal(intent.creator.processIdentity, await processIdentity(process.pid));
+        assert.notEqual(intent.creator.bridgePid, process.pid);
+        assert.match(intent.creator.bridgeIdentity, new RegExp(`^${intent.creator.bridgePid}:[1-9][0-9]*$`));
+        assert.match(intent.createdAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+        assert.ok(Date.parse(intent.createdAt) >= Date.parse(record.committedAt));
+        await assert.rejects(promisify(execFile)(pwsh,
+          [...observeArgs, '-CommittedIno', previous.committed.ino, '-PrepareRetirement'],
+          { timeout: 45000, maxBuffer: 131072, windowsHide: true }),
+        error => error.message.includes('Committed handoff observation failed; retain evidence.'));
       } else { assert.equal(previous.committed, null); }
-      const names = [previous.prepared.path, ...(previous.committed ? [previous.committed.path] : [])].sort();
+      const names = [previous.prepared.path, ...(previous.committed ? [previous.committed.path] : []),
+        ...(retirement ? [retirement.path] : [])].sort();
       assert.deepEqual((await readdir(control)).filter(name => name.toLowerCase().startsWith('inactive-handoff-')).sort(), names);
       const { acquireLock, releaseLock } = await load('state.mjs');
       await assert.rejects(api.openWindowsInactiveRollbackHistoryArchive(options));
@@ -744,6 +781,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       const completionIdentity = await lstat(completionFile, { bigint: true });
       assert.equal(completionIdentity.dev, retainedCompletion.identity.dev);
       assert.equal(completionIdentity.ino, retainedCompletion.identity.ino);
+      if (retirement) await unlink(path.join(control, retirement.path));
       if (previous.committed) await unlink(path.join(control, previous.committed.path));
       if (previous.owner) await unlink(path.join(control, previous.owner.path));
       await rmdir(lockDirectory);
@@ -755,6 +793,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         Committed: 'PASS: actual committed handoff publisher death preserves exact receipt and blocks ordinary continuation',
       };
       console.log(receipt[lockStage]);
+      if (retirement) console.log('PASS: native lock retirement intent binds exact dead committed lock without deleting evidence or granting continuation');
     }
     if (mode === 'resume-abandoned-history') {
       const previous = JSON.parse(crashStep);
