@@ -4,8 +4,14 @@ function Get-AgentsChatStoppedHistoryHandoffRestartBinding(
     [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity,
     [string]$AttemptId, [string]$OperationId, [string]$Token, [string]$CreatedAt
 ) {
-    if (-not $Context.ContainsKey('HistoryHandoffRestartPreparer') -or
-        $Context.HistoryHandoffRestartPreparer -ne $true -or
+    $preparer = $Context.ContainsKey('HistoryHandoffRestartPreparer') -and
+        $Context.HistoryHandoffRestartPreparer -eq $true
+    $observer = $Context.ContainsKey('HistoryHandoffRestartObserver') -and
+        $Context.HistoryHandoffRestartObserver -eq $true
+    if ($preparer -eq $observer -or
+        ($preparer -and $Context.ContainsKey('HistoryHandoffRestartObserver')) -or
+        ($observer -and ($Context.ContainsKey('HistoryHandoffRestartPreparer') -or
+            $Context.ContainsKey('HistoryHandoffRestartPublisher'))) -or
         -not $Context.ContainsKey('HistoryHandoffSuccessorAbandonedObserver') -or
         $Context.HistoryHandoffSuccessorAbandonedObserver -ne $true -or
         -not $Context.ContainsKey('HistoryHandoffSuccessorObserver') -or
@@ -16,8 +22,8 @@ function Get-AgentsChatStoppedHistoryHandoffRestartBinding(
         throw 'Restart preparation requires its independent native role.'
     }
     $previous = $Context.HistoryHandoffObservedCommit
-    if ($ControllerPid -ne $previous.ControllerPid -or
-        $ControllerIdentity -cne $previous.ControllerIdentity) {
+    if ($preparer -and ($ControllerPid -ne $previous.ControllerPid -or
+        $ControllerIdentity -cne $previous.ControllerIdentity)) {
         throw 'Restart preparation controller differs.'
     }
     $old = $Context.HistoryHandoffLock.OwnerRequest
@@ -56,7 +62,8 @@ function Get-AgentsChatStoppedHistoryHandoffRestartBinding(
     }
     $record.phase = 'stopped-history-handoff-restart-prepared'
     $record.attemptId = $AttemptId
-    $record.newOwner = New-AgentsChatStoppedHistoryHandoffOwner @request
+    $record.newOwner = if ($observer) { Get-AgentsChatStoppedHistoryHandoffRetiredOwner @request }
+        else { New-AgentsChatStoppedHistoryHandoffOwner @request }
     $intent = $Context.HistoryHandoffLockRetirementIntent
     $settlement = $Context.HistoryHandoffLockSettlement
     $record.predecessor = [ordered]@{
@@ -74,7 +81,8 @@ function Get-AgentsChatStoppedHistoryHandoffRestartBinding(
     if ([Text.Encoding]::UTF8.GetByteCount(($record | ConvertTo-Json -Depth 16 -Compress)) -gt 1048576) {
         throw 'Native restart preparation response is oversized.'
     }
-    $null = New-AgentsChatStoppedHistoryHandoffOwner @request
+    if ($observer) { $null = Get-AgentsChatStoppedHistoryHandoffRetiredOwner @request }
+    else { $null = New-AgentsChatStoppedHistoryHandoffOwner @request }
     return $record
 }
 
@@ -82,6 +90,11 @@ function Get-AgentsChatStoppedHistoryHandoffRestartRecord(
     [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity,
     [string]$AttemptId, [string]$OperationId, [string]$Token, [string]$CreatedAt
 ) {
+    if (-not $Context.ContainsKey('HistoryHandoffRestartPreparer') -or
+        $Context.HistoryHandoffRestartPreparer -ne $true -or
+        $Context.ContainsKey('HistoryHandoffRestartObserver')) {
+        throw 'Restart preparation requires its independent native role.'
+    }
     $null = Get-AgentsChatStoppedHistoryHandoffRestartBinding @PSBoundParameters
     $null = Get-AgentsChatStoppedHistoryHandoffSuccessorAbandonedObservation $Context $ControllerPid $ControllerIdentity
     $record = Get-AgentsChatStoppedHistoryHandoffRestartBinding @PSBoundParameters

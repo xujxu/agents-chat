@@ -1,8 +1,16 @@
 . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-restart.ps1')
 
 function Assert-AgentsChatStoppedHistoryHandoffRestartPrepared([hashtable]$Context) {
-    if (-not $Context.ContainsKey('HistoryHandoffRestartPublisher') -or
-        $Context.HistoryHandoffRestartPublisher -ne $true -or
+    $publisher = $Context.ContainsKey('HistoryHandoffRestartPublisher') -and
+        $Context.HistoryHandoffRestartPublisher -eq $true -and
+        $Context.ContainsKey('HistoryHandoffRestartPreparer') -and
+        $Context.HistoryHandoffRestartPreparer -eq $true -and
+        -not $Context.ContainsKey('HistoryHandoffRestartObserver')
+    $observer = $Context.ContainsKey('HistoryHandoffRestartObserver') -and
+        $Context.HistoryHandoffRestartObserver -eq $true -and
+        -not $Context.ContainsKey('HistoryHandoffRestartPreparer') -and
+        -not $Context.ContainsKey('HistoryHandoffRestartPublisher')
+    if ($publisher -eq $observer -or
         -not $Context.ContainsKey('HistoryHandoffRestartPrepared')) {
         throw 'Restart preparation lacks retained independent publication proof.'
     }
@@ -34,7 +42,8 @@ function Publish-AgentsChatStoppedHistoryHandoffRestartPrepared(
     if (-not $Context.ContainsKey('HistoryHandoffRestartPublisher') -or
         $Context.HistoryHandoffRestartPublisher -ne $true -or
         -not $Context.ContainsKey('HistoryHandoffRestartPreparer') -or
-        $Context.HistoryHandoffRestartPreparer -ne $true) {
+        $Context.HistoryHandoffRestartPreparer -ne $true -or
+        $Context.ContainsKey('HistoryHandoffRestartObserver')) {
         throw 'Restart publication requires its independent native role.'
     }
     try {

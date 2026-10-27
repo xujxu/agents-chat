@@ -117,3 +117,21 @@ dependency root and therefore lacked `Read-AgentsChatRetirementJson`.
 This is not valid missing-observer red. Load the same cleanup root as the
 accepted committed-observation fixture before strict request parsing; keep
 the native observer module absent and rerun the test-only gate.
+
+## Valid missing-observer red and implementation
+
+Corrected test-only `e50685973da6d1454af79464af0e7d547c54f7cc`, run
+`40590433344` / job `122492960129`, retained the separate normal seventh-file
+publication receipt at `2026-10-27T22:36:14.9128671Z`, then completed actual
+restart publisher/bridge death and reached the eleventh native actor.
+At `2026-10-27T22:42:02.9856985Z` it failed for the missing native
+`windows-stopped-history-handoff-restart-observation.ps1`, not timeout or
+fixture bootstrap.
+
+The implementation adds only explicit optional tenth `restart` request
+field, seven-name bootstrap, and independent dead-owner observer. Native
+binding accepts live preparer/publisher XOR read-only observer; public
+factories remain live-role-only. The readonly getter brackets complete
+ancestor observation with strict seventh-file assertions and returns nine
+bounded fields with both authority flags false. Ordinary five/six-record
+readers retain their original namespace refusal.
