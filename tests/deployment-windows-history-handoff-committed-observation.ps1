@@ -21,6 +21,12 @@ param(
     [switch]$ObserveSettlement,
     [switch]$PrepareSuccessor,
     [switch]$PublishSuccessor,
+    [switch]$ObserveSuccessor,
+    [string]$SuccessorAttemptId,
+    [string]$SuccessorDev,
+    [string]$SuccessorIno,
+    [int]$SuccessorBytes,
+    [string]$SuccessorSha256,
     [string]$TerminalDev,
     [string]$TerminalIno,
     [int]$TerminalBytes,
@@ -34,13 +40,15 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $scope = $watch = $failure = $null
 try {
-    if (($PublishSuccessor -and -not $PrepareSuccessor) -or
+    if (($ObserveSuccessor -and (-not $ObserveSettlement -or $PrepareSuccessor -or $PublishSuccessor)) -or
+        ($PublishSuccessor -and -not $PrepareSuccessor) -or
         ($PrepareSuccessor -and -not $ObserveSettlement) -or
-        ($Hold -and -not ($PrepareRetirement -or $RetireOwner -or $RetireDirectory -or $SettleRetirement)) -or
+        ($Hold -and -not ($PrepareRetirement -or $RetireOwner -or $RetireDirectory -or $SettleRetirement -or $PublishSuccessor)) -or
         ($ObserveRetirement -and $PrepareRetirement) -or ($RetireOwner -and -not $ObserveRetirement) -or
         ($RetireDirectory -and (-not $ObserveRetirement -or $RetireOwner)) -or
         ($SettleRetirement -and (-not $ObserveRetirement -or $RetireOwner -or $RetireDirectory -or $ObserveSettlement)) -or
-        ($ObserveSettlement -and (-not $ObserveRetirement -or $RetireOwner -or $RetireDirectory -or $Hold))) {
+        ($ObserveSettlement -and (-not $ObserveRetirement -or $RetireOwner -or $RetireDirectory -or
+            ($Hold -and -not $PublishSuccessor)))) {
         throw 'Invalid native retirement fixture mode.'
     }
     Add-Type -Path @(
@@ -71,7 +79,40 @@ try {
                 path="inactive-handoff-$AttemptId-lock-retired.json"
                 dev=$TerminalDev; ino=$TerminalIno; bytes=$TerminalBytes; sha256=$TerminalSha256
             }
-            if ($PublishSuccessor) {
+            if ($ObserveSuccessor) {
+                . (Join-Path $Source 'windows-stopped-history-handoff-successor-observation.ps1')
+                $successor = @{
+                    path="inactive-handoff-$SuccessorAttemptId-prepared.json"
+                    dev=$SuccessorDev; ino=$SuccessorIno; bytes=$SuccessorBytes; sha256=$SuccessorSha256
+                }
+                $scope = Open-AgentsChatStoppedHistoryHandoffSuccessorObservation $Control `
+                    $ControllerPid $ControllerIdentity $AttemptId $prepared $committed $retirement $terminal $successor
+                $observation = Get-AgentsChatStoppedHistoryHandoffSuccessorPreparedObservation $scope `
+                    $ControllerPid $ControllerIdentity
+                if ($scope.ContainsKey('HistoryHandoffSuccessorPreparer') -or
+                    $scope.ContainsKey('HistoryHandoffSuccessorPublisher') -or
+                    $scope.HistoryHandoffSuccessorObserver -ne $true) {
+                    throw 'Successor reader gained a mutation role.'
+                }
+                $request = @{
+                    Context=$scope; ControllerPid=$ControllerPid; ControllerIdentity=$ControllerIdentity
+                    AttemptId=[guid]::NewGuid().ToString(); OperationId=[guid]::NewGuid().ToString()
+                    Token=[guid]::NewGuid().ToString()
+                    CreatedAt=[DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ', [Globalization.CultureInfo]::InvariantCulture)
+                }
+                foreach ($case in @(
+                    @{ name='Get-AgentsChatStoppedHistoryHandoffSuccessorRecord'; message='Successor preparation requires its independent native role.' },
+                    @{ name='Publish-AgentsChatStoppedHistoryHandoffSuccessorPrepared'; message='Successor publication requires its independent native role.' }
+                )) {
+                    $refused = $false
+                    try { $null = & $case.name @request }
+                    catch {
+                        if ($_.Exception.Message -cne $case.message) { throw }
+                        $refused = $true
+                    }
+                    if (-not $refused) { throw 'Successor reader accepted a preparation or publication mutation.' }
+                }
+            } elseif ($PublishSuccessor) {
                 $scope = Open-AgentsChatStoppedHistoryHandoffCommittedObservation $Control `
                     $ControllerPid $ControllerIdentity $AttemptId $prepared $committed `
                     -Retirement $retirement -Terminal $terminal
@@ -182,13 +223,14 @@ try {
         if ($PublishSuccessor) {
             . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-successor-publication.ps1')
             $observation = Test-AgentsChatStoppedHistoryHandoffSuccessorPublication $Source $scope `
-                $ControllerPid $ControllerIdentity
+                $ControllerPid $ControllerIdentity -Hold:$Hold
         } else {
             . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-successor.ps1')
             $observation = Test-AgentsChatStoppedHistoryHandoffSuccessor $Source $scope $ControllerPid $ControllerIdentity
         }
     }
     if ($Hold) {
+        if ($PublishSuccessor) { $observation = $observation.observation }
         [Console]::Out.WriteLine((@{
             type='ready'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
             control=$Control; controllerIdentity=$ControllerIdentity; value=$observation
