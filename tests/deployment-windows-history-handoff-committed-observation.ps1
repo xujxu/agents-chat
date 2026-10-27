@@ -26,9 +26,9 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $scope = $watch = $failure = $null
 try {
-    if (($Hold -and -not ($PrepareRetirement -or $RetireOwner)) -or
+    if (($Hold -and -not ($PrepareRetirement -or $RetireOwner -or $RetireDirectory)) -or
         ($ObserveRetirement -and $PrepareRetirement) -or ($RetireOwner -and -not $ObserveRetirement) -or
-        ($RetireDirectory -and (-not $ObserveRetirement -or $RetireOwner -or $Hold))) {
+        ($RetireDirectory -and (-not $ObserveRetirement -or $RetireOwner))) {
         throw 'Invalid native retirement fixture mode.'
     }
     Add-Type -Path @(

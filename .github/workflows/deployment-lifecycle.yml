@@ -256,7 +256,8 @@ jobs:
             'PASS: native exact dead handoff owner retirement deletes only its pinned owner under immutable intent',
             'PASS: actual owner retirement executor death leaves an exact empty directory for a fresh native partial-cleanup observer',
             'PASS: native exact handoff directory retirement deletes only its original empty directory under immutable intent',
-            'PASS: fresh native directory-retired observation and idempotent retry preserve immutable evidence and reject replacement directories'
+            'PASS: fresh native directory-retired observation and idempotent retry preserve immutable evidence and reject replacement directories',
+            'PASS: actual directory retirement executor death leaves exact immutable evidence for a distinct fifth native actor without authority'
           )) {
             if ($historyOutput -cnotcontains $receipt) { throw "Missing stopped-history acceptance receipt: $receipt" }
           }

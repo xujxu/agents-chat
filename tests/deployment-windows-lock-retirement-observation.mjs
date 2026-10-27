@@ -6,11 +6,11 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
-const descriptorArgs = (prefix, descriptor) => [
+export const descriptorArgs = (prefix, descriptor) => [
   `-${prefix}Dev`, descriptor.dev, `-${prefix}Ino`, descriptor.ino,
   `-${prefix}Bytes`, String(descriptor.bytes), `-${prefix}Sha256`, descriptor.sha256,
 ];
-const fixtureArgs = ({ source, control, identity, previous }) => [
+export const fixtureArgs = ({ source, control, identity, previous }) => [
   '-NoProfile', '-NonInteractive', '-File',
   fileURLToPath(new URL('./deployment-windows-history-handoff-committed-observation.ps1', import.meta.url)),
   '-Source', source, '-Control', control, '-ControllerPid', String(process.pid),
