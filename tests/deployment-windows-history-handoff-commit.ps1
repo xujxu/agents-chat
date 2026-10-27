@@ -10,7 +10,8 @@ param(
     [Parameter(Mandatory)][string]$PreparedDev,
     [Parameter(Mandatory)][string]$PreparedIno,
     [Parameter(Mandatory)][int]$PreparedBytes,
-    [Parameter(Mandatory)][string]$PreparedSha256
+    [Parameter(Mandatory)][string]$PreparedSha256,
+    [ValidateSet('Directory', 'Owner', 'Committed')][string]$HoldAt
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -39,6 +40,24 @@ try {
     }
     if (-not $refused) { throw 'Lock commit accepted a scope without its independent role.' }
     $scope.HistoryHandoffLockPublisher = $true
+    if ($HoldAt) {
+        $directory = New-AgentsChatStoppedHistoryHandoffLock $scope $descriptor `
+            $ControllerPid $ControllerIdentity $AttemptId $OperationId $Token $CreatedAt
+        $owner = $committed = $null
+        if ($HoldAt -cne 'Directory') { $owner = Publish-AgentsChatStoppedHistoryHandoffLockOwner $scope }
+        if ($HoldAt -ceq 'Committed') { $committed = Complete-AgentsChatStoppedHistoryHandoffCommit $scope }
+        $null = Assert-AgentsChatStoppedWorkerCleanup $scope
+        Assert-AgentsChatStoppedHistoryHandoffLock $scope
+        [Console]::Out.WriteLine((@{
+            type='ready'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+            control=$Control; controllerIdentity=$ControllerIdentity
+            value=@{ stage=$HoldAt; attemptId=$AttemptId; prepared=$descriptor
+                lockIdentity=$directory; owner=$owner; committed=$committed }
+        } | ConvertTo-Json -Depth 8 -Compress))
+        [Console]::Out.Flush()
+        $null = [Console]::In.ReadLine()
+        throw 'Held native commit fixture received unexpected controller input.'
+    }
     $published = Publish-AgentsChatStoppedHistoryHandoffCommitted $scope $descriptor `
         $ControllerPid $ControllerIdentity $AttemptId $OperationId $Token $CreatedAt
     $document = [Text.Json.JsonDocument]::Parse([IO.File]::ReadAllText((Join-Path $Control $published.path)))

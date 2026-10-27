@@ -468,13 +468,21 @@ if (mode === 'resume-history-saved') {
 }
 await withWindowsAdmission(control, { pwsh }, async admission => {
   const options = { control, pwsh, admission };
+  const lockStages = {
+    'crash-lock-directory-history': 'Directory', 'resume-lock-directory-history': 'Directory',
+    'crash-lock-owner-history': 'Owner', 'resume-lock-owner-history': 'Owner',
+    'crash-lock-committed-history': 'Committed', 'resume-lock-committed-history': 'Committed',
+  };
+  const lockStage = lockStages[mode];
+  const lockCrash = Boolean(lockStage && mode.startsWith('crash-'));
+  const lockResume = Boolean(lockStage && mode.startsWith('resume-'));
   if (['crash-history', 'resume-history', 'crash-finalized-history', 'resume-finalized-history',
     'resume-history-saved', 'crash-completed-history', 'resume-completed-history',
     'crash-prepared-history', 'resume-prepared-history',
-    'crash-abandoned-history', 'resume-abandoned-history'].includes(mode)) {
+    'crash-abandoned-history', 'resume-abandoned-history'].includes(mode) || lockStage) {
     const finalizedResume = ['resume-finalized-history', 'resume-history-saved',
       'resume-completed-history', 'resume-prepared-history',
-      'crash-abandoned-history', 'resume-abandoned-history'].includes(mode);
+      'crash-abandoned-history', 'resume-abandoned-history'].includes(mode) || lockResume;
     if (!finalizedResume) await retainOriginalRuntimeAbsence();
     const intentFile = path.join(control, 'inactive-rollback-history-intent.json');
     const originalIntent = await readFile(finalizedResume
@@ -483,7 +491,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     const intent = JSON.parse(originalIntent);
     const completionFile = path.join(control, `retired-${intent.operationId}-inactive-rollback-history-complete.json`);
     const retainedCompletion = ['resume-completed-history', 'resume-prepared-history',
-      'crash-abandoned-history', 'resume-abandoned-history'].includes(mode) ? {
+      'crash-abandoned-history', 'resume-abandoned-history'].includes(mode) || lockResume ? {
       bytes: await readFile(completionFile), identity: await lstat(completionFile, { bigint: true }),
     } : undefined;
     if (mode === 'resume-history' || finalizedResume) {
@@ -491,7 +499,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.notEqual(await processIdentity(process.pid), previous.actorIdentity);
       assert.notEqual(await processIdentity(previous.pid), previous.processIdentity);
     }
-    if (mode === 'resume-history' || finalizedResume) {
+    if ((mode === 'resume-history' || finalizedResume) && !lockResume) {
       const { archiveCompletedWindowsInactiveRollback } = await load('windows-completed-closeout.mjs');
       assert.equal(typeof archiveCompletedWindowsInactiveRollback, 'function');
       const originalState = JSON.parse(state);
@@ -504,7 +512,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       const expected = { status: 'history-archived', operationId: originalState.operationId, phase: 'restored' };
       assert.deepEqual(await archiveCompletedWindowsInactiveRollback(closeout), expected);
       assert.deepEqual(await archiveCompletedWindowsInactiveRollback(closeout), expected);
-    } else {
+    } else if (!lockResume) {
       const writer = await api.openWindowsInactiveRollbackHistoryRetirement(options);
       try {
         assert.equal(writer.observation.archivedEntries, 0);
@@ -535,7 +543,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         }
       } finally { await writer.close(); }
     }
-    if (['crash-completed-history', 'crash-prepared-history'].includes(mode)) {
+    if (['crash-completed-history', 'crash-prepared-history'].includes(mode) || lockCrash) {
       const publisher = await api.openWindowsInactiveRollbackHistoryCompletion(options);
       try {
         const completed = await publisher.completeHistory();
@@ -548,7 +556,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         }
       } finally { await publisher.close(); }
     }
-    if (mode === 'crash-prepared-history') {
+    if (mode === 'crash-prepared-history' || lockCrash) {
       const { openWindowsStoppedHistoryHandoffPreparation } = await load('windows-stopped-history-handoff.mjs');
       const actorIdentity = await processIdentity(process.pid);
       const attemptId = randomUUID();
@@ -562,6 +570,45 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       const descriptor = await scope.publish();
       assert.deepEqual((await scope.check()).prepared, descriptor);
       assert.equal(scope.identity.processIdentity, await processIdentity(scope.identity.pid));
+      if (lockCrash) {
+        await scope.close();
+        const owner = JSON.parse(await readFile(path.join(control, descriptor.path))).newOwner;
+        const { windowsControllerTransport } = await load('windows-controller-transport.mjs');
+        const { captureWorkerFields } = await load('worker-identity.mjs');
+        const transport = windowsControllerTransport({
+          pwsh, label: 'Held native handoff lock fixture',
+          refused: cause => new Error('Held native handoff lock fixture failed.', { cause }),
+          args: [
+            '-NoProfile', '-NonInteractive', '-File',
+            fileURLToPath(new URL('./deployment-windows-history-handoff-commit.ps1', import.meta.url)),
+            '-Source', source, '-Control', control, '-ControllerPid', String(process.pid),
+            '-ControllerIdentity', actorIdentity, '-AttemptId', attemptId,
+            '-OperationId', owner.operationId, '-Token', owner.token, '-CreatedAt', owner.createdAt,
+            '-PreparedDev', descriptor.dev, '-PreparedIno', descriptor.ino,
+            '-PreparedBytes', String(descriptor.bytes), '-PreparedSha256', descriptor.sha256,
+            '-HoldAt', lockStage,
+          ],
+        });
+        let ready;
+        try {
+          ready = captureWorkerFields(await transport.wire.receive({ timeoutMs: 60000 }),
+            ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'], 'held handoff lock');
+          assert.equal(ready.type, 'ready');
+          assert.equal(ready.pid, transport.child.pid);
+          assert.equal(ready.control, control);
+          assert.equal(ready.controllerIdentity, actorIdentity);
+          assert.equal(ready.processIdentity, await processIdentity(ready.pid));
+          assert.equal(ready.value.stage, lockStage);
+          assert.equal(ready.value.attemptId, attemptId);
+          assert.deepEqual(ready.value.prepared, descriptor);
+        } catch (cause) { throw await transport.abandon(cause); }
+        console.log(`INACTIVE_HISTORY_ARCHIVE_HELD ${JSON.stringify({
+          pid: ready.pid, processIdentity: ready.processIdentity, actorPid: process.pid, actorIdentity,
+          ...ready.value, completionSha256,
+        })}`);
+        const timer = setInterval(() => {}, 1000);
+        try { await new Promise(() => {}); } finally { clearInterval(timer); }
+      }
       console.log(`INACTIVE_HISTORY_ARCHIVE_HELD ${JSON.stringify({
         ...scope.identity, actorIdentity, actorPid: process.pid, attemptId, prepared: descriptor,
         completionSha256,
@@ -570,6 +617,91 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       try { await new Promise(() => {}); } finally { clearInterval(timer); }
     }
     const completionBytes = await readFile(completionFile);
+    if (lockResume) {
+      const previous = JSON.parse(crashStep);
+      assert.equal(previous.stage, lockStage);
+      assert.notEqual(await processIdentity(process.pid), previous.actorIdentity);
+      assert.notEqual(await processIdentity(previous.actorPid), previous.actorIdentity);
+      assert.notEqual(await processIdentity(previous.pid), previous.processIdentity);
+      assert.equal(previous.prepared.path, `inactive-handoff-${previous.attemptId}-prepared.json`);
+      const snapshots = [];
+      const capture = async descriptor => {
+        const file = path.join(control, descriptor.path);
+        const bytes = await readFile(file);
+        const identity = await lstat(file, { bigint: true });
+        assert.equal(bytes.length, descriptor.bytes);
+        assert.equal(createHash('sha256').update(bytes).digest('hex'), descriptor.sha256);
+        assert.equal(identity.dev.toString(), descriptor.dev);
+        assert.equal(identity.ino.toString(), descriptor.ino);
+        const snapshot = { file, bytes, identity };
+        snapshots.push(snapshot);
+        return snapshot;
+      };
+      const prepared = JSON.parse((await capture(previous.prepared)).bytes);
+      assert.equal(prepared.oldState, state.toString('utf8'));
+      assert.equal(prepared.newOwner.pid, previous.actorPid);
+      assert.equal(prepared.newOwner.processIdentity, previous.actorIdentity);
+      const lockDirectory = path.join(control, 'lock');
+      const directory = await lstat(lockDirectory, { bigint: true });
+      assert.ok(directory.isDirectory());
+      assert.deepEqual(previous.lockIdentity, { dev: directory.dev.toString(), ino: directory.ino.toString() });
+      const children = lockStage === 'Directory' ? [] : ['owner.json'];
+      assert.deepEqual(await readdir(lockDirectory), children);
+      if (lockStage === 'Directory') {
+        assert.equal(previous.owner, null);
+      } else {
+        assert.equal(previous.owner.path, 'lock\\owner.json');
+        assert.deepEqual(JSON.parse((await capture(previous.owner)).bytes), prepared.newOwner);
+      }
+      if (lockStage === 'Committed') {
+        assert.equal(previous.committed.path, `inactive-handoff-${previous.attemptId}-committed.json`);
+        const record = JSON.parse((await capture(previous.committed)).bytes);
+        assert.equal(record.phase, 'stopped-history-handoff-committed');
+        assert.equal(record.attemptId, previous.attemptId);
+        assert.equal(record.control, control);
+        assert.equal(record.project, prepared.project);
+        assert.equal(record.previousOperationId, prepared.previousOperationId);
+        assert.deepEqual(record.controlIdentity, prepared.controlIdentity);
+        assert.deepEqual(record.prepared, previous.prepared);
+        assert.deepEqual(record.newOwner, prepared.newOwner);
+        assert.deepEqual(record.lockIdentity, previous.lockIdentity);
+        assert.deepEqual(record.lock, previous.owner);
+        assert.deepEqual(record.creator, { pid: previous.actorPid, processIdentity: previous.actorIdentity,
+          bridgePid: previous.pid, bridgeIdentity: previous.processIdentity });
+      } else { assert.equal(previous.committed, null); }
+      const names = [previous.prepared.path, ...(previous.committed ? [previous.committed.path] : [])].sort();
+      assert.deepEqual((await readdir(control)).filter(name => name.toLowerCase().startsWith('inactive-handoff-')).sort(), names);
+      const { acquireLock, releaseLock } = await load('state.mjs');
+      await assert.rejects(api.openWindowsInactiveRollbackHistoryArchive(options));
+      await assert.rejects(acquireLock(control, { ...options, project: prepared.project, operationId: randomUUID() }));
+      await assert.rejects(releaseLock(control, prepared.newOwner, { pwsh, admission }));
+      for (const snapshot of snapshots) {
+        assert.deepEqual(await readFile(snapshot.file), snapshot.bytes);
+        const current = await lstat(snapshot.file, { bigint: true });
+        assert.equal(current.dev, snapshot.identity.dev);
+        assert.equal(current.ino, snapshot.identity.ino);
+      }
+      const after = await lstat(lockDirectory, { bigint: true });
+      assert.equal(after.dev, directory.dev);
+      assert.equal(after.ino, directory.ino);
+      assert.deepEqual(await readdir(lockDirectory), children);
+      assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
+      assert.deepEqual(await readFile(completionFile), retainedCompletion.bytes);
+      const completionIdentity = await lstat(completionFile, { bigint: true });
+      assert.equal(completionIdentity.dev, retainedCompletion.identity.dev);
+      assert.equal(completionIdentity.ino, retainedCompletion.identity.ino);
+      if (previous.committed) await unlink(path.join(control, previous.committed.path));
+      if (previous.owner) await unlink(path.join(control, previous.owner.path));
+      await rmdir(lockDirectory);
+      await unlink(path.join(control, previous.prepared.path));
+      assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
+      const receipt = {
+        Directory: 'PASS: actual handoff directory publisher death preserves an empty exact lock and ordinary refusal',
+        Owner: 'PASS: actual handoff owner publisher death preserves exact prepared owner evidence without committed authority',
+        Committed: 'PASS: actual committed handoff publisher death preserves exact receipt and blocks ordinary continuation',
+      };
+      console.log(receipt[lockStage]);
+    }
     if (mode === 'resume-abandoned-history') {
       const previous = JSON.parse(crashStep);
       const preparedFile = path.join(control, previous.prepared.path);
