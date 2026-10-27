@@ -4,8 +4,14 @@ function Get-AgentsChatStoppedHistoryHandoffSuccessorBinding(
     [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity,
     [string]$AttemptId, [string]$OperationId, [string]$Token, [string]$CreatedAt
 ) {
-    if (-not $Context.ContainsKey('HistoryHandoffSuccessorPreparer') -or
-        $Context.HistoryHandoffSuccessorPreparer -ne $true -or
+    $preparer = $Context.ContainsKey('HistoryHandoffSuccessorPreparer') -and
+        $Context.HistoryHandoffSuccessorPreparer -eq $true
+    $observer = $Context.ContainsKey('HistoryHandoffSuccessorObserver') -and
+        $Context.HistoryHandoffSuccessorObserver -eq $true
+    if ($preparer -eq $observer -or
+        ($preparer -and $Context.ContainsKey('HistoryHandoffSuccessorObserver')) -or
+        ($observer -and ($Context.ContainsKey('HistoryHandoffSuccessorPreparer') -or
+            $Context.ContainsKey('HistoryHandoffSuccessorPublisher'))) -or
         -not $Context.ContainsKey('HistoryHandoffLockSettlementObserver') -or
         $Context.HistoryHandoffLockSettlementObserver -ne $true -or
         $Context.ContainsKey('HistoryHandoffLockSettler')) {
@@ -45,7 +51,8 @@ function Get-AgentsChatStoppedHistoryHandoffSuccessorBinding(
         PreviousUpdatedAt=$updatedAt
         ControllerPid=$ControllerPid; ControllerIdentity=$ControllerIdentity
     }
-    $owner = New-AgentsChatStoppedHistoryHandoffOwner @request
+    $owner = if ($observer) { Get-AgentsChatStoppedHistoryHandoffRetiredOwner @request }
+        else { New-AgentsChatStoppedHistoryHandoffOwner @request }
     $record.phase = 'stopped-history-handoff-successor-prepared'
     $record.attemptId = $AttemptId
     $record.newOwner = $owner
@@ -61,7 +68,8 @@ function Get-AgentsChatStoppedHistoryHandoffSuccessorBinding(
     if ([Text.Encoding]::UTF8.GetByteCount(($record | ConvertTo-Json -Depth 12 -Compress)) -gt 1048576) {
         throw 'Native successor preparation response is oversized.'
     }
-    $null = New-AgentsChatStoppedHistoryHandoffOwner @request
+    if ($observer) { $null = Get-AgentsChatStoppedHistoryHandoffRetiredOwner @request }
+    else { $null = New-AgentsChatStoppedHistoryHandoffOwner @request }
     return $record
 }
 
@@ -69,6 +77,11 @@ function Get-AgentsChatStoppedHistoryHandoffSuccessorRecord(
     [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity,
     [string]$AttemptId, [string]$OperationId, [string]$Token, [string]$CreatedAt
 ) {
+    if (-not $Context.ContainsKey('HistoryHandoffSuccessorPreparer') -or
+        $Context.HistoryHandoffSuccessorPreparer -ne $true -or
+        $Context.ContainsKey('HistoryHandoffSuccessorObserver')) {
+        throw 'Successor preparation requires its independent native role.'
+    }
     $null = Get-AgentsChatStoppedHistoryHandoffSuccessorBinding @PSBoundParameters
     $null = Get-AgentsChatStoppedHistoryHandoffLockSettlementObservation $Context $ControllerPid $ControllerIdentity
     $record = Get-AgentsChatStoppedHistoryHandoffSuccessorBinding @PSBoundParameters

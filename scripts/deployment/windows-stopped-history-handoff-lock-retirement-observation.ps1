@@ -67,13 +67,14 @@ function Get-AgentsChatStoppedHistoryHandoffLockRetirementObservation(
 
 function Open-AgentsChatStoppedHistoryHandoffLockRetirementObservation(
     [string]$Control, [int]$ControllerPid, [string]$ControllerIdentity,
-    [string]$AttemptId, $Prepared, $Committed, $Retirement, $Terminal
+    [string]$AttemptId, $Prepared, $Committed, $Retirement, $Terminal, $Successor
 ) {
     $scope = $null
     try {
         if ($null -eq $Retirement) { throw 'Lock retirement descriptor is required.' }
         $scope = Open-AgentsChatStoppedHistoryHandoffCommittedObservation $Control `
-            $ControllerPid $ControllerIdentity $AttemptId $Prepared $Committed -Retirement $Retirement -Terminal $Terminal
+            $ControllerPid $ControllerIdentity $AttemptId $Prepared $Committed `
+            -Retirement $Retirement -Terminal $Terminal -Successor $Successor
         if (-not $scope.ContainsKey('HistoryHandoffLockRetirementObserver') -or
             $scope.HistoryHandoffLockRetirementObserver -ne $true) {
             throw 'Lock retirement observation role is missing.'

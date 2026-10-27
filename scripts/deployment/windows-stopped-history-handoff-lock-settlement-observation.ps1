@@ -62,13 +62,14 @@ function Get-AgentsChatStoppedHistoryHandoffLockSettlementObservation(
 
 function Open-AgentsChatStoppedHistoryHandoffLockSettlementObservation(
     [string]$Control, [int]$ControllerPid, [string]$ControllerIdentity,
-    [string]$AttemptId, $Prepared, $Committed, $Retirement, $Terminal
+    [string]$AttemptId, $Prepared, $Committed, $Retirement, $Terminal, $Successor
 ) {
     $scope = $null
     try {
         if ($null -eq $Terminal) { throw 'Lock settlement descriptor is required.' }
         $scope = Open-AgentsChatStoppedHistoryHandoffLockRetirementObservation $Control `
-            $ControllerPid $ControllerIdentity $AttemptId $Prepared $Committed $Retirement -Terminal $Terminal
+            $ControllerPid $ControllerIdentity $AttemptId $Prepared $Committed $Retirement `
+            -Terminal $Terminal -Successor $Successor
         $null = Get-AgentsChatStoppedHistoryHandoffLockSettlementObservation $scope $ControllerPid $ControllerIdentity
         return $scope
     } catch {

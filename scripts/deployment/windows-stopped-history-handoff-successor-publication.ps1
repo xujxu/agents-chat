@@ -1,8 +1,16 @@
 . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-successor.ps1')
 
 function Assert-AgentsChatStoppedHistoryHandoffSuccessorPrepared([hashtable]$Context) {
-    if (-not $Context.ContainsKey('HistoryHandoffSuccessorPublisher') -or
-        $Context.HistoryHandoffSuccessorPublisher -ne $true -or
+    $publisher = $Context.ContainsKey('HistoryHandoffSuccessorPublisher') -and
+        $Context.HistoryHandoffSuccessorPublisher -eq $true -and
+        $Context.ContainsKey('HistoryHandoffSuccessorPreparer') -and
+        $Context.HistoryHandoffSuccessorPreparer -eq $true -and
+        -not $Context.ContainsKey('HistoryHandoffSuccessorObserver')
+    $observer = $Context.ContainsKey('HistoryHandoffSuccessorObserver') -and
+        $Context.HistoryHandoffSuccessorObserver -eq $true -and
+        -not $Context.ContainsKey('HistoryHandoffSuccessorPreparer') -and
+        -not $Context.ContainsKey('HistoryHandoffSuccessorPublisher')
+    if ($publisher -eq $observer -or
         -not $Context.ContainsKey('HistoryHandoffSuccessorPrepared')) {
         throw 'Successor preparation lacks retained independent publication proof.'
     }
@@ -30,7 +38,8 @@ function Publish-AgentsChatStoppedHistoryHandoffSuccessorPrepared(
     [string]$AttemptId, [string]$OperationId, [string]$Token, [string]$CreatedAt
 ) {
     if (-not $Context.ContainsKey('HistoryHandoffSuccessorPublisher') -or
-        $Context.HistoryHandoffSuccessorPublisher -ne $true) {
+        $Context.HistoryHandoffSuccessorPublisher -ne $true -or
+        $Context.ContainsKey('HistoryHandoffSuccessorObserver')) {
         throw 'Successor publication requires its independent native role.'
     }
     try {
@@ -72,7 +81,10 @@ function Get-AgentsChatStoppedHistoryHandoffSuccessorPreparedObservation(
         $request = $retained.Request
         $record = Get-AgentsChatStoppedHistoryHandoffSuccessorBinding -Context $Context @request
         return [ordered]@{
-            status='successor-prepared'; attemptId=$record.attemptId
+            status=$(if ($Context.ContainsKey('HistoryHandoffSuccessorObserver')) {
+                'successor-prepared-observed'
+            } else { 'successor-prepared' })
+            attemptId=$record.attemptId
             previousAttemptId=$record.predecessor.attemptId
             previousOperationId=$record.previousOperationId; project=$record.project
             prepared=$retained.Descriptor; predecessor=$record.predecessor

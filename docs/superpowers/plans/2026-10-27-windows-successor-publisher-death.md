@@ -138,3 +138,35 @@ does not create another owner or lock, publish abandonment or substitute
 state. Successor settlement/admission, live committed capability, immutable
 state snapshot, first transition, release, public routing and actual
 application repeat lifecycle remain later gates.
+
+## Valid interruption red and native implementation
+
+Test-only `669bbc5d4ed79078a5d3406de0711f8ca8afccba`, focused run
+`40511278029`, job `122213540215`, passed normal publication at
+`2026-10-27T13:53:40.7099175Z`. The subsequent boundary completed actual
+sixth publisher and exact bridge termination, unchanged five-record/state
+checks and the seventh actor's six predecessor identity checks. That actor
+then failed specifically on missing
+`windows-stopped-history-handoff-successor-observation.ps1` at
+`13:56:34.3801595Z`, without timeout. This is valid native-reader red.
+
+Implement the explicit optional eighth bootstrap field only with a
+terminal, canonical distinct successor GUID filename and a pinned 1-MiB
+descriptor. The initializer decodes the fifteen-field prepared record
+with explicit nullable parsing and retains only a read-only successor
+observer. Strict binding rederives the original pinned template and all
+predecessor descriptors, and proves the prospective owner absent with
+the native retired-owner helper instead of granting live ownership.
+Reject mixed roles; keep the public preparation factory and publisher
+unavailable to observers.
+
+The new opener uses the full existing terminal opener through the
+retirement/committed chain, then asserts the exact successor binding.
+It does not redundantly call the complete bounded-observation getter
+before the caller requests that observation. The actual observation
+getter retains both full terminal proofs and strict successor checks,
+returns the same nine fields with `successor-prepared-observed`, and
+grants neither lock nor runtime authority. Ordinary bootstrap shapes
+remain unchanged. No lock, state, task or evidence mutation is introduced.
+Require same-SHA focused 31-receipt and Contracts validation before
+acceptance.
