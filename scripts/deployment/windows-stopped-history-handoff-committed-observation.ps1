@@ -83,6 +83,16 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
     $Context.HistoryHandoffLockObserver = $true
 }
 
+function Get-AgentsChatStoppedHistoryHandoffCommittedNamespace([hashtable]$Context) {
+    $retained = $Context.HistoryHandoffObservedCommit
+    $names = @($retained.PreparedName, $retained.CommittedName)
+    if ($Context.ContainsKey('HistoryHandoffLockRetirementIntent')) {
+        Assert-AgentsChatStoppedHistoryHandoffLockRetirementIntent $Context
+        $names += $Context.HistoryHandoffLockRetirementIntent.Descriptor.path
+    }
+    return $names
+}
+
 function Get-AgentsChatStoppedHistoryHandoffCommittedObservation(
     [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity
 ) {
@@ -100,7 +110,8 @@ function Get-AgentsChatStoppedHistoryHandoffCommittedObservation(
             if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity) {
                 throw 'Committed observer identity differs.'
             }
-            Assert-AgentsChatStoppedHistoryHandoffNamespace $Context @($retained.PreparedName, $retained.CommittedName)
+            $names = Get-AgentsChatStoppedHistoryHandoffCommittedNamespace $Context
+            Assert-AgentsChatStoppedHistoryHandoffNamespace $Context $names
             Assert-AgentsChatStoppedHistoryHandoffRetiredPreparedBinding $Context $retained.Prepared $retained.AttemptId `
                 $ControllerPid $ControllerIdentity
             Assert-AgentsChatRetirementCreator $retained.Creator $ControllerPid $ControllerIdentity
@@ -138,7 +149,8 @@ function Get-AgentsChatStoppedHistoryHandoffCommittedObservation(
             }
             Assert-AgentsChatStoppedHistoryHandoffLock $Context
             $null = Assert-AgentsChatStoppedWorkerCleanup $Context
-            Assert-AgentsChatStoppedHistoryHandoffNamespace $Context @($retained.PreparedName, $retained.CommittedName)
+            $names = Get-AgentsChatStoppedHistoryHandoffCommittedNamespace $Context
+            Assert-AgentsChatStoppedHistoryHandoffNamespace $Context $names
             if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity) {
                 throw 'Committed observer changed during observation.'
             }
