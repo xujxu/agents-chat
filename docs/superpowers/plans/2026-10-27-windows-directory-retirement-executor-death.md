@@ -83,3 +83,25 @@ PASS: actual directory retirement executor death leaves exact immutable evidence
   artificial missing-function red. Inspect all 26 actual receipts and
   persist SHA/run/job evidence. No terminal settlement, fresh operation,
   state write, public routing or worker authority is introduced.
+
+## Accepted execution evidence
+
+- Coverage SHA: `1c12afa285f5511a3cea2445fedff9ee59bc26c5`.
+  Same-SHA focused history
+  [40457144350](https://github.com/xujxu/agents-chat/actions/runs/40457144350),
+  job `122032992880`, and Windows Contracts
+  [40457147127](https://github.com/xujxu/agents-chat/actions/runs/40457147127),
+  job `122033004997`, both succeeded.
+- All 26 required receipts were matched to actual timestamped `Z PASS:`
+  lines, not workflow echoes. The real directory-executor death and distinct
+  fifth native actor receipt appeared at `2026-10-27T06:07:27Z`.
+- Host killed the exact fourth Node controller after native directory
+  deletion and waited for its captured native bridge handle to exit within
+  unchanged budgets. The fifth actor proved all four prior controller/bridge
+  identities absent, exact immutable records/state/completion, actual lock
+  absence, native idempotent retry, wrong-intent-identity and changed-state
+  refusal, and ordinary acquisition/release refusal.
+- There was no new production mutation in this test-only increment and no
+  artificial missing-function red. Validation ran only in GitHub Actions.
+  Terminal settlement, a fresh operation and the final full matrix remain
+  unaccepted.
