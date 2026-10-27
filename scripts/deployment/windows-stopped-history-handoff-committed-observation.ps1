@@ -5,12 +5,15 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
     $hasRetirement = $Request -is [Collections.IDictionary] -and $Request.Contains('retirement')
     $hasTerminal = $Request -is [Collections.IDictionary] -and $Request.Contains('terminal')
     $hasSuccessor = $Request -is [Collections.IDictionary] -and $Request.Contains('successor')
+    $hasSuccessorAbandoned = $Request -is [Collections.IDictionary] -and $Request.Contains('successorAbandoned')
     if ($hasTerminal -and -not $hasRetirement) { throw 'Committed handoff terminal requires retirement.' }
     if ($hasSuccessor -and -not $hasTerminal) { throw 'Committed handoff successor requires terminal.' }
+    if ($hasSuccessorAbandoned -and -not $hasSuccessor) { throw 'Committed handoff successor terminal requires preparation.' }
     $fields = @('attemptId', 'prepared', 'committed', 'controllerPid', 'controllerIdentity')
     if ($hasRetirement) { $fields += 'retirement' }
     if ($hasTerminal) { $fields += 'terminal' }
     if ($hasSuccessor) { $fields += 'successor' }
+    if ($hasSuccessorAbandoned) { $fields += 'successorAbandoned' }
     Assert-AgentsChatRetirementFields $Request $fields
     Assert-AgentsChatCompletionGuid $Request.attemptId
     Assert-AgentsChatCompletionProcessIdentity $Request.controllerPid $Request.controllerIdentity
@@ -37,6 +40,11 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
     if ($hasSuccessor) {
         $successorAttempt = Get-AgentsChatStoppedHistoryHandoffSuccessorAttempt $Request.successor $Request.attemptId
         $names += "inactive-handoff-$successorAttempt-prepared.json"
+    }
+    if ($hasSuccessorAbandoned) {
+        $successorTerminalName = "inactive-handoff-$successorAttempt-abandoned.json"
+        Assert-AgentsChatRetirementDescriptor $Request.successorAbandoned $successorTerminalName 65536
+        $names += $successorTerminalName
     }
     Assert-AgentsChatStoppedHistoryHandoffNamespace $Context $names
     $prepared = Open-AgentsChatRetirementFile $Context $Request.prepared $preparedName
@@ -132,6 +140,9 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
     }
     if ($hasSuccessor) {
         Initialize-AgentsChatStoppedHistoryHandoffSuccessorObservation $Context $Request.successor
+    }
+    if ($hasSuccessorAbandoned) {
+        Initialize-AgentsChatStoppedHistoryHandoffSuccessorAbandonedObservation $Context $Request.successorAbandoned
     }
 }
 
@@ -234,7 +245,7 @@ function Get-AgentsChatStoppedHistoryHandoffCommittedObservation(
 
 function Open-AgentsChatStoppedHistoryHandoffCommittedObservation(
     [string]$Control, [int]$ControllerPid, [string]$ControllerIdentity,
-    [string]$AttemptId, $Prepared, $Committed, $Retirement, $Terminal, $Successor
+    [string]$AttemptId, $Prepared, $Committed, $Retirement, $Terminal, $Successor, $SuccessorAbandoned
 ) {
     $scope = $null
     try {
@@ -245,6 +256,7 @@ function Open-AgentsChatStoppedHistoryHandoffCommittedObservation(
         if ($null -ne $Retirement) { $request.retirement = $Retirement }
         if ($null -ne $Terminal) { $request.terminal = $Terminal }
         if ($null -ne $Successor) { $request.successor = $Successor }
+        if ($null -ne $SuccessorAbandoned) { $request.successorAbandoned = $SuccessorAbandoned }
         $scope = Open-AgentsChatStoppedWorkerCleanup $Control -HistoryArchive -HistoryHandoffObservation $request
         $null = Get-AgentsChatStoppedHistoryHandoffCommittedObservation $scope $ControllerPid $ControllerIdentity
         return $scope

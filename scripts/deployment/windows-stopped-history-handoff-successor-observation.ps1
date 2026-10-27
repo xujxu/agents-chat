@@ -56,14 +56,14 @@ function Initialize-AgentsChatStoppedHistoryHandoffSuccessorObservation([hashtab
 
 function Open-AgentsChatStoppedHistoryHandoffSuccessorObservation(
     [string]$Control, [int]$ControllerPid, [string]$ControllerIdentity,
-    [string]$AttemptId, $Prepared, $Committed, $Retirement, $Terminal, $Successor
+    [string]$AttemptId, $Prepared, $Committed, $Retirement, $Terminal, $Successor, $SuccessorAbandoned
 ) {
     $scope = $null
     try {
         if ($null -eq $Successor) { throw 'Successor descriptor is required.' }
         $scope = Open-AgentsChatStoppedHistoryHandoffLockSettlementObservation $Control `
             $ControllerPid $ControllerIdentity $AttemptId $Prepared $Committed $Retirement $Terminal `
-            -Successor $Successor
+            -Successor $Successor -SuccessorAbandoned $SuccessorAbandoned
         Assert-AgentsChatStoppedHistoryHandoffSuccessorPrepared $scope
         return $scope
     } catch {

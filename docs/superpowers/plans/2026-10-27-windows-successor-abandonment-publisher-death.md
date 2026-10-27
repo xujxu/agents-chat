@@ -115,3 +115,28 @@ valid red.
 Fresh-attempt admission, production committed capability, immutable state
 snapshot/transition, release, public routing and actual application repeat
 lifecycle remain separate gates. No record alone grants continuation.
+
+## Valid interruption red and implementation
+
+Test-only `25ca1389264011f3b4e4d2e305501398e0fec6ca`, focused run
+`40538566629` / job `122310405420`, reached the ninth observer after
+the actual eighth publisher/bridge death and all six evidence checks.
+It failed specifically on missing
+`windows-stopped-history-handoff-successor-abandoned-observation.ps1`
+at `2026-10-27T16:56:17Z`, with exit code 1 and no timeout.
+
+Implement optional explicit `successorAbandoned` only with the successor
+preparation, retaining all original ordinary request shapes. Pin the
+canonical 64-KiB terminal after successor initialization, decode its exact
+ten fields with the default non-nullable strict reader and prove the actual
+creator Node and bridge absent. Permit exactly one independent abandoner or
+read-only abandoned observer in nonrecursive binding, and retain the actual
+live publisher requirement in the publishing branch.
+
+The new opener uses complete native successor/terminal proof through the
+existing chain. Its twelve-field getter brackets the existing full
+successor observation with exact terminal assertions; that parent getter
+still executes both complete terminal proofs. The read-only scope cannot
+prepare, publish a successor or publish abandonment. It grants no lock,
+runtime or state-write authority. Require same-SHA focused 33 receipts plus
+Contracts before acceptance.

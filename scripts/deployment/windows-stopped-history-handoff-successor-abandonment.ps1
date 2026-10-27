@@ -3,8 +3,13 @@
 function Get-AgentsChatStoppedHistoryHandoffSuccessorAbandonedRecord(
     [hashtable]$Context, $Creator, [string]$SettledAt
 ) {
-    if (-not $Context.ContainsKey('HistoryHandoffSuccessorAbandoner') -or
-        $Context.HistoryHandoffSuccessorAbandoner -ne $true -or
+    $publisher = $Context.ContainsKey('HistoryHandoffSuccessorAbandoner') -and
+        $Context.HistoryHandoffSuccessorAbandoner -eq $true -and
+        -not $Context.ContainsKey('HistoryHandoffSuccessorAbandonedObserver')
+    $reader = $Context.ContainsKey('HistoryHandoffSuccessorAbandonedObserver') -and
+        $Context.HistoryHandoffSuccessorAbandonedObserver -eq $true -and
+        -not $Context.ContainsKey('HistoryHandoffSuccessorAbandoner')
+    if ($publisher -eq $reader -or
         -not $Context.ContainsKey('HistoryHandoffSuccessorObserver') -or
         $Context.HistoryHandoffSuccessorObserver -ne $true -or
         $Context.ContainsKey('HistoryHandoffSuccessorPreparer') -or
@@ -17,7 +22,10 @@ function Get-AgentsChatStoppedHistoryHandoffSuccessorAbandonedRecord(
         throw 'Successor abandonment controller differs.'
     }
     Assert-AgentsChatRetirementCreator $Creator $observer.ControllerPid $observer.ControllerIdentity
-    if ($Creator.pid -ne $observer.ControllerPid -or
+    if ($reader) {
+        Assert-AgentsChatCompletionProcessAbsent $Creator.pid $Creator.processIdentity
+        Assert-AgentsChatCompletionProcessAbsent $Creator.bridgePid $Creator.bridgeIdentity
+    } elseif ($Creator.pid -ne $observer.ControllerPid -or
         $Creator.processIdentity -cne $observer.ControllerIdentity -or
         $Creator.bridgePid -ne $PID -or
         $Creator.bridgeIdentity -cne [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)) {
@@ -61,7 +69,8 @@ function Publish-AgentsChatStoppedHistoryHandoffSuccessorAbandoned(
     [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity
 ) {
     if (-not $Context.ContainsKey('HistoryHandoffSuccessorAbandoner') -or
-        $Context.HistoryHandoffSuccessorAbandoner -ne $true) {
+        $Context.HistoryHandoffSuccessorAbandoner -ne $true -or
+        $Context.ContainsKey('HistoryHandoffSuccessorAbandonedObserver')) {
         throw 'Successor abandonment requires its independent native role.'
     }
     try {
