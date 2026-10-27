@@ -3,8 +3,11 @@
 
 function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtable]$Context, $Request) {
     $hasRetirement = $Request -is [Collections.IDictionary] -and $Request.Contains('retirement')
+    $hasTerminal = $Request -is [Collections.IDictionary] -and $Request.Contains('terminal')
+    if ($hasTerminal -and -not $hasRetirement) { throw 'Committed handoff terminal requires retirement.' }
     $fields = @('attemptId', 'prepared', 'committed', 'controllerPid', 'controllerIdentity')
     if ($hasRetirement) { $fields += 'retirement' }
+    if ($hasTerminal) { $fields += 'terminal' }
     Assert-AgentsChatRetirementFields $Request $fields
     Assert-AgentsChatCompletionGuid $Request.attemptId
     Assert-AgentsChatCompletionProcessIdentity $Request.controllerPid $Request.controllerIdentity
@@ -22,6 +25,11 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
         $retirementName = "inactive-handoff-$($Request.attemptId)-lock-retirement.json"
         Assert-AgentsChatRetirementDescriptor $Request.retirement $retirementName 65536
         $names += $retirementName
+    }
+    if ($hasTerminal) {
+        $terminalName = "inactive-handoff-$($Request.attemptId)-lock-retired.json"
+        Assert-AgentsChatRetirementDescriptor $Request.terminal $terminalName 65536
+        $names += $terminalName
     }
     Assert-AgentsChatStoppedHistoryHandoffNamespace $Context $names
     $prepared = Open-AgentsChatRetirementFile $Context $Request.prepared $preparedName
@@ -112,6 +120,9 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
     if ($hasRetirement) {
         Initialize-AgentsChatStoppedHistoryHandoffLockRetirementObservation $Context $Request.retirement
     }
+    if ($hasTerminal) {
+        Initialize-AgentsChatStoppedHistoryHandoffLockSettlementObservation $Context $Request.terminal
+    }
 }
 
 function Get-AgentsChatStoppedHistoryHandoffCommittedNamespace([hashtable]$Context) {
@@ -120,6 +131,10 @@ function Get-AgentsChatStoppedHistoryHandoffCommittedNamespace([hashtable]$Conte
     if ($Context.ContainsKey('HistoryHandoffLockRetirementIntent')) {
         Assert-AgentsChatStoppedHistoryHandoffLockRetirementIntent $Context
         $names += $Context.HistoryHandoffLockRetirementIntent.Descriptor.path
+    }
+    if ($Context.ContainsKey('HistoryHandoffLockSettlement')) {
+        Assert-AgentsChatStoppedHistoryHandoffLockSettlement $Context
+        $names += $Context.HistoryHandoffLockSettlement.Descriptor.path
     }
     return $names
 }
@@ -201,7 +216,7 @@ function Get-AgentsChatStoppedHistoryHandoffCommittedObservation(
 
 function Open-AgentsChatStoppedHistoryHandoffCommittedObservation(
     [string]$Control, [int]$ControllerPid, [string]$ControllerIdentity,
-    [string]$AttemptId, $Prepared, $Committed, $Retirement
+    [string]$AttemptId, $Prepared, $Committed, $Retirement, $Terminal
 ) {
     $scope = $null
     try {
@@ -210,6 +225,7 @@ function Open-AgentsChatStoppedHistoryHandoffCommittedObservation(
             controllerPid=$ControllerPid; controllerIdentity=$ControllerIdentity
         }
         if ($null -ne $Retirement) { $request.retirement = $Retirement }
+        if ($null -ne $Terminal) { $request.terminal = $Terminal }
         $scope = Open-AgentsChatStoppedWorkerCleanup $Control -HistoryArchive -HistoryHandoffObservation $request
         $null = Get-AgentsChatStoppedHistoryHandoffCommittedObservation $scope $ControllerPid $ControllerIdentity
         return $scope
