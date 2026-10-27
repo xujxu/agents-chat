@@ -111,3 +111,28 @@ $target = [Deployment.WindowsPrivateFile]::RetainForRetirement(
 ## Next deletion and settlement boundary
 
 The original directory remains a blocker after this increment. Native directory retirement must separately pin its exact identity, survive actual executor death after directory disappearance and publish immutable terminal settlement. Fresh-attempt admission, first state transition, handoff-aware release and public inactive routing remain later gates; no worker authority follows from owner-file removal.
+
+## Accepted execution evidence
+
+- Tests: `09e858be`; focused red
+  [40445415945](https://github.com/xujxu/agents-chat/actions/runs/40445415945),
+  job `121995420709`. The actual third actor reached the missing native
+  `windows-stopped-history-handoff-lock-retirement-owner.ps1` module; this was
+  not a timeout or an earlier contract failure.
+- Implementation: `04b89949967f40546ffed185e08f75a9e567fbd8`.
+  Same-SHA focused history
+  [40447653263](https://github.com/xujxu/agents-chat/actions/runs/40447653263),
+  job `122002648989`, and Windows Contracts
+  [40447656298](https://github.com/xujxu/agents-chat/actions/runs/40447656298),
+  job `122002657672`, both succeeded.
+- All 23 required receipts were matched to actual timestamped `Z PASS:`
+  execution lines, not workflow source echoes. Owner deletion passed at
+  `2026-10-27T04:24:07Z`; actual executor death and fresh partial-cleanup
+  observation passed at `2026-10-27T04:24:56Z`.
+- The fresh actor proved unchanged original empty-directory identity,
+  immutable records/state/completion, wrong-intent-identity refusal,
+  foreign-child and changed-state refusal, and idempotent native retry.
+  Ordinary gates remained refused. Production did not remove the directory
+  or grant any new-operation authority.
+- All execution was in GitHub Actions. This focused acceptance does not
+  replace the pending full Linux/Windows matrix or public repeat lifecycle.
