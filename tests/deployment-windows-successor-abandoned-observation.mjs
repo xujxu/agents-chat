@@ -172,6 +172,8 @@ export async function assertSuccessorAbandonedAfterDeath({
     assert.equal(current.ino, originalIdentity.ino);
   }
   await assert.rejects(lstat(directory), { code: 'ENOENT' });
-  for (const snapshot of snapshots.reverse()) await unlink(snapshot.file);
   console.log('PASS: actual successor abandonment publisher death preserves six exact records for a distinct ninth native observer without continuation authority');
+  console.log(`INACTIVE_HISTORY_SUCCESSOR_ABANDONED_OBSERVED ${JSON.stringify({
+    ...previous, settledObserverActor: { actorPid: process.pid, actorIdentity: identity },
+  })}`);
 }

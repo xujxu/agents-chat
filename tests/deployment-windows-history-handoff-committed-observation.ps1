@@ -25,6 +25,7 @@ param(
     [switch]$ObserveSuccessor,
     [switch]$SealSuccessor,
     [switch]$ObserveSuccessorAbandoned,
+    [switch]$PrepareRestart,
     [string]$AbandonedDev,
     [string]$AbandonedIno,
     [int]$AbandonedBytes,
@@ -49,6 +50,7 @@ $scope = $watch = $failure = $null
 try {
     if (($ObserveSuccessor -and (-not $ObserveSettlement -or $PrepareSuccessor -or $PublishSuccessor)) -or
         ($ObserveSuccessorAbandoned -and (-not $ObserveSuccessor -or $SealSuccessor)) -or
+        ($PrepareRestart -and -not $ObserveSuccessorAbandoned) -or
         ($PhasedPublication -and -not $PublishSuccessor) -or
         ($SealSuccessor -and -not $ObserveSuccessor) -or
         ($PublishSuccessor -and -not $PrepareSuccessor) -or
@@ -116,6 +118,20 @@ try {
                         $refused = $true
                     }
                     if (-not $refused) { throw 'Abandoned successor reader accepted terminal publication.' }
+                    if ($PrepareRestart) {
+                        [Console]::Out.WriteLine((@{
+                            type='successor-settlement-observed'; pid=$PID
+                            processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+                            control=$Control; controllerIdentity=$ControllerIdentity; value=$observation
+                        } | ConvertTo-Json -Depth 8 -Compress))
+                        [Console]::Out.Flush()
+                        if ([Console]::In.ReadLine() -cne '{"type":"prepare"}') {
+                            throw 'Restart preparation requires its exact command.'
+                        }
+                        . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart.ps1')
+                        $observation = Test-AgentsChatStoppedHistoryHandoffRestart $Source $scope `
+                            $ControllerPid $ControllerIdentity
+                    }
                 } else {
                     $scope = Open-AgentsChatStoppedHistoryHandoffSuccessorObservation $Control `
                         $ControllerPid $ControllerIdentity $AttemptId $prepared $committed $retirement $terminal $successor

@@ -10,6 +10,7 @@ import { holdLockDirectoryRetirement, assertLockDirectoryRetirementAfterDeath } 
 import { holdLockRetirementSettlement, assertLockRetirementSettlementAfterDeath } from './deployment-windows-lock-settlement-observation.mjs';
 import { holdSuccessorPrepared, assertSuccessorAfterDeath } from './deployment-windows-successor-observation.mjs';
 import { holdSuccessorAbandoned, assertSuccessorAbandonedAfterDeath } from './deployment-windows-successor-abandoned-observation.mjs';
+import { assertRestartPreparation } from './deployment-windows-restart-preparation.mjs';
 
 const [source, control, pwsh, mode = 'complete', crashStep = 'task-restored', terminalCrashStep = ''] = process.argv.slice(2);
 const load = name => import(pathToFileURL(path.join(source, name)).href);
@@ -488,6 +489,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   const successorCheck = mode === 'check-successor-prepared-history';
   const successorAbandonedCrash = mode === 'crash-successor-abandoned-history';
   const successorAbandonedResume = mode === 'resume-successor-abandoned-history';
+  const successorAbandonedCheck = mode === 'check-successor-abandoned-history';
   const lockStages = {
     'crash-lock-directory-history': 'Directory', 'resume-lock-directory-history': 'Directory',
     'crash-lock-owner-history': 'Owner', 'resume-lock-owner-history': 'Owner',
@@ -501,12 +503,13 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     'crash-successor-prepared-history': 'Committed', 'resume-successor-prepared-history': 'Committed',
     'check-successor-prepared-history': 'Committed',
     'crash-successor-abandoned-history': 'Committed', 'resume-successor-abandoned-history': 'Committed',
+    'check-successor-abandoned-history': 'Committed',
   };
   const lockStage = lockStages[mode];
   const lockCrash = Boolean(lockStage && mode.startsWith('crash-') &&
     !retirementCrash && !ownerRetirementCrash && !directoryRetirementCrash && !settlementCrash && !successorCrash && !successorAbandonedCrash);
   const lockResume = Boolean(lockStage &&
-    (mode.startsWith('resume-') || retirementCrash || ownerRetirementCrash || directoryRetirementCrash || ownerRetirementCheck || settlementCrash || settlementCheck || successorCrash || successorCheck || successorAbandonedCrash));
+    (mode.startsWith('resume-') || retirementCrash || ownerRetirementCrash || directoryRetirementCrash || ownerRetirementCheck || settlementCrash || settlementCheck || successorCrash || successorCheck || successorAbandonedCrash || successorAbandonedCheck));
   if (['crash-history', 'resume-history', 'crash-finalized-history', 'resume-finalized-history',
     'resume-history-saved', 'crash-completed-history', 'resume-completed-history',
     'crash-prepared-history', 'resume-prepared-history',
@@ -651,8 +654,13 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     if (successorAbandonedCrash) {
       await holdSuccessorAbandoned({ source, control, pwsh, previous: JSON.parse(crashStep) });
       throw new Error('Held successor abandonment publisher unexpectedly returned.');
-    } else if (successorAbandonedResume) {
+    } else if (successorAbandonedCheck) {
       await assertSuccessorAbandonedAfterDeath({
+        source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
+      });
+      return;
+    } else if (successorAbandonedResume) {
+      await assertRestartPreparation({
         source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
       });
     } else if (successorCrash) {

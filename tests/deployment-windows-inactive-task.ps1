@@ -903,6 +903,26 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                                 $historyStateHash) 'Successor abandoner death changed original state'
                             $resumeMode = 'resume-successor-abandoned-history'
                         }
+                        if ($historyBoundary -ceq 'successor-abandoned-history') {
+                            $settledChecker = [Deployment.WindowsControllerProcess]::Start($node,
+                                @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
+                                    $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
+                                    'check-successor-abandoned-history', $historyActor), $control, $environment)
+                            try {
+                                $output = $settledChecker.StandardOutput.ReadToEndAsync()
+                                $diagnostic = $settledChecker.StandardError.ReadToEndAsync()
+                                Assert ($settledChecker.WaitForExit(120000)) 'Fresh six-record proof actor timed out'
+                                $settledProofOutput = $output.GetAwaiter().GetResult()
+                                Write-Output $settledProofOutput
+                                $errors = $diagnostic.GetAwaiter().GetResult()
+                                if ($errors) { [Console]::Error.WriteLine($errors) }
+                                Assert ($settledChecker.ExitCode -eq 0) 'Fresh six-record proof actor failed'
+                                $settledProofFrames = @($settledProofOutput -split '\r?\n' |
+                                    Where-Object { $_.StartsWith('INACTIVE_HISTORY_SUCCESSOR_ABANDONED_OBSERVED ') })
+                                Assert ($settledProofFrames.Count -eq 1) 'Fresh six-record proof identity frame differs'
+                                $historyActor = $settledProofFrames[0].Substring('INACTIVE_HISTORY_SUCCESSOR_ABANDONED_OBSERVED '.Length)
+                            } finally { $settledChecker.Dispose() }
+                        }
                         $historyResumer = [Deployment.WindowsControllerProcess]::Start($node,
                             @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
                                 $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
