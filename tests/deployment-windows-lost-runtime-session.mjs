@@ -5,7 +5,7 @@ import { readFile, readdir, writeFile, unlink, lstat, rename, mkdir, rmdir } fro
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
-import { holdLockRetirementIntent, assertLockRetirementIntentAfterDeath } from './deployment-windows-lock-retirement-observation.mjs';
+import { holdLockRetirementIntent, holdLockOwnerRetirement, assertLockRetirementIntentAfterDeath } from './deployment-windows-lock-retirement-observation.mjs';
 
 const [source, control, pwsh, mode = 'complete', crashStep = 'task-restored', terminalCrashStep = ''] = process.argv.slice(2);
 const load = name => import(pathToFileURL(path.join(source, name)).href);
@@ -471,15 +471,18 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   const options = { control, pwsh, admission };
   const retirementCrash = mode === 'crash-lock-retirement-history';
   const retirementResume = mode === 'resume-lock-retirement-history';
+  const ownerRetirementCrash = mode === 'crash-lock-owner-retired-history';
+  const ownerRetirementResume = mode === 'resume-lock-owner-retired-history';
   const lockStages = {
     'crash-lock-directory-history': 'Directory', 'resume-lock-directory-history': 'Directory',
     'crash-lock-owner-history': 'Owner', 'resume-lock-owner-history': 'Owner',
     'crash-lock-committed-history': 'Committed', 'resume-lock-committed-history': 'Committed',
     'crash-lock-retirement-history': 'Committed', 'resume-lock-retirement-history': 'Committed',
+    'crash-lock-owner-retired-history': 'Committed', 'resume-lock-owner-retired-history': 'Committed',
   };
   const lockStage = lockStages[mode];
-  const lockCrash = Boolean(lockStage && mode.startsWith('crash-') && !retirementCrash);
-  const lockResume = Boolean(lockStage && (mode.startsWith('resume-') || retirementCrash));
+  const lockCrash = Boolean(lockStage && mode.startsWith('crash-') && !retirementCrash && !ownerRetirementCrash);
+  const lockResume = Boolean(lockStage && (mode.startsWith('resume-') || retirementCrash || ownerRetirementCrash));
   if (['crash-history', 'resume-history', 'crash-finalized-history', 'resume-finalized-history',
     'resume-history-saved', 'crash-completed-history', 'resume-completed-history',
     'crash-prepared-history', 'resume-prepared-history',
@@ -621,9 +624,13 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       try { await new Promise(() => {}); } finally { clearInterval(timer); }
     }
     const completionBytes = await readFile(completionFile);
-    if (retirementResume) {
+    if (ownerRetirementCrash) {
+      await holdLockOwnerRetirement({ source, control, pwsh, previous: JSON.parse(crashStep) });
+      throw new Error('Held owner retirement executor unexpectedly returned.');
+    } else if (retirementResume || ownerRetirementResume) {
       await assertLockRetirementIntentAfterDeath({
         source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
+        ownerRetired: ownerRetirementResume,
       });
     } else if (lockResume) {
       const previous = JSON.parse(crashStep);

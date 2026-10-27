@@ -15,6 +15,7 @@ param(
     [switch]$PrepareRetirement,
     [switch]$Hold,
     [switch]$ObserveRetirement,
+    [switch]$RetireOwner,
     [string]$RetirementDev,
     [string]$RetirementIno,
     [int]$RetirementBytes,
@@ -24,7 +25,8 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $scope = $watch = $failure = $null
 try {
-    if (($Hold -and -not $PrepareRetirement) -or ($ObserveRetirement -and ($PrepareRetirement -or $Hold))) {
+    if (($Hold -and -not ($PrepareRetirement -or $RetireOwner)) -or
+        ($ObserveRetirement -and $PrepareRetirement) -or ($RetireOwner -and -not $ObserveRetirement)) {
         throw 'Invalid native retirement fixture mode.'
     }
     Add-Type -Path @(
@@ -80,15 +82,37 @@ try {
                 throw 'Lock retirement intent does not identify its actual native bridge.'
             }
         } finally { $document.Dispose() }
-        if ($Hold) {
-            [Console]::Out.WriteLine((@{
-                type='ready'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
-                control=$Control; controllerIdentity=$ControllerIdentity; value=$observation
-            } | ConvertTo-Json -Depth 8 -Compress))
-            [Console]::Out.Flush()
-            $null = [Console]::In.ReadLine()
-            throw 'Held lock retirement fixture received unexpected controller input.'
+    }
+    if ($RetireOwner) {
+        . (Join-Path $Source 'windows-stopped-history-handoff-lock-retirement-owner.ps1')
+        $refused = $false
+        try {
+            $null = Remove-AgentsChatStoppedHistoryHandoffLockOwner $scope $ControllerPid $ControllerIdentity
+        } catch {
+            if ($_.Exception.Message -cne 'Handoff owner retirement requires its independent native role.') { throw }
+            $refused = $true
         }
+        if (-not $refused) { throw 'Owner retirement accepted a scope without its independent role.' }
+        $scope.HistoryHandoffLockRetirementExecutor = $true
+        $observation = Remove-AgentsChatStoppedHistoryHandoffLockOwner $scope $ControllerPid $ControllerIdentity
+        if ($observation.status -cne 'lock-retirement-owner-retired' -or
+            (Test-Path -LiteralPath (Join-Path $Control 'lock\owner.json')) -or
+            @(Get-ChildItem -LiteralPath (Join-Path $Control 'lock') -Force).Count) {
+            throw 'Native owner retirement did not preserve an exact empty directory.'
+        }
+        $identity = $scope.HistoryHandoffLock.Directory.CaptureIdentity()
+        if ($identity.Dev -cne $observation.lockIdentity.dev -or $identity.Ino -cne $observation.lockIdentity.ino) {
+            throw 'Native owner retirement changed its original directory identity.'
+        }
+    }
+    if ($Hold) {
+        [Console]::Out.WriteLine((@{
+            type='ready'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+            control=$Control; controllerIdentity=$ControllerIdentity; value=$observation
+        } | ConvertTo-Json -Depth 8 -Compress))
+        [Console]::Out.Flush()
+        $null = [Console]::In.ReadLine()
+        throw 'Held lock retirement fixture received unexpected controller input.'
     }
     [Console]::Out.WriteLine(($observation | ConvertTo-Json -Depth 8 -Compress))
 } catch {

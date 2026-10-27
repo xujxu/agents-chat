@@ -249,7 +249,9 @@ jobs:
             'PASS: native dead committed handoff observation pins exact lock and original archive under a distinct actor without authority',
             'PASS: native lock retirement intent binds exact dead committed lock without deleting evidence or granting continuation',
             'PASS: actual lock retirement intent publisher death preserves exact evidence for a distinct third actor without cleanup authority',
-            'PASS: native retired lock intent observation revalidates exact creator death and unchanged committed lock without mutation'
+            'PASS: native retired lock intent observation revalidates exact creator death and unchanged committed lock without mutation',
+            'PASS: native exact dead handoff owner retirement deletes only its pinned owner under immutable intent',
+            'PASS: actual owner retirement executor death leaves an exact empty directory for a fresh native partial-cleanup observer'
           )) {
             if ($historyOutput -cnotcontains $receipt) { throw "Missing stopped-history acceptance receipt: $receipt" }
           }
