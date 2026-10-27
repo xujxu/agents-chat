@@ -14,6 +14,7 @@ try {
         'WindowsRuntimeControl.cs', 'WindowsPrivateFile.cs', 'WindowsPrivateFile.SourceSecurity.cs',
         'WindowsRuntimeLease.cs', 'WindowsRuntimeHost.cs', 'WindowsRuntimeListener.cs' |
         ForEach-Object { Join-Path $Source $_ })
+    . (Join-Path $Source 'windows-inactive-worker-cleanup.ps1')
     . (Join-Path $Source 'windows-stopped-history-handoff-successor-abandoned-observation.ps1')
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
     $inputRecord = Read-AgentsChatRetirementJson $Request

@@ -106,3 +106,14 @@ PASS: actual fresh restart publisher death preserves seven exact records for a d
 No dead preparation is reused. Keep the separately accepted normal live
 publisher path available for the later native lock-publication gate rather
 than creating another fixed successor generation to proceed.
+
+## Fixture bootstrap correction before valid red
+
+Test-only `3c11d2420edaaa24e9d4f6e3ffa449eca0779bea`, run `40583531474`
+/ job `122468937243`, reached the actual eleventh actor after real restart
+publisher/bridge death, but failed at `2026-10-27T21:51:39Z` because the
+standalone fixture had not loaded the existing stopped-worker cleanup
+dependency root and therefore lacked `Read-AgentsChatRetirementJson`.
+This is not valid missing-observer red. Load the same cleanup root as the
+accepted committed-observation fixture before strict request parsing; keep
+the native observer module absent and rerun the test-only gate.
