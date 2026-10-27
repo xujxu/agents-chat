@@ -128,3 +128,17 @@ sixth namespace member. Ordinary bootstrap requests still refuse it.
 Duplicate and other publication failures poison the scope and preserve all
 files. No new lock, worker/task authority, original-state write or fresh
 attempt admission is introduced. Require same-SHA Actions acceptance.
+
+## Accepted dead-successor settlement
+
+Accepted SHA `bef3ce03b9e102e68856c55ea3a658ccae1f833e`.
+Focused `40531894343` / job `122286660891` succeeded; all 32 required
+receipts from this exact SHA's workflow matched actual timestamped output.
+The new settlement receipt occurred at `2026-10-27T16:05:42.4807067Z`.
+Same-SHA Contracts `40531901243` / `122286681656` succeeded. Both job
+logs are retained in the session artifacts.
+
+This accepts actual eighth-actor terminal publication, independent-role
+and duplicate refusal, and preservation of all five predecessor records,
+original state/completion and absent lock. Actual terminal-publisher death,
+six-record fresh reopening and new-attempt admission remain unaccepted.
