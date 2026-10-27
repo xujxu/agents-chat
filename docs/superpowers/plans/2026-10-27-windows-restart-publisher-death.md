@@ -135,3 +135,17 @@ factories remain live-role-only. The readonly getter brackets complete
 ancestor observation with strict seventh-file assertions and returns nine
 bounded fields with both authority flags false. Ordinary five/six-record
 readers retain their original namespace refusal.
+
+## Aggregate job budget correction
+
+Implementation `ab1eb23dfa35d629f0ee48bf3d18c0e89ddbe121` passed Windows
+Contracts in run `40597324559` / job `122516431880`. Focused run
+`40597320749` / job `122516424987` was cancelled at
+`2026-10-27T23:46:28.2253598Z` by the entire job's 60-minute limit,
+not an individual native request/actor failure. Its seventeen cumulative
+boundaries reached the final chain before cancellation.
+
+Allow 90 minutes for the aggregate job with all seventeen boundaries;
+retain every assertion and the unchanged 45-second per-response,
+120-second per-actor and 15-second bridge-exit limits. This cancellation
+is not acceptance; rerun focused and Contracts together on the new SHA.
