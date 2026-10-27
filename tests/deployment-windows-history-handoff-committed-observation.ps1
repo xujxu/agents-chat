@@ -57,12 +57,12 @@ try {
         ($SealSuccessor -and -not $ObserveSuccessor) -or
         ($PublishSuccessor -and -not $PrepareSuccessor) -or
         ($PrepareSuccessor -and -not $ObserveSettlement) -or
-        ($Hold -and -not ($PrepareRetirement -or $RetireOwner -or $RetireDirectory -or $SettleRetirement -or $PublishSuccessor -or $SealSuccessor)) -or
+        ($Hold -and -not ($PrepareRetirement -or $RetireOwner -or $RetireDirectory -or $SettleRetirement -or $PublishSuccessor -or $SealSuccessor -or $PublishRestart)) -or
         ($ObserveRetirement -and $PrepareRetirement) -or ($RetireOwner -and -not $ObserveRetirement) -or
         ($RetireDirectory -and (-not $ObserveRetirement -or $RetireOwner)) -or
         ($SettleRetirement -and (-not $ObserveRetirement -or $RetireOwner -or $RetireDirectory -or $ObserveSettlement)) -or
         ($ObserveSettlement -and (-not $ObserveRetirement -or $RetireOwner -or $RetireDirectory -or
-            ($Hold -and -not ($PublishSuccessor -or $SealSuccessor))))) {
+            ($Hold -and -not ($PublishSuccessor -or $SealSuccessor -or $PublishRestart))))) {
         throw 'Invalid native retirement fixture mode.'
     }
     Add-Type -Path @(
@@ -133,7 +133,7 @@ try {
                         if ($PublishRestart) {
                             . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart-publication.ps1')
                             $observation = Test-AgentsChatStoppedHistoryHandoffRestartPublication $Source $scope `
-                                $ControllerPid $ControllerIdentity
+                                $ControllerPid $ControllerIdentity -Hold:$Hold
                         } else {
                             . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart.ps1')
                             $observation = Test-AgentsChatStoppedHistoryHandoffRestart $Source $scope `

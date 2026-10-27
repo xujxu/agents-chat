@@ -490,6 +490,8 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   const successorAbandonedCrash = mode === 'crash-successor-abandoned-history';
   const successorAbandonedResume = mode === 'resume-successor-abandoned-history';
   const restartPublishedResume = mode === 'resume-restart-published-history';
+  const restartCrash = mode === 'crash-restart-prepared-history';
+  const restartResume = mode === 'resume-restart-prepared-history';
   const successorAbandonedCheck = mode === 'check-successor-abandoned-history';
   const lockStages = {
     'crash-lock-directory-history': 'Directory', 'resume-lock-directory-history': 'Directory',
@@ -506,12 +508,13 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     'crash-successor-abandoned-history': 'Committed', 'resume-successor-abandoned-history': 'Committed',
     'check-successor-abandoned-history': 'Committed',
     'resume-restart-published-history': 'Committed',
+    'crash-restart-prepared-history': 'Committed', 'resume-restart-prepared-history': 'Committed',
   };
   const lockStage = lockStages[mode];
   const lockCrash = Boolean(lockStage && mode.startsWith('crash-') &&
-    !retirementCrash && !ownerRetirementCrash && !directoryRetirementCrash && !settlementCrash && !successorCrash && !successorAbandonedCrash);
+    !retirementCrash && !ownerRetirementCrash && !directoryRetirementCrash && !settlementCrash && !successorCrash && !successorAbandonedCrash && !restartCrash);
   const lockResume = Boolean(lockStage &&
-    (mode.startsWith('resume-') || retirementCrash || ownerRetirementCrash || directoryRetirementCrash || ownerRetirementCheck || settlementCrash || settlementCheck || successorCrash || successorCheck || successorAbandonedCrash || successorAbandonedCheck));
+    (mode.startsWith('resume-') || retirementCrash || ownerRetirementCrash || directoryRetirementCrash || ownerRetirementCheck || settlementCrash || settlementCheck || successorCrash || successorCheck || successorAbandonedCrash || successorAbandonedCheck || restartCrash));
   if (['crash-history', 'resume-history', 'crash-finalized-history', 'resume-finalized-history',
     'resume-history-saved', 'crash-completed-history', 'resume-completed-history',
     'crash-prepared-history', 'resume-prepared-history',
@@ -653,7 +656,17 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       try { await new Promise(() => {}); } finally { clearInterval(timer); }
     }
     const completionBytes = await readFile(completionFile);
-    if (successorAbandonedCrash) {
+    if (restartCrash) {
+      await assertRestartPreparation({
+        source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
+        publish: true, hold: true,
+      });
+      throw new Error('Held restart publisher unexpectedly returned.');
+    } else if (restartResume) {
+      await assertSuccessorAbandonedAfterDeath({
+        source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes, restart: true,
+      });
+    } else if (successorAbandonedCrash) {
       await holdSuccessorAbandoned({ source, control, pwsh, previous: JSON.parse(crashStep) });
       throw new Error('Held successor abandonment publisher unexpectedly returned.');
     } else if (successorAbandonedCheck) {

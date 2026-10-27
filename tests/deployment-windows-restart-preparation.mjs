@@ -8,8 +8,9 @@ import { promisify } from 'node:util';
 import { fixtureArgs, descriptorArgs } from './deployment-windows-lock-retirement-observation.mjs';
 
 export async function assertRestartPreparation({
-  source, control, pwsh, admission, previous, state, completionBytes, publish = false,
+  source, control, pwsh, admission, previous, state, completionBytes, publish = false, hold = false,
 }) {
+  assert.ok(!hold || publish);
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
   const { windowsControllerTransport } = await load('windows-controller-transport.mjs');
@@ -57,7 +58,7 @@ export async function assertRestartPreparation({
     ...descriptorArgs('Terminal', previous.terminal), '-ObserveSuccessor',
     '-SuccessorAttemptId', previous.successorAttemptId, ...descriptorArgs('Successor', previous.successor),
     '-ObserveSuccessorAbandoned', ...descriptorArgs('Abandoned', previous.successorAbandoned), '-PrepareRestart',
-    ...(publish ? ['-PublishRestart'] : [])];
+    ...(publish ? ['-PublishRestart'] : []), ...(hold ? ['-Hold'] : [])];
   const transport = windowsControllerTransport({
     pwsh, label: 'Fresh native restart preparation fixture',
     refused: cause => new Error('Fresh native restart preparation fixture failed.', { cause }),
@@ -65,6 +66,7 @@ export async function assertRestartPreparation({
   });
   let diagnostic = '';
   let owner;
+  let heldPublication;
   transport.child.stderr.on('data', bytes => { diagnostic = `${diagnostic}${bytes.toString('utf8')}`.slice(-4096); });
   try {
     const ready = captureWorkerFields(await transport.wire.receive({ timeoutMs: 45000 }),
@@ -83,7 +85,19 @@ export async function assertRestartPreparation({
     });
     await transport.wire.send({ type: 'prepare' });
     const response = await transport.wire.receive({ timeoutMs: 45000 });
-    const publication = publish ? captureWorkerFields(response, ['prepared', 'record'], 'restart publication') : null;
+    let value = response;
+    if (hold) {
+      const frame = captureWorkerFields(response,
+        ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'], 'held restart publication');
+      assert.equal(frame.type, 'ready');
+      assert.equal(frame.pid, ready.pid);
+      assert.equal(frame.processIdentity, ready.processIdentity);
+      assert.equal(frame.processIdentity, await processIdentity(frame.pid));
+      assert.equal(frame.control, control);
+      assert.equal(frame.controllerIdentity, identity);
+      value = frame.value;
+    }
+    const publication = publish ? captureWorkerFields(value, ['prepared', 'record'], 'restart publication') : null;
     const record = captureWorkerFields(publication ? publication.record : response,
       ['version', 'phase', 'attemptId', 'newOwner', 'predecessor'], 'restart preparation');
     const identifiers = [record.attemptId, record.newOwner.operationId, record.newOwner.token];
@@ -109,9 +123,11 @@ export async function assertRestartPreparation({
     assert.equal(new Date(record.newOwner.createdAt).toISOString(), record.newOwner.createdAt);
     assert.ok(record.newOwner.createdAt >= abandoned.settledAt);
     owner = record.newOwner;
-    assert.deepEqual(await transport.waitForExit(), { code: 0, signal: null });
+    if (!hold) {
+      assert.deepEqual(await transport.waitForExit(), { code: 0, signal: null });
+      transport.wire.close();
+    }
     assert.equal(diagnostic, '');
-    transport.wire.close();
     if (publication) {
       const descriptor = captureWorkerFields(publication.prepared,
         ['path', 'dev', 'ino', 'bytes', 'sha256'], 'published restart descriptor');
@@ -129,6 +145,16 @@ export async function assertRestartPreparation({
         newOwner: record.newOwner, predecessor: record.predecessor,
       });
       snapshots.push({ file, bytes, identity: current });
+      if (hold) {
+        heldPublication = {
+          ...previous, abandonmentPublisherActor: {
+            actorPid: previous.actorPid, actorIdentity: previous.actorIdentity,
+            pid: previous.pid, processIdentity: previous.processIdentity,
+          },
+          restartPrepared: descriptor, restartAttemptId: record.attemptId,
+          actorPid: process.pid, actorIdentity: identity, pid: ready.pid, processIdentity: ready.processIdentity,
+        };
+      }
     }
   } catch (cause) {
     const error = await transport.abandon(cause);
@@ -136,14 +162,16 @@ export async function assertRestartPreparation({
     throw error;
   }
   const { acquireLock, releaseLock } = await load('state.mjs');
-  if (publish) {
+  if (publish && !hold) {
     await assert.rejects(promisify(execFile)(pwsh,
       nativeArgs.filter(arg => arg !== '-PrepareRestart' && arg !== '-PublishRestart'),
       { timeout: 45000, maxBuffer: 131072, windowsHide: true }),
     error => error.message.includes('Successor abandoned observation failed; retain evidence.'));
   }
-  await assert.rejects(acquireLock(control, { pwsh, admission, project: original.project, operationId: randomUUID() }));
-  await assert.rejects(releaseLock(control, owner, { pwsh, admission }));
+  if (!hold) {
+    await assert.rejects(acquireLock(control, { pwsh, admission, project: original.project, operationId: randomUUID() }));
+    await assert.rejects(releaseLock(control, owner, { pwsh, admission }));
+  }
   for (const snapshot of snapshots) {
     assert.deepEqual(await readFile(snapshot.file), snapshot.bytes);
     const current = await lstat(snapshot.file, { bigint: true });
@@ -161,6 +189,11 @@ export async function assertRestartPreparation({
     assert.equal(current.ino, originalIdentity.ino);
   }
   await assert.rejects(lstat(path.join(control, 'lock')), { code: 'ENOENT' });
+  if (hold) {
+    console.log(`INACTIVE_HISTORY_RESTART_PREPARED_HELD ${JSON.stringify(heldPublication)}`);
+    const timer = setInterval(() => {}, 1000);
+    try { await new Promise(() => {}); } finally { clearInterval(timer); }
+  }
   for (const snapshot of snapshots.reverse()) await unlink(snapshot.file);
   console.log(publish
     ? 'PASS: native restart publication creates one exact seventh preparation while duplicate publication and ordinary authority remain refused'

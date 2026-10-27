@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile, lstat, writeFile, unlink, rename, mkdir, rmdir, readdir } from 'node:fs/promises';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { fixtureArgs, descriptorArgs } from './deployment-windows-lock-retirement-observation.mjs';
 import { publishSuccessorAbandonment } from './deployment-windows-successor-abandonment.mjs';
@@ -52,24 +52,28 @@ export async function holdSuccessorAbandoned({ source, control, pwsh, previous }
 }
 
 export async function assertSuccessorAbandonedAfterDeath({
-  source, control, pwsh, admission, previous, state, completionBytes,
+  source, control, pwsh, admission, previous, state, completionBytes, restart = false,
 }) {
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
   const identity = await processIdentity(process.pid);
   const actors = [previous.originalActor, previous.retirementActor, previous.ownerRetirementActor,
-    previous.directoryRetirementActor, previous.settlementActor, previous.successorPublisherActor, previous];
-  assert.equal(new Set([...actors.map(actor => actor.actorIdentity), previous.successorObserverActor.actorIdentity]).size, 8);
+    previous.directoryRetirementActor, previous.settlementActor, previous.successorPublisherActor,
+    ...(restart ? [previous.abandonmentPublisherActor] : []), previous];
+  const observers = [previous.successorObserverActor, ...(restart ? [previous.settledObserverActor] : [])];
+  assert.equal(new Set([...actors, ...observers].map(actor => actor.actorIdentity)).size, restart ? 10 : 8);
   for (const actor of actors) {
     assert.notEqual(identity, actor.actorIdentity);
     assert.notEqual(await processIdentity(actor.actorPid), actor.actorIdentity);
     assert.notEqual(await processIdentity(actor.pid), actor.processIdentity);
   }
-  assert.notEqual(identity, previous.successorObserverActor.actorIdentity);
-  assert.notEqual(await processIdentity(previous.successorObserverActor.actorPid), previous.successorObserverActor.actorIdentity);
+  for (const actor of observers) {
+    assert.notEqual(identity, actor.actorIdentity);
+    assert.notEqual(await processIdentity(actor.actorPid), actor.actorIdentity);
+  }
   const snapshots = [];
   for (const descriptor of [previous.prepared, previous.committed, previous.retirement,
-    previous.terminal, previous.successor, previous.successorAbandoned]) {
+    previous.terminal, previous.successor, previous.successorAbandoned, ...(restart ? [previous.restartPrepared] : [])]) {
     const file = path.join(control, descriptor.path);
     const bytes = await readFile(file);
     const current = await lstat(file, { bigint: true });
@@ -86,9 +90,10 @@ export async function assertSuccessorAbandonedAfterDeath({
   assert.equal(successor.newOwner.pid, previous.successorPublisherActor.actorPid);
   assert.equal(successor.newOwner.processIdentity, previous.successorPublisherActor.actorIdentity);
   assert.deepEqual(successor.predecessor, predecessor(previous));
+  const abandonmentPublisher = restart ? previous.abandonmentPublisherActor : previous;
   assert.deepEqual(abandoned.creator, {
-    pid: previous.actorPid, processIdentity: previous.actorIdentity,
-    bridgePid: previous.pid, bridgeIdentity: previous.processIdentity,
+    pid: abandonmentPublisher.actorPid, processIdentity: abandonmentPublisher.actorIdentity,
+    bridgePid: abandonmentPublisher.pid, bridgeIdentity: abandonmentPublisher.processIdentity,
   });
   assert.equal(abandoned.attemptId, previous.successorAttemptId);
   assert.deepEqual(abandoned.prepared, previous.successor);
@@ -100,10 +105,29 @@ export async function assertSuccessorAbandonedAfterDeath({
   const completionIdentity = await lstat(completionFile, { bigint: true });
   assert.equal(createHash('sha256').update(completionBytes).digest('hex'), previous.completionSha256);
   const baseArgs = successorArgs({ source, control, identity, previous });
-  const args = [...baseArgs, '-ObserveSuccessorAbandoned', ...descriptorArgs('Abandoned', previous.successorAbandoned)];
+  const sixArgs = [...baseArgs, '-ObserveSuccessorAbandoned', ...descriptorArgs('Abandoned', previous.successorAbandoned)];
+  const request = {
+    attemptId: previous.attemptId, prepared: previous.prepared, committed: previous.committed,
+    retirement: previous.retirement, terminal: previous.terminal, successor: previous.successor,
+    successorAbandoned: previous.successorAbandoned, restart: previous.restartPrepared,
+  };
+  const restartArgs = value => ['-NoProfile', '-NonInteractive', '-File',
+    fileURLToPath(new URL('./deployment-windows-history-handoff-restart-observation.ps1', import.meta.url)),
+    '-Source', source, '-Control', control, '-ControllerPid', String(process.pid), '-ControllerIdentity', identity,
+    '-Request', JSON.stringify(value)];
+  const args = restart ? restartArgs(request) : sixArgs;
   const observe = input => promisify(execFile)(pwsh, input,
     { timeout: 45000, maxBuffer: 131072, windowsHide: true });
-  const expected = {
+  const expected = restart ? {
+    status: 'restart-prepared-observed', attemptId: previous.restartAttemptId,
+    previousAttemptId: previous.successorAttemptId, previousOperationId: original.previousOperationId,
+    project: original.project, prepared: previous.restartPrepared,
+    predecessor: {
+      attemptId: previous.successorAttemptId, prepared: previous.successor,
+      abandoned: previous.successorAbandoned, predecessor: predecessor(previous),
+    },
+    runtimeAuthority: false, lockAuthority: false,
+  } : {
     status: 'successor-abandoned-observed', attemptId: previous.successorAttemptId,
     previousAttemptId: previous.attemptId, previousOperationId: original.previousOperationId,
     project: original.project, prepared: previous.successor, abandoned: previous.successorAbandoned,
@@ -113,11 +137,17 @@ export async function assertSuccessorAbandonedAfterDeath({
   const first = await observe(args);
   assert.equal(first.stderr, '');
   assert.deepEqual(JSON.parse(first.stdout), expected);
-  const refused = error => error.message.includes('Successor abandoned observation failed; retain evidence.');
+  const refused = error => error.message.includes(restart
+    ? 'Restart prepared observation failed; retain evidence.'
+    : 'Successor abandoned observation failed; retain evidence.');
   const wrong = args.slice();
-  wrong[wrong.indexOf('-AbandonedIno') + 1] = previous.successorAbandoned.ino === '1' ? '2' : '1';
+  if (restart) {
+    wrong[wrong.indexOf('-Request') + 1] = JSON.stringify({
+      ...request, restart: { ...request.restart, ino: request.restart.ino === '1' ? '2' : '1' },
+    });
+  } else { wrong[wrong.indexOf('-AbandonedIno') + 1] = previous.successorAbandoned.ino === '1' ? '2' : '1'; }
   await assert.rejects(observe(wrong), refused);
-  const published = snapshots[5];
+  const published = snapshots[restart ? 6 : 5];
   const held = path.join(control, 'fixture-held-successor-abandoned.json');
   await rename(published.file, held);
   let replacement;
@@ -152,9 +182,18 @@ export async function assertSuccessorAbandonedAfterDeath({
   assert.deepEqual(JSON.parse(checked.stdout), expected);
   await assert.rejects(observe(baseArgs),
     error => error.message.includes('Successor prepared observation failed; retain evidence.'));
+  if (restart) {
+    const record = JSON.parse(published.bytes);
+    assert.equal(record.newOwner.pid, previous.actorPid);
+    assert.equal(record.newOwner.processIdentity, previous.actorIdentity);
+    assert.equal(record.attemptId, previous.restartAttemptId);
+    assert.deepEqual(record.predecessor, expected.predecessor);
+    await assert.rejects(observe(sixArgs),
+      error => error.message.includes('Successor abandoned observation failed; retain evidence.'));
+  }
   const { acquireLock, releaseLock } = await load('state.mjs');
   await assert.rejects(acquireLock(control, { pwsh, admission, project: original.project, operationId: randomUUID() }));
-  await assert.rejects(releaseLock(control, successor.newOwner, { pwsh, admission }));
+  await assert.rejects(releaseLock(control, restart ? JSON.parse(published.bytes).newOwner : successor.newOwner, { pwsh, admission }));
   for (const snapshot of snapshots) {
     assert.deepEqual(await readFile(snapshot.file), snapshot.bytes);
     const current = await lstat(snapshot.file, { bigint: true });
@@ -172,8 +211,13 @@ export async function assertSuccessorAbandonedAfterDeath({
     assert.equal(current.ino, originalIdentity.ino);
   }
   await assert.rejects(lstat(directory), { code: 'ENOENT' });
-  console.log('PASS: actual successor abandonment publisher death preserves six exact records for a distinct ninth native observer without continuation authority');
-  console.log(`INACTIVE_HISTORY_SUCCESSOR_ABANDONED_OBSERVED ${JSON.stringify({
-    ...previous, settledObserverActor: { actorPid: process.pid, actorIdentity: identity },
-  })}`);
+  if (restart) {
+    for (const snapshot of snapshots.reverse()) await unlink(snapshot.file);
+    console.log('PASS: actual fresh restart publisher death preserves seven exact records for a distinct eleventh native observer without continuation authority');
+  } else {
+    console.log('PASS: actual successor abandonment publisher death preserves six exact records for a distinct ninth native observer without continuation authority');
+    console.log(`INACTIVE_HISTORY_SUCCESSOR_ABANDONED_OBSERVED ${JSON.stringify({
+      ...previous, settledObserverActor: { actorPid: process.pid, actorIdentity: identity },
+    })}`);
+  }
 }
