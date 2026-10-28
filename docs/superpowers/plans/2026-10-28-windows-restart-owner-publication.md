@@ -19,6 +19,7 @@
 - Modify: `tests/deployment-windows-restart-preparation.mjs`
 - Modify: `tests/deployment-windows-lost-runtime-session.mjs`
 - Modify: `tests/deployment-windows-inactive-task.ps1`
+- Create: `tests/deployment-windows-restart-owner-controller.ps1`
 - Modify: `.github/workflows/deployment-lifecycle.yml`
 
 - [ ] Add `restart-owner-history` after the nineteen existing boundaries.
@@ -124,3 +125,30 @@ PASS: native restart owner publication pins only its exact fresh live owner whil
 
 - [ ] Commit accepted evidence. Actual owner-publisher death remains the
   next independent gate before fresh committed capability.
+
+### Aggregate-budget investigation
+
+At `92fba2725400c0d9e9d5c2ddcce006f96c06a014`, run `40636493388`,
+job `122644553806`, was cancelled by the 90-minute aggregate limit at
+`2026-10-28T06:41:16.3722229Z`. This is not a valid missing-module red.
+The prior normal directory receipt passed at `06:24:37.9444506Z` and
+actual incomplete-directory death passed at `06:33:09.7158996Z`.
+The new owner's ninth six-record observer passed at
+`06:39:32.7463905Z`, before cancellation during the final live fixture.
+No native 45-second response timeout was reported.
+
+- [ ] Split only the cumulative fixture scheduling into two native
+  Windows jobs: `baseline` covers history through original lock
+  settlement; `restart` covers successor preparation through fresh owner
+  publication. Both run their own complete runtime/task setup and every
+  selected boundary's full original ancestor/death chain.
+- [ ] Default direct fixture invocation still selects `all`; reject
+  unknown shard names. Earlier summary receipts are emitted only by the
+  baseline/all selection that actually runs their original boundaries.
+- [ ] Keep aggregate 90-minute and native/actor/exit bounds unchanged.
+  Preserve actual stdout receipt strings from each successful shard in
+  distinct artifacts. A dependent acceptance job requires both artifacts
+  and all 39 original exact receipts; neither shard alone can pass the
+  full acceptance gate.
+- [ ] Push and repeat the same focused dispatch to obtain valid owner
+  module red without repeating all twenty boundaries serially in one job.

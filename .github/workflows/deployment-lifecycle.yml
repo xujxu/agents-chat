@@ -212,9 +212,13 @@ jobs:
 
   windows-stopped-history:
     if: ${{ inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && inputs.windows_history_only && inputs.windows_restore_scenario == 'failed' }}
-    name: Native Windows stopped-history archival and saved takeover
+    name: Native Windows stopped-history archival and saved takeover (${{ matrix.history_shard }})
     runs-on: windows-2022
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        history_shard: [baseline, restart]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -227,10 +231,43 @@ jobs:
         run: ./tests/deployment-windows-private-file.ps1
       - name: Verify actual stopped-history deletion, finalization and saved-entry takeover
         shell: pwsh
+        env:
+          DEPLOYMENT_TEST_HISTORY_SHARD: ${{ matrix.history_shard }}
         run: |
           $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
           & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition -InactiveCompletionRecovery -InactiveCompletionRecoveryStep release-requested -ExternalInactiveRuntime -InactiveRollbackCrashStep task-restore-requested | Tee-Object -Variable historyOutput
-          if ($LASTEXITCODE -ne 0) { throw 'Stopped-history native archival or saved-entry takeover failed.' }
+          $historyExitCode = $LASTEXITCODE
+          $historyOutput | Where-Object { $_ -is [string] -and $_.StartsWith('PASS: ') } |
+            ConvertTo-Json -AsArray | Set-Content -LiteralPath "${{ runner.temp }}/history-${{ matrix.history_shard }}.json" -Encoding utf8
+          if ($historyExitCode -ne 0) { throw 'Stopped-history native archival or saved-entry takeover failed.' }
+      - name: Preserve actual shard receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stopped-history-${{ matrix.history_shard }}
+          path: ${{ runner.temp }}/history-${{ matrix.history_shard }}.json
+          if-no-files-found: error
+
+  windows-stopped-history-acceptance:
+    if: ${{ inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && inputs.windows_history_only && inputs.windows_restore_scenario == 'failed' }}
+    name: Stopped-history acceptance (all boundaries)
+    needs: windows-stopped-history
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: stopped-history-*
+          path: history-receipts
+          merge-multiple: true
+      - name: Require every actual stopped-history receipt across both native shards
+        shell: pwsh
+        run: |
+          $historyOutput = foreach ($shard in @('baseline', 'restart')) {
+            $file = "history-receipts/history-$shard.json"
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing stopped-history shard: $shard" }
+            Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
+          }
           foreach ($receipt in @(
             'PASS: actual history writer death preserves its archived prefix and a distinct fresh actor completes exact native archival',
             'PASS: death after final intent archival retains sealed evidence for a distinct fresh read-only actor',

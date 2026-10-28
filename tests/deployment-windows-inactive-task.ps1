@@ -475,8 +475,19 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     $history = Get-Content -LiteralPath $historyIntent -Raw | ConvertFrom-Json
                     $historyHash = (Get-FileHash -LiteralPath $historyIntent -Algorithm SHA256).Hash
                     $historyStateHash = (Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash
-                    foreach ($historyBoundary in @('history', 'finalized-history', 'saved-history', 'completed-history', 'prepared-history', 'abandoned-history',
-                        'lock-directory-history', 'lock-owner-history', 'lock-committed-history', 'lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history', 'restart-directory-history', 'restart-directory-dead-history', 'restart-owner-history')) {
+                    $historyBoundaries = @('history', 'finalized-history', 'saved-history', 'completed-history', 'prepared-history', 'abandoned-history',
+                        'lock-directory-history', 'lock-owner-history', 'lock-committed-history', 'lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history', 'restart-directory-history', 'restart-directory-dead-history', 'restart-owner-history')
+                    $historyShard = $env:DEPLOYMENT_TEST_HISTORY_SHARD
+                    if ([string]::IsNullOrEmpty($historyShard)) { $historyShard = 'all' }
+                    if ($historyShard -cnotin @('all', 'baseline', 'restart')) { throw 'Unknown stopped-history test shard.' }
+                    $restartIndex = [Array]::IndexOf($historyBoundaries, 'successor-prepared-history')
+                    if ($restartIndex -le 0) { throw 'Stopped-history shard boundary is missing.' }
+                    $selectedBoundaries = switch -CaseSensitive ($historyShard) {
+                        'all' { $historyBoundaries }
+                        'baseline' { $historyBoundaries[0..($restartIndex - 1)] }
+                        'restart' { $historyBoundaries[$restartIndex..($historyBoundaries.Count - 1)] }
+                    }
+                    foreach ($historyBoundary in $selectedBoundaries) {
                         $lockBoundary = $historyBoundary -cin @('lock-directory-history', 'lock-owner-history', 'lock-committed-history', 'lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history', 'restart-directory-history', 'restart-directory-dead-history', 'restart-owner-history')
                         $crashMode = switch ($historyBoundary) {
                             'finalized-history' { 'crash-finalized-history' }
@@ -1036,11 +1047,13 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                             (Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash -ceq $historyStateHash) `
                             'History actor takeover changed prepared intent or original state'
                     }
-                    Write-Output 'PASS: actual history writer death preserves its archived prefix and a distinct fresh actor completes exact native archival'
-                    Write-Output 'PASS: death after final intent archival retains sealed evidence for a distinct fresh read-only actor'
-                    Write-Output 'PASS: the exact verified saved entry resumes stopped history archival after actual actor death'
-                    Write-Output 'PASS: completion publisher death preserves original receipt bytes and identity for a distinct fresh actor'
-                    Write-Output 'PASS: stopped task and worker cleanup survive real actor death, retire exact history, release original lock and retain final receipt'
+                    if ($historyShard -cne 'restart') {
+                        Write-Output 'PASS: actual history writer death preserves its archived prefix and a distinct fresh actor completes exact native archival'
+                        Write-Output 'PASS: death after final intent archival retains sealed evidence for a distinct fresh read-only actor'
+                        Write-Output 'PASS: the exact verified saved entry resumes stopped history archival after actual actor death'
+                        Write-Output 'PASS: completion publisher death preserves original receipt bytes and identity for a distinct fresh actor'
+                        Write-Output 'PASS: stopped task and worker cleanup survive real actor death, retire exact history, release original lock and retain final receipt'
+                    }
                 }
             }
             $Recover = $false
