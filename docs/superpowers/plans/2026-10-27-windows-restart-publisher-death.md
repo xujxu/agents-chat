@@ -149,3 +149,18 @@ Allow 90 minutes for the aggregate job with all seventeen boundaries;
 retain every assertion and the unchanged 45-second per-response,
 120-second per-actor and 15-second bridge-exit limits. This cancellation
 is not acceptance; rerun focused and Contracts together on the new SHA.
+
+## Accepted actual publisher death and seven-record reopening
+
+Implementation plus aggregate budget `6bc95c58ca6055f0e360fd60b8456b70fb55fef6`
+passed focused run `40604571700` / job `122540755934`. All 36 required
+receipts from that exact SHA's workflow matched actual timestamped
+`Z PASS:` lines. The new eleventh-observer receipt is
+`2026-10-28T00:37:29.7475054Z`.
+Windows Contracts passed on the same SHA in run `40604575040` /
+job `122540767072`; both logs are retained.
+
+This accepts actual tenth-publisher death and independent seven-record
+read-only reopening, not reuse of its dead owner, new lock publication,
+committed authority or state mutation. The separately tested live publisher
+path remains the input to the next native lock gate.
