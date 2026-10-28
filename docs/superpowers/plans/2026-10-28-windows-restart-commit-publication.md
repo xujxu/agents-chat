@@ -120,3 +120,20 @@ PASS: native restart commitment pins its exact live owner and eighth record whil
 
 - [ ] Record accepted evidence before actual committed publisher death
   and original-state snapshot/transition integration.
+
+### Execution evidence
+
+The test contract was pushed as `a0208843d54a5cb8676c1553aa7b932c5ea90520`.
+Focused Actions run `40677325333` passed baseline job `122778961505` and
+successor job `122778960721`. Restart job `122778961241` reached the fourth
+explicit command and failed at `2026-10-28T11:58:27.9850493Z` because
+`windows-stopped-history-handoff-restart-commit.ps1` did not exist.
+The recorded phase was `restart-committed-before-proof`, after both owner
+proofs and the live owner checkpoint. This is the intended missing-module
+red, not a phase timeout or an aggregate job-budget cancellation.
+
+The native implementation now retains the eighth file, descriptor, native
+creator and canonical commitment time. Namespace admission invokes only the
+nonrecursive retained-file assertion. Ordinary bootstrap request shapes and
+the original retired lock cache remain unchanged. Green validation remains
+pending; no state/task/runtime authority or dead-owner adoption is added.
