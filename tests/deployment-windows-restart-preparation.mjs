@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { fixtureArgs, descriptorArgs } from './deployment-windows-lock-retirement-observation.mjs';
 import { assertRestartOwnerPublication } from './deployment-windows-restart-owner-publication.mjs';
+import { assertRestartPublicationProofs } from './deployment-windows-restart-publication-progress.mjs';
 
 export async function assertRestartPreparation({
   source, control, pwsh, admission, previous, state, completionBytes, publish = false, hold = false,
@@ -191,17 +192,9 @@ export async function assertRestartPreparation({
         } finally { if (!publishOwner) controllerWire.close(); }
         enterPhase('restart-directory-publication');
         await transport.wire.send({ type: 'create-directory' });
-        for (const stage of ['before', 'after']) {
-          enterPhase(`restart-directory-${stage}-proof`);
-          const proof = captureWorkerFields(await transport.wire.receive({ timeoutMs: 45000 }),
-            ['type', 'stage', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'],
-            'restart directory ancestor proof');
-          assert.deepEqual(proof, {
-            type: 'restart-directory-proof', stage, pid: ready.pid, processIdentity: ready.processIdentity,
-            control, controllerIdentity: identity, value: ready.value,
-          });
-        }
-        enterPhase('restart-directory-result');
+        await assertRestartPublicationProofs({
+          publication: 'directory', transport, ready, control, identity, captureWorkerFields, enterPhase,
+        });
         let directoryResponse = await transport.wire.receive({ timeoutMs: 45000 });
         if (holdDirectory || publishOwner) {
           const frame = captureWorkerFields(directoryResponse,

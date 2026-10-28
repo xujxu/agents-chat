@@ -183,3 +183,30 @@ expired with empty native stderr. This is not valid owner-module red.
   the new phase error must expose that instead of accepting it.
 - [ ] Repeat focused Actions and establish valid owner-module red before
   any new production implementation.
+
+### Valid red and implementation
+
+At `e0d764e68b3534ccbf6f5cdfc696ff441990fab2`, run `40651612669`,
+baseline job `122692758098` passed. Restart job `122692757770`
+reached the twentieth actual live owner publication and failed at
+`2026-10-28T08:40:04.4774882Z` because
+`windows-stopped-history-handoff-restart-owner.ps1` did not exist.
+Both shard logs together match exactly the 38 previous required actual
+timestamped receipts; only the new owner receipt is missing.
+
+The normal directory receipt passed at `08:25:05.3708826Z` and actual
+incomplete-directory death at `08:32:49.2096298Z`. The twentieth directory
+proof's two successful observations took about 16.5 and 20 seconds, each
+within 45 seconds. The owner command was accepted at `08:40:04.342Z`
+and the missing-module refusal followed immediately, not a timeout.
+
+Implement the native owner publisher and strict owner-aware fresh-directory
+assertion. Rename the fixture-only progress helper to
+`tests/deployment-windows-restart-publication-progress.ps1` and share its
+two fixed observation frames between directory and owner publication.
+Their Node verifier is shared in
+`tests/deployment-windows-restart-publication-progress.mjs`.
+Owner invokes two full production ancestor observations too; require both
+actual readonly values in order with the same 45-second per-proof,
+120-second overall host-stage and 15-second bridge-exit limits.
+No production callbacks, proof elision or timing heartbeat are added.

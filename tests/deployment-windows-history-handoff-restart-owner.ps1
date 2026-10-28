@@ -10,7 +10,17 @@ function Test-AgentsChatStoppedHistoryHandoffRestartOwner(
     }
     if (-not $refused) { throw 'Restart directory published an owner without its independent role.' }
     $Context.HistoryHandoffRestartOwnerPublisher = $true
-    $descriptor = Publish-AgentsChatStoppedHistoryHandoffRestartLockOwner $Context $ControllerPid $ControllerIdentity
+    . (Join-Path $PSScriptRoot 'deployment-windows-restart-publication-progress.ps1')
+    $descriptor = Invoke-AgentsChatRestartPublicationProofFrames $Context $ControllerPid $ControllerIdentity owner
+    Assert-AgentsChatStoppedHistoryHandoffRestartLock $Context
+    $Context.HistoryHandoffRestartOwnerPublisher = $false
+    $refused = $false
+    try { Assert-AgentsChatStoppedHistoryHandoffRestartLock $Context }
+    catch {
+        if ($_.Exception.Message -cne 'Restart lock owner lacks retained independent native publication proof.') { throw }
+        $refused = $true
+    } finally { $Context.HistoryHandoffRestartOwnerPublisher = $true }
+    if (-not $refused) { throw 'Restart owner observation accepted a scope without its independent role.' }
     Assert-AgentsChatStoppedHistoryHandoffRestartLock $Context
     $retained = $Context.HistoryHandoffRestartLock
     $before = $retained.Directory.CaptureIdentity()

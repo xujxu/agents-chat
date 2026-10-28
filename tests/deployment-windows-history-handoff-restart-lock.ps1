@@ -10,8 +10,8 @@ function Test-AgentsChatStoppedHistoryHandoffRestartLockDirectory(
     }
     if (-not $refused) { throw 'Prepared restart acquired a lock directory without its independent role.' }
     $Context.HistoryHandoffRestartLockPublisher = $true
-    . (Join-Path $PSScriptRoot 'deployment-windows-restart-directory-progress.ps1')
-    $identity = Invoke-AgentsChatRestartDirectoryProofFrames $Context $ControllerPid $ControllerIdentity
+    . (Join-Path $PSScriptRoot 'deployment-windows-restart-publication-progress.ps1')
+    $identity = Invoke-AgentsChatRestartPublicationProofFrames $Context $ControllerPid $ControllerIdentity directory
     Assert-AgentsChatStoppedHistoryHandoffRestartLock $Context
     $retained = $Context.HistoryHandoffRestartLock
     $before = $retained.Directory.CaptureIdentity()

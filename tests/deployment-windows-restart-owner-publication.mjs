@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { lstat, readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
+import { assertRestartPublicationProofs } from './deployment-windows-restart-publication-progress.mjs';
 
 export async function assertRestartOwnerPublication({
   control, identity, ready, record, prepared, directory, transport, controllerWire,
@@ -17,6 +18,9 @@ export async function assertRestartOwnerPublication({
   assert.equal(command.type, 'publish-owner');
   enterPhase('restart-owner-publication');
   await transport.wire.send({ type: 'publish-owner' });
+  await assertRestartPublicationProofs({
+    publication: 'owner', transport, ready, control, identity, captureWorkerFields, enterPhase,
+  });
   const result = captureWorkerFields(await transport.wire.receive({ timeoutMs: 45000 }),
     ['status', 'attemptId', 'prepared', 'directory', 'owner', 'runtimeAuthority', 'lockAuthority'],
     'restart owner publication');

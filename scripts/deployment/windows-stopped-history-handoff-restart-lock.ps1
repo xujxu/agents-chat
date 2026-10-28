@@ -17,8 +17,33 @@ function Assert-AgentsChatStoppedHistoryHandoffRestartLock([hashtable]$Context) 
     }
     $root = @(Get-ChildItem -LiteralPath $Context.Control -Force |
         Where-Object { $_.Name -ieq 'lock' })
-    if ($root.Count -ne 1 -or $root[0].Name -cne 'lock' -or -not $root[0].PSIsContainer -or
-        @(Get-ChildItem -LiteralPath (Join-Path $Context.Control 'lock') -Force).Count) {
+    if ($root.Count -ne 1 -or $root[0].Name -cne 'lock' -or -not $root[0].PSIsContainer) {
+        throw 'Restart lock directory inventory differs.'
+    }
+    $children = @(Get-ChildItem -LiteralPath (Join-Path $Context.Control 'lock') -Force)
+    if ($lock.ContainsKey('OwnerFile') -or $lock.ContainsKey('OwnerDescriptor')) {
+        if (-not $Context.ContainsKey('HistoryHandoffRestartOwnerPublisher') -or
+            $Context.HistoryHandoffRestartOwnerPublisher -ne $true -or
+            -not $lock.ContainsKey('OwnerFile') -or -not $lock.ContainsKey('OwnerDescriptor') -or
+            $null -eq $lock.OwnerFile -or $null -eq $lock.OwnerDescriptor -or
+            $children.Count -ne 1 -or $children[0].PSIsContainer -or $children[0].Name -cne 'owner.json') {
+            throw 'Restart lock owner lacks retained independent native publication proof.'
+        }
+        $request = $Context.HistoryHandoffRestartPrepared.Request
+        $record = Get-AgentsChatStoppedHistoryHandoffRestartBinding -Context $Context @request
+        $lock.OwnerFile.Check()
+        if ($lock.OwnerFile.ReadText() -cne ($record.newOwner | ConvertTo-Json -Compress)) {
+            throw 'Restart lock owner bytes differ.'
+        }
+        Assert-AgentsChatRetirementDescriptor $lock.OwnerDescriptor 'lock\owner.json' 65536
+        $descriptor = Get-AgentsChatStoppedHandoffDescriptor $lock.OwnerFile 'lock\owner.json'
+        foreach ($field in @('path', 'dev', 'ino', 'bytes', 'sha256')) {
+            if ($descriptor[$field] -cne $lock.OwnerDescriptor[$field]) {
+                throw 'Restart lock owner descriptor differs.'
+            }
+        }
+        $lock.OwnerFile.Check()
+    } elseif ($children.Count) {
         throw 'Restart lock directory inventory differs.'
     }
     $lock.Directory.Check()
