@@ -191,6 +191,17 @@ export async function assertRestartPreparation({
         } finally { if (!publishOwner) controllerWire.close(); }
         enterPhase('restart-directory-publication');
         await transport.wire.send({ type: 'create-directory' });
+        for (const stage of ['before', 'after']) {
+          enterPhase(`restart-directory-${stage}-proof`);
+          const proof = captureWorkerFields(await transport.wire.receive({ timeoutMs: 45000 }),
+            ['type', 'stage', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'],
+            'restart directory ancestor proof');
+          assert.deepEqual(proof, {
+            type: 'restart-directory-proof', stage, pid: ready.pid, processIdentity: ready.processIdentity,
+            control, controllerIdentity: identity, value: ready.value,
+          });
+        }
+        enterPhase('restart-directory-result');
         let directoryResponse = await transport.wire.receive({ timeoutMs: 45000 });
         if (holdDirectory || publishOwner) {
           const frame = captureWorkerFields(directoryResponse,

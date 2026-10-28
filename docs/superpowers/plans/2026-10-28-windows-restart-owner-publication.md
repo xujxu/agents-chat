@@ -152,3 +152,34 @@ No native 45-second response timeout was reported.
   full acceptance gate.
 - [ ] Push and repeat the same focused dispatch to obtain valid owner
   module red without repeating all twenty boundaries serially in one job.
+
+### Directory response investigation
+
+At `c379ae3c1ba3d2bb2c5d55619b6e6e58506e0c31`, run `40645799730`,
+baseline job `122674197094` passed. Restart job `122674197323` failed
+at `2026-10-28T07:35:44.6592170Z`, before the new owner boundary.
+The retained phase history now identifies `restart-directory-publication`:
+bootstrap began at `07:33:55.557Z`, preparation at `07:34:25.034Z`,
+and the directory request at `07:34:59.589Z`. Its 45-second receive
+expired with empty native stderr. This is not valid owner-module red.
+
+- [ ] Keep the production directory publisher completely unchanged,
+  including both full ancestor observations and continuous execution.
+  Add `tests/deployment-windows-restart-directory-progress.ps1`, a
+  function-local fixture facade over the original native ancestor getter.
+  It invokes the original getter with unchanged arguments and returns its
+  unchanged result, emitting a bounded frame only after that full native
+  observation succeeds. The facade disappears when its local scope exits.
+- [ ] Require exactly two frames, in `before` then `after` order, binding
+  native PID/start identity, control, controller and the complete original
+  six-record readonly observation. Compare both values against the actual
+  bootstrap observation; no frame grants directory or continuation authority.
+  No timer heartbeat, retry, extra mutation or consumer-controlled pause is
+  introduced. Missing, extra, malformed or out-of-order frames fail.
+- [ ] Give each of these explicit proof responses the existing 45-second
+  receive bound, then require the original final directory result. Keep
+  the host's 120-second whole-directory stage and 15-second bridge exit
+  bounds unchanged. If one full observation itself exceeds 45 seconds,
+  the new phase error must expose that instead of accepting it.
+- [ ] Repeat focused Actions and establish valid owner-module red before
+  any new production implementation.
