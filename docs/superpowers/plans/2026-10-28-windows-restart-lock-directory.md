@@ -129,3 +129,16 @@ directory only through this explicit role plus the strict nonrecursive
 native handle/identity, live preparation and empty-inventory checker;
 flags or names alone remain insufficient. Failures poison and retain.
 No owner, committed record, task/runtime or state write is published.
+
+## Accepted exact live directory publication
+
+Implementation `364cda3db73c477dfe0db293c3467b3fab5ef0bf` passed focused
+run `40616971695` / job `122581629473`. All 37 required receipts from that
+exact SHA's workflow matched actual timestamped `Z PASS:` lines, including
+the new directory receipt at `2026-10-28T02:42:45.3443498Z`.
+Windows Contracts passed on the same SHA in run `40616974737` /
+job `122581638883`; both logs are retained.
+
+This accepts only the exact empty directory under the same retained live
+owner and native bridge. Owner publication, committed capability and state
+continuity remain unaccepted.
