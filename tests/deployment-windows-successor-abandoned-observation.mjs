@@ -52,8 +52,9 @@ export async function holdSuccessorAbandoned({ source, control, pwsh, previous }
 }
 
 export async function assertSuccessorAbandonedAfterDeath({
-  source, control, pwsh, admission, previous, state, completionBytes, restart = false,
+  source, control, pwsh, admission, previous, state, completionBytes, restart = false, blockedDirectory = false,
 }) {
+  assert.ok(!blockedDirectory || restart);
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
   const identity = await processIdentity(process.pid);
@@ -134,52 +135,62 @@ export async function assertSuccessorAbandonedAfterDeath({
     predecessor: predecessor(previous), creator: abandoned.creator, settledAt: abandoned.settledAt,
     runtimeAuthority: false, lockAuthority: false,
   };
-  const first = await observe(args);
-  assert.equal(first.stderr, '');
-  assert.deepEqual(JSON.parse(first.stdout), expected);
   const refused = error => error.message.includes(restart
     ? 'Restart prepared observation failed; retain evidence.'
     : 'Successor abandoned observation failed; retain evidence.');
-  const wrong = args.slice();
-  if (restart) {
-    wrong[wrong.indexOf('-Request') + 1] = JSON.stringify({
-      ...request, restart: { ...request.restart, ino: request.restart.ino === '1' ? '2' : '1' },
-    });
-  } else { wrong[wrong.indexOf('-AbandonedIno') + 1] = previous.successorAbandoned.ino === '1' ? '2' : '1'; }
-  await assert.rejects(observe(wrong), refused);
   const published = snapshots[restart ? 6 : 5];
-  const held = path.join(control, 'fixture-held-successor-abandoned.json');
-  await rename(published.file, held);
-  let replacement;
-  try {
-    await writeFile(published.file, published.bytes, { flag: 'wx' });
-    replacement = await lstat(published.file, { bigint: true });
-    assert.notEqual(replacement.ino, published.identity.ino);
-    await assert.rejects(observe(args), refused);
-    assert.deepEqual(await readFile(published.file), published.bytes);
-  } finally {
-    if (replacement) {
-      const current = await lstat(published.file, { bigint: true });
-      assert.equal(current.dev, replacement.dev);
-      assert.equal(current.ino, replacement.ino);
-      assert.deepEqual(await readFile(published.file), published.bytes);
-      await unlink(published.file);
-    }
-    await rename(held, published.file);
-  }
   const directory = path.join(control, 'lock');
-  await mkdir(directory);
-  const foreign = await lstat(directory, { bigint: true });
-  try {
-    await assert.rejects(observe(args), refused);
+  if (blockedDirectory) {
     const current = await lstat(directory, { bigint: true });
-    assert.equal(current.dev, foreign.dev);
-    assert.equal(current.ino, foreign.ino);
+    assert.ok(current.isDirectory());
+    assert.equal(current.dev.toString(), previous.restartDirectory.dev);
+    assert.equal(current.ino.toString(), previous.restartDirectory.ino);
     assert.deepEqual(await readdir(directory), []);
-  } finally { await rmdir(directory); }
-  const checked = await observe(args);
-  assert.equal(checked.stderr, '');
-  assert.deepEqual(JSON.parse(checked.stdout), expected);
+    await assert.rejects(observe(args), error => refused(error) &&
+      error.message.includes('Committed lock directory identity differs.'));
+  } else {
+    const first = await observe(args);
+    assert.equal(first.stderr, '');
+    assert.deepEqual(JSON.parse(first.stdout), expected);
+    const wrong = args.slice();
+    if (restart) {
+      wrong[wrong.indexOf('-Request') + 1] = JSON.stringify({
+        ...request, restart: { ...request.restart, ino: request.restart.ino === '1' ? '2' : '1' },
+      });
+    } else { wrong[wrong.indexOf('-AbandonedIno') + 1] = previous.successorAbandoned.ino === '1' ? '2' : '1'; }
+    await assert.rejects(observe(wrong), refused);
+    const held = path.join(control, 'fixture-held-successor-abandoned.json');
+    await rename(published.file, held);
+    let replacement;
+    try {
+      await writeFile(published.file, published.bytes, { flag: 'wx' });
+      replacement = await lstat(published.file, { bigint: true });
+      assert.notEqual(replacement.ino, published.identity.ino);
+      await assert.rejects(observe(args), refused);
+      assert.deepEqual(await readFile(published.file), published.bytes);
+    } finally {
+      if (replacement) {
+        const current = await lstat(published.file, { bigint: true });
+        assert.equal(current.dev, replacement.dev);
+        assert.equal(current.ino, replacement.ino);
+        assert.deepEqual(await readFile(published.file), published.bytes);
+        await unlink(published.file);
+      }
+      await rename(held, published.file);
+    }
+    await mkdir(directory);
+    const foreign = await lstat(directory, { bigint: true });
+    try {
+      await assert.rejects(observe(args), refused);
+      const current = await lstat(directory, { bigint: true });
+      assert.equal(current.dev, foreign.dev);
+      assert.equal(current.ino, foreign.ino);
+      assert.deepEqual(await readdir(directory), []);
+    } finally { await rmdir(directory); }
+    const checked = await observe(args);
+    assert.equal(checked.stderr, '');
+    assert.deepEqual(JSON.parse(checked.stdout), expected);
+  }
   await assert.rejects(observe(baseArgs),
     error => error.message.includes('Successor prepared observation failed; retain evidence.'));
   if (restart) {
@@ -210,10 +221,18 @@ export async function assertSuccessorAbandonedAfterDeath({
     assert.equal(current.dev, originalIdentity.dev);
     assert.equal(current.ino, originalIdentity.ino);
   }
-  await assert.rejects(lstat(directory), { code: 'ENOENT' });
+  if (blockedDirectory) {
+    const current = await lstat(directory, { bigint: true });
+    assert.equal(current.dev.toString(), previous.restartDirectory.dev);
+    assert.equal(current.ino.toString(), previous.restartDirectory.ino);
+    assert.deepEqual(await readdir(directory), []);
+    await rmdir(directory);
+  } else { await assert.rejects(lstat(directory), { code: 'ENOENT' }); }
   if (restart) {
     for (const snapshot of snapshots.reverse()) await unlink(snapshot.file);
-    console.log('PASS: actual fresh restart publisher death preserves seven exact records for a distinct eleventh native observer without continuation authority');
+    console.log(blockedDirectory
+      ? 'PASS: actual fresh restart directory publisher death preserves the exact incomplete directory and seven records without continuation authority'
+      : 'PASS: actual fresh restart publisher death preserves seven exact records for a distinct eleventh native observer without continuation authority');
   } else {
     console.log('PASS: actual successor abandonment publisher death preserves six exact records for a distinct ninth native observer without continuation authority');
     console.log(`INACTIVE_HISTORY_SUCCESSOR_ABANDONED_OBSERVED ${JSON.stringify({

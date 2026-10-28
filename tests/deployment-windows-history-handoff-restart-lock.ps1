@@ -1,5 +1,5 @@
 function Test-AgentsChatStoppedHistoryHandoffRestartLockDirectory(
-    [string]$Source, [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity
+    [string]$Source, [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity, [switch]$Continue
 ) {
     . (Join-Path $Source 'windows-stopped-history-handoff-restart-lock.ps1')
     $refused = $false
@@ -17,6 +17,12 @@ function Test-AgentsChatStoppedHistoryHandoffRestartLockDirectory(
     if ($before.Dev -cne $identity.dev -or $before.Ino -cne $identity.ino) {
         throw 'Restart lock directory does not bind its retained native identity.'
     }
+    $result = [ordered]@{
+        status='restart-lock-directory'; attemptId=$Context.HistoryHandoffRestartPrepared.Request.AttemptId
+        prepared=$Context.HistoryHandoffRestartPrepared.Descriptor; directory=$identity
+        runtimeAuthority=$false; lockAuthority=$false
+    }
+    if ($Continue) { return $result }
     $refused = $false
     try { $null = New-AgentsChatStoppedHistoryHandoffRestartLockDirectory $Context $ControllerPid $ControllerIdentity }
     catch {
@@ -30,9 +36,5 @@ function Test-AgentsChatStoppedHistoryHandoffRestartLockDirectory(
         @(Get-ChildItem -LiteralPath (Join-Path $Context.Control 'lock') -Force).Count) {
         throw 'Duplicate restart directory publication failed to preserve and poison.'
     }
-    return [ordered]@{
-        status='restart-lock-directory'; attemptId=$Context.HistoryHandoffRestartPrepared.Request.AttemptId
-        prepared=$Context.HistoryHandoffRestartPrepared.Descriptor; directory=$identity
-        runtimeAuthority=$false; lockAuthority=$false
-    }
+    return $result
 }

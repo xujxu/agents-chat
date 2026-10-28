@@ -9,10 +9,11 @@ import { fixtureArgs, descriptorArgs } from './deployment-windows-lock-retiremen
 
 export async function assertRestartPreparation({
   source, control, pwsh, admission, previous, state, completionBytes, publish = false, hold = false,
-  createDirectory = false,
+  createDirectory = false, holdDirectory = false,
 }) {
   assert.ok(!hold || publish);
   assert.ok(!createDirectory || (publish && !hold));
+  assert.ok(!holdDirectory || createDirectory);
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
   const { windowsControllerTransport } = await load('windows-controller-transport.mjs');
@@ -61,7 +62,7 @@ export async function assertRestartPreparation({
     '-SuccessorAttemptId', previous.successorAttemptId, ...descriptorArgs('Successor', previous.successor),
     '-ObserveSuccessorAbandoned', ...descriptorArgs('Abandoned', previous.successorAbandoned), '-PrepareRestart',
     ...(publish ? ['-PublishRestart'] : []), ...(hold ? ['-Hold'] : []),
-    ...(createDirectory ? ['-CreateRestartDirectory'] : [])];
+    ...(createDirectory ? ['-CreateRestartDirectory'] : []), ...(holdDirectory ? ['-HoldRestartDirectory'] : [])];
   const transport = windowsControllerTransport({
     pwsh, label: 'Fresh native restart preparation fixture',
     refused: cause => new Error('Fresh native restart preparation fixture failed.', { cause }),
@@ -149,7 +150,7 @@ export async function assertRestartPreparation({
         newOwner: record.newOwner, predecessor: record.predecessor,
       });
       snapshots.push({ file, bytes, identity: current });
-      if (hold) {
+      if (hold || holdDirectory) {
         heldPublication = {
           ...previous, abandonmentPublisherActor: {
             actorPid: previous.actorPid, actorIdentity: previous.actorIdentity,
@@ -172,7 +173,19 @@ export async function assertRestartPreparation({
           assert.equal(command.type, 'create-directory');
         } finally { controllerWire.close(); }
         await transport.wire.send({ type: 'create-directory' });
-        const directory = captureWorkerFields(await transport.wire.receive({ timeoutMs: 45000 }),
+        let directoryResponse = await transport.wire.receive({ timeoutMs: 45000 });
+        if (holdDirectory) {
+          const frame = captureWorkerFields(directoryResponse,
+            ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'], 'held restart directory');
+          assert.equal(frame.type, 'ready');
+          assert.equal(frame.pid, ready.pid);
+          assert.equal(frame.processIdentity, ready.processIdentity);
+          assert.equal(frame.processIdentity, await processIdentity(frame.pid));
+          assert.equal(frame.control, control);
+          assert.equal(frame.controllerIdentity, identity);
+          directoryResponse = frame.value;
+        }
+        const directory = captureWorkerFields(directoryResponse,
           ['status', 'attemptId', 'prepared', 'directory', 'runtimeAuthority', 'lockAuthority'],
           'restart directory publication');
         directoryIdentity = captureWorkerFields(directory.directory, ['dev', 'ino'], 'restart directory identity');
@@ -180,9 +193,12 @@ export async function assertRestartPreparation({
           status: 'restart-lock-directory', attemptId: record.attemptId, prepared: descriptor,
           directory: directoryIdentity, runtimeAuthority: false, lockAuthority: false,
         });
-        assert.deepEqual(await transport.waitForExit(), { code: 0, signal: null });
-        assert.equal(diagnostic, '');
-        transport.wire.close();
+        if (holdDirectory) { heldPublication.restartDirectory = directoryIdentity; }
+        else {
+          assert.deepEqual(await transport.waitForExit(), { code: 0, signal: null });
+          assert.equal(diagnostic, '');
+          transport.wire.close();
+        }
       }
     }
   } catch (cause) {
@@ -191,13 +207,13 @@ export async function assertRestartPreparation({
     throw error;
   }
   const { acquireLock, releaseLock } = await load('state.mjs');
-  if (publish && !hold) {
+  if (publish && !hold && !holdDirectory) {
     await assert.rejects(promisify(execFile)(pwsh,
       nativeArgs.filter(arg => arg !== '-PrepareRestart' && arg !== '-PublishRestart' && arg !== '-CreateRestartDirectory'),
       { timeout: 45000, maxBuffer: 131072, windowsHide: true }),
     error => error.message.includes('Successor abandoned observation failed; retain evidence.'));
   }
-  if (!hold) {
+  if (!hold && !holdDirectory) {
     await assert.rejects(acquireLock(control, { pwsh, admission, project: original.project, operationId: randomUUID() }));
     await assert.rejects(releaseLock(control, owner, { pwsh, admission }));
   }
@@ -224,10 +240,11 @@ export async function assertRestartPreparation({
     assert.equal(current.dev.toString(), directoryIdentity.dev);
     assert.equal(current.ino.toString(), directoryIdentity.ino);
     assert.deepEqual(await readdir(directory), []);
-    await rmdir(directory);
+    if (!holdDirectory) { await rmdir(directory); }
   } else { await assert.rejects(lstat(directory), { code: 'ENOENT' }); }
-  if (hold) {
-    console.log(`INACTIVE_HISTORY_RESTART_PREPARED_HELD ${JSON.stringify(heldPublication)}`);
+  if (hold || holdDirectory) {
+    const marker = holdDirectory ? 'INACTIVE_HISTORY_RESTART_DIRECTORY_HELD' : 'INACTIVE_HISTORY_RESTART_PREPARED_HELD';
+    console.log(`${marker} ${JSON.stringify(heldPublication)}`);
     const timer = setInterval(() => {}, 1000);
     try { await new Promise(() => {}); } finally { clearInterval(timer); }
   }

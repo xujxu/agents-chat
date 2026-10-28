@@ -28,6 +28,7 @@ param(
     [switch]$PrepareRestart,
     [switch]$PublishRestart,
     [switch]$CreateRestartDirectory,
+    [switch]$HoldRestartDirectory,
     [string]$AbandonedDev,
     [string]$AbandonedIno,
     [int]$AbandonedBytes,
@@ -55,6 +56,7 @@ try {
         ($PrepareRestart -and -not $ObserveSuccessorAbandoned) -or
         ($PublishRestart -and -not $PrepareRestart) -or
         ($CreateRestartDirectory -and (-not $PublishRestart -or $Hold)) -or
+        ($HoldRestartDirectory -and -not $CreateRestartDirectory) -or
         ($PhasedPublication -and -not $PublishSuccessor) -or
         ($SealSuccessor -and -not $ObserveSuccessor) -or
         ($PublishSuccessor -and -not $PrepareSuccessor) -or
@@ -313,7 +315,16 @@ try {
         }
         . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart-lock.ps1')
         $observation = Test-AgentsChatStoppedHistoryHandoffRestartLockDirectory $Source $scope `
-            $ControllerPid $ControllerIdentity
+            $ControllerPid $ControllerIdentity -Continue:$HoldRestartDirectory
+    }
+    if ($HoldRestartDirectory) {
+        [Console]::Out.WriteLine((@{
+            type='ready'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+            control=$Control; controllerIdentity=$ControllerIdentity; value=$observation
+        } | ConvertTo-Json -Depth 8 -Compress))
+        [Console]::Out.Flush()
+        $null = [Console]::In.ReadLine()
+        throw 'Held restart directory fixture received unexpected controller input.'
     }
     if ($Hold) {
         if ($PublishSuccessor) { $observation = $observation.observation }
