@@ -83,3 +83,19 @@ PASS: actual fresh restart owner publisher death preserves its exact owner direc
 
 Fresh committed capability must continue through the separately retained
 normal live path, never by adopting this dead owner.
+
+### Accepted evidence
+
+At `0956a2283448e59e6a01496fb5892a3cde624781`, focused run
+`40669641460` passed baseline job `122752862352`, successor job
+`122752862226`, restart job `122752861733`, and dependent all-boundaries
+acceptance job `122773727378`. Comparing all three raw native logs against
+that SHA's workflow matched all forty actual timestamped receipts.
+The new owner-death receipt was emitted at
+`2026-10-28T10:54:19.3764964Z`. Same-SHA Windows Contracts run
+`40669645851`, job `122752877791`, passed.
+
+Actual owner/bridge death, independent conservative refusal, and exact
+owner/directory/seven-record/state preservation are accepted. No
+production behavior changed in this gate. Fresh committed capability
+remains unimplemented and must use the normal live owner path.
