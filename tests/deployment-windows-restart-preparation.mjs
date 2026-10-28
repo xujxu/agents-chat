@@ -11,12 +11,13 @@ import { assertRestartPublicationProofs } from './deployment-windows-restart-pub
 
 export async function assertRestartPreparation({
   source, control, pwsh, admission, previous, state, completionBytes, publish = false, hold = false,
-  createDirectory = false, holdDirectory = false, publishOwner = false,
+  createDirectory = false, holdDirectory = false, publishOwner = false, holdOwner = false,
 }) {
   assert.ok(!hold || publish);
   assert.ok(!createDirectory || (publish && !hold));
   assert.ok(!holdDirectory || createDirectory);
   assert.ok(!publishOwner || (createDirectory && !holdDirectory));
+  assert.ok(!holdOwner || publishOwner);
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
   const { windowsControllerTransport } = await load('windows-controller-transport.mjs');
@@ -66,7 +67,7 @@ export async function assertRestartPreparation({
     '-ObserveSuccessorAbandoned', ...descriptorArgs('Abandoned', previous.successorAbandoned), '-PrepareRestart',
     ...(publish ? ['-PublishRestart'] : []), ...(hold ? ['-Hold'] : []),
     ...(createDirectory ? ['-CreateRestartDirectory'] : []), ...(holdDirectory ? ['-HoldRestartDirectory'] : []),
-    ...(publishOwner ? ['-PublishRestartOwner'] : [])];
+    ...(publishOwner ? ['-PublishRestartOwner'] : []), ...(holdOwner ? ['-HoldRestartOwner'] : [])];
   let phase;
   const phases = [];
   const enterPhase = value => {
@@ -167,7 +168,7 @@ export async function assertRestartPreparation({
         newOwner: record.newOwner, predecessor: record.predecessor,
       });
       snapshots.push({ file, bytes, identity: current });
-      if (hold || holdDirectory) {
+      if (hold || holdDirectory || holdOwner) {
         heldPublication = {
           ...previous, abandonmentPublisherActor: {
             actorPid: previous.actorPid, actorIdentity: previous.actorIdentity,
@@ -219,12 +220,14 @@ export async function assertRestartPreparation({
           try {
             ownerSnapshot = await assertRestartOwnerPublication({
               control, identity, ready, record, prepared: descriptor, directory: directoryIdentity,
-              transport, controllerWire, captureWorkerFields, enterPhase,
+              transport, controllerWire, captureWorkerFields, enterPhase, holdOwner, processIdentity,
             });
           } finally { controllerWire.close(); }
         }
-        if (holdDirectory) { heldPublication.restartDirectory = directoryIdentity; }
-        else {
+        if (holdDirectory || holdOwner) {
+          heldPublication.restartDirectory = directoryIdentity;
+          if (holdOwner) { heldPublication.restartOwner = ownerSnapshot.descriptor; }
+        } else {
           enterPhase('directory-exit');
           assert.deepEqual(await transport.waitForExit(), { code: 0, signal: null });
           assert.equal(diagnostic, '');
@@ -239,13 +242,13 @@ export async function assertRestartPreparation({
     throw error;
   }
   const { acquireLock, releaseLock } = await load('state.mjs');
-  if (publish && !hold && !holdDirectory) {
+  if (publish && !hold && !holdDirectory && !holdOwner) {
     await assert.rejects(promisify(execFile)(pwsh,
       nativeArgs.filter(arg => !['-PrepareRestart', '-PublishRestart', '-CreateRestartDirectory', '-PublishRestartOwner'].includes(arg)),
       { timeout: 45000, maxBuffer: 131072, windowsHide: true }),
     error => error.message.includes('Successor abandoned observation failed; retain evidence.'));
   }
-  if (!hold && !holdDirectory) {
+  if (!hold && !holdDirectory && !holdOwner) {
     await assert.rejects(acquireLock(control, { pwsh, admission, project: original.project, operationId: randomUUID() }));
     await assert.rejects(releaseLock(control, owner, { pwsh, admission }));
   }
@@ -272,11 +275,12 @@ export async function assertRestartPreparation({
     assert.equal(current.dev.toString(), directoryIdentity.dev);
     assert.equal(current.ino.toString(), directoryIdentity.ino);
     assert.deepEqual(await readdir(directory), publishOwner ? ['owner.json'] : []);
-    if (ownerSnapshot) { await unlink(ownerSnapshot.file); }
-    if (!holdDirectory) { await rmdir(directory); }
+    if (ownerSnapshot && !holdOwner) { await unlink(ownerSnapshot.file); }
+    if (!holdDirectory && !holdOwner) { await rmdir(directory); }
   } else { await assert.rejects(lstat(directory), { code: 'ENOENT' }); }
-  if (hold || holdDirectory) {
-    const marker = holdDirectory ? 'INACTIVE_HISTORY_RESTART_DIRECTORY_HELD' : 'INACTIVE_HISTORY_RESTART_PREPARED_HELD';
+  if (hold || holdDirectory || holdOwner) {
+    const marker = holdOwner ? 'INACTIVE_HISTORY_RESTART_OWNER_HELD'
+      : holdDirectory ? 'INACTIVE_HISTORY_RESTART_DIRECTORY_HELD' : 'INACTIVE_HISTORY_RESTART_PREPARED_HELD';
     console.log(`${marker} ${JSON.stringify(heldPublication)}`);
     const timer = setInterval(() => {}, 1000);
     try { await new Promise(() => {}); } finally { clearInterval(timer); }

@@ -1,6 +1,6 @@
 function Stop-AgentsChatRestartDirectoryPublisher(
     [string]$Node, [string]$Source, [string]$Control, [string]$Pwsh,
-    $Environment, [string]$HistoryActor, [string]$StateHash
+    $Environment, [string]$HistoryActor, [string]$StateHash, [switch]$Owner
 ) {
     function Read-RestartDirectoryCheckpoint($Process, $Diagnostic, [string]$Prefix) {
         $clock = [Diagnostics.Stopwatch]::StartNew()
@@ -21,7 +21,9 @@ function Stop-AgentsChatRestartDirectoryPublisher(
     }
     $publisher = [Deployment.WindowsControllerProcess]::Start($Node,
         @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
-            $Source, $Control, $Pwsh, 'crash-restart-directory-history', $HistoryActor), $Control, $Environment)
+            $Source, $Control, $Pwsh,
+            $(if ($Owner) { 'crash-restart-owner-history' } else { 'crash-restart-directory-history' }),
+            $HistoryActor), $Control, $Environment)
     try {
         $diagnostic = $publisher.StandardError.ReadToEndAsync()
         $live = (Read-RestartDirectoryCheckpoint $publisher $diagnostic 'INACTIVE_HISTORY_RESTART_PREPARED_LIVE ') |
@@ -35,7 +37,12 @@ function Stop-AgentsChatRestartDirectoryPublisher(
         Assert (-not (Test-Path -LiteralPath (Join-Path $Control 'lock'))) 'Restart directory appeared before explicit command'
         $publisher.StandardInput.WriteLine('{"type":"create-directory"}')
         $publisher.StandardInput.Flush()
-        $metadata = Read-RestartDirectoryCheckpoint $publisher $diagnostic 'INACTIVE_HISTORY_RESTART_DIRECTORY_HELD '
+        if ($Owner) {
+            . (Join-Path $PSScriptRoot 'deployment-windows-restart-owner-controller.ps1')
+            Send-AgentsChatRestartOwnerCommand $publisher $diagnostic $live $Control
+        }
+        $prefix = if ($Owner) { 'INACTIVE_HISTORY_RESTART_OWNER_HELD ' } else { 'INACTIVE_HISTORY_RESTART_DIRECTORY_HELD ' }
+        $metadata = Read-RestartDirectoryCheckpoint $publisher $diagnostic $prefix
         $held = $metadata | ConvertFrom-Json
         Assert ($held.actorPid -eq $publisher.Id -and $held.actorIdentity -ceq $live.actorIdentity -and
             $held.pid -eq $live.pid -and $held.processIdentity -ceq $live.processIdentity -and
@@ -57,8 +64,16 @@ function Stop-AgentsChatRestartDirectoryPublisher(
         }
         Assert (Test-Path -LiteralPath (Join-Path $Control 'lock') -PathType Container) `
             'Restart directory publisher death removed incomplete evidence'
-        Assert (@(Get-ChildItem -LiteralPath (Join-Path $Control 'lock') -Force).Count -eq 0) `
-            'Restart directory publisher death introduced an owner or foreign child'
+        $children = @(Get-ChildItem -LiteralPath (Join-Path $Control 'lock') -Force)
+        if ($Owner) {
+            Assert ($children.Count -eq 1 -and $children[0].Name -ceq 'owner.json' -and -not $children[0].PSIsContainer) `
+                'Restart owner publisher death changed its exact child inventory'
+            Assert ($held.restartOwner.path -ceq 'lock\owner.json' -and
+                (Get-FileHash -LiteralPath (Join-Path $Control $held.restartOwner.path) -Algorithm SHA256).Hash.ToLowerInvariant() -ceq
+                $held.restartOwner.sha256) 'Restart owner publisher death changed owner bytes'
+        } else {
+            Assert ($children.Count -eq 0) 'Restart directory publisher death introduced an owner or foreign child'
+        }
         Assert ((Get-FileHash -LiteralPath (Join-Path $Control 'state.json') -Algorithm SHA256).Hash -ceq
             $StateHash) 'Restart directory publisher death changed original state'
         return $metadata

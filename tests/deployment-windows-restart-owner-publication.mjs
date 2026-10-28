@@ -6,7 +6,7 @@ import { assertRestartPublicationProofs } from './deployment-windows-restart-pub
 
 export async function assertRestartOwnerPublication({
   control, identity, ready, record, prepared, directory, transport, controllerWire,
-  captureWorkerFields, enterPhase,
+  captureWorkerFields, enterPhase, holdOwner = false, processIdentity,
 }) {
   enterPhase('host-owner-command');
   console.log(`INACTIVE_HISTORY_RESTART_DIRECTORY_LIVE ${JSON.stringify({
@@ -21,7 +21,19 @@ export async function assertRestartOwnerPublication({
   await assertRestartPublicationProofs({
     publication: 'owner', transport, ready, control, identity, captureWorkerFields, enterPhase,
   });
-  const result = captureWorkerFields(await transport.wire.receive({ timeoutMs: 45000 }),
+  let response = await transport.wire.receive({ timeoutMs: 45000 });
+  if (holdOwner) {
+    const frame = captureWorkerFields(response,
+      ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'], 'held restart owner');
+    assert.equal(frame.type, 'ready');
+    assert.equal(frame.pid, ready.pid);
+    assert.equal(frame.processIdentity, ready.processIdentity);
+    assert.equal(frame.processIdentity, await processIdentity(frame.pid));
+    assert.equal(frame.control, control);
+    assert.equal(frame.controllerIdentity, identity);
+    response = frame.value;
+  }
+  const result = captureWorkerFields(response,
     ['status', 'attemptId', 'prepared', 'directory', 'owner', 'runtimeAuthority', 'lockAuthority'],
     'restart owner publication');
   const descriptor = captureWorkerFields(result.owner,
@@ -41,5 +53,5 @@ export async function assertRestartOwnerPublication({
   assert.equal(current.dev.toString(), descriptor.dev);
   assert.equal(current.ino.toString(), descriptor.ino);
   assert.deepEqual(await readdir(path.join(control, 'lock')), ['owner.json']);
-  return { file, bytes, identity: current };
+  return { file, bytes, identity: current, descriptor };
 }

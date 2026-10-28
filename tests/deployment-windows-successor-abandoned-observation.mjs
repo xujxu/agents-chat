@@ -53,8 +53,10 @@ export async function holdSuccessorAbandoned({ source, control, pwsh, previous }
 
 export async function assertSuccessorAbandonedAfterDeath({
   source, control, pwsh, admission, previous, state, completionBytes, restart = false, blockedDirectory = false,
+  blockedOwner = false,
 }) {
   assert.ok(!blockedDirectory || restart);
+  assert.ok(!blockedOwner || blockedDirectory);
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
   const identity = await processIdentity(process.pid);
@@ -140,12 +142,38 @@ export async function assertSuccessorAbandonedAfterDeath({
     : 'Successor abandoned observation failed; retain evidence.');
   const published = snapshots[restart ? 6 : 5];
   const directory = path.join(control, 'lock');
+  let ownerSnapshot;
   if (blockedDirectory) {
     const current = await lstat(directory, { bigint: true });
     assert.ok(current.isDirectory());
     assert.equal(current.dev.toString(), previous.restartDirectory.dev);
     assert.equal(current.ino.toString(), previous.restartDirectory.ino);
-    assert.deepEqual(await readdir(directory), []);
+    assert.deepEqual(await readdir(directory), blockedOwner ? ['owner.json'] : []);
+    if (blockedOwner) {
+      const { captureWorkerFields } = await load('worker-identity.mjs');
+      const descriptor = captureWorkerFields(previous.restartOwner,
+        ['path', 'dev', 'ino', 'bytes', 'sha256'], 'dead restart owner descriptor');
+      assert.equal(descriptor.path, 'lock\\owner.json');
+      const file = path.join(directory, 'owner.json');
+      const bytes = await readFile(file);
+      const current = await lstat(file, { bigint: true });
+      assert.ok(current.isFile());
+      assert.equal(current.nlink, 1n);
+      assert.equal(current.dev.toString(), descriptor.dev);
+      assert.equal(current.ino.toString(), descriptor.ino);
+      assert.equal(bytes.length, descriptor.bytes);
+      assert.equal(createHash('sha256').update(bytes).digest('hex'), descriptor.sha256);
+      const owner = captureWorkerFields(JSON.parse(bytes),
+        ['version', 'token', 'project', 'operationId', 'pid', 'processIdentity', 'createdAt'], 'dead restart owner');
+      const preparedOwner = JSON.parse(published.bytes).newOwner;
+      assert.deepEqual(owner, preparedOwner);
+      assert.equal(bytes.toString('utf8'), JSON.stringify(preparedOwner));
+      assert.equal(owner.version, 1);
+      assert.equal(owner.project, original.project);
+      assert.equal(owner.pid, previous.actorPid);
+      assert.equal(owner.processIdentity, previous.actorIdentity);
+      ownerSnapshot = { file, bytes, identity: current };
+    }
     await assert.rejects(observe(args), error => refused(error) &&
       error.message.includes('Committed lock directory identity differs.'));
   } else {
@@ -205,11 +233,12 @@ export async function assertSuccessorAbandonedAfterDeath({
   const { acquireLock, releaseLock } = await load('state.mjs');
   await assert.rejects(acquireLock(control, { pwsh, admission, project: original.project, operationId: randomUUID() }));
   await assert.rejects(releaseLock(control, restart ? JSON.parse(published.bytes).newOwner : successor.newOwner, { pwsh, admission }));
-  for (const snapshot of snapshots) {
+  for (const snapshot of [...snapshots, ...(ownerSnapshot ? [ownerSnapshot] : [])]) {
     assert.deepEqual(await readFile(snapshot.file), snapshot.bytes);
     const current = await lstat(snapshot.file, { bigint: true });
     assert.equal(current.dev, snapshot.identity.dev);
     assert.equal(current.ino, snapshot.identity.ino);
+    if (snapshot === ownerSnapshot) { assert.equal(current.nlink, 1n); }
   }
   assert.deepEqual((await readdir(control)).filter(name => name.toLowerCase().startsWith('inactive-handoff-')).sort(),
     snapshots.map(snapshot => path.basename(snapshot.file)).sort());
@@ -225,12 +254,15 @@ export async function assertSuccessorAbandonedAfterDeath({
     const current = await lstat(directory, { bigint: true });
     assert.equal(current.dev.toString(), previous.restartDirectory.dev);
     assert.equal(current.ino.toString(), previous.restartDirectory.ino);
-    assert.deepEqual(await readdir(directory), []);
+    assert.deepEqual(await readdir(directory), blockedOwner ? ['owner.json'] : []);
+    if (ownerSnapshot) { await unlink(ownerSnapshot.file); }
     await rmdir(directory);
   } else { await assert.rejects(lstat(directory), { code: 'ENOENT' }); }
   if (restart) {
     for (const snapshot of snapshots.reverse()) await unlink(snapshot.file);
-    console.log(blockedDirectory
+    console.log(blockedOwner
+      ? 'PASS: actual fresh restart owner publisher death preserves its exact owner directory and seven records without committed authority'
+      : blockedDirectory
       ? 'PASS: actual fresh restart directory publisher death preserves the exact incomplete directory and seven records without continuation authority'
       : 'PASS: actual fresh restart publisher death preserves seven exact records for a distinct eleventh native observer without continuation authority');
   } else {

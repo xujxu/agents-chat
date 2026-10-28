@@ -30,6 +30,7 @@ param(
     [switch]$CreateRestartDirectory,
     [switch]$HoldRestartDirectory,
     [switch]$PublishRestartOwner,
+    [switch]$HoldRestartOwner,
     [string]$AbandonedDev,
     [string]$AbandonedIno,
     [int]$AbandonedBytes,
@@ -59,6 +60,7 @@ try {
         ($CreateRestartDirectory -and (-not $PublishRestart -or $Hold)) -or
         ($HoldRestartDirectory -and -not $CreateRestartDirectory) -or
         ($PublishRestartOwner -and (-not $CreateRestartDirectory -or $HoldRestartDirectory)) -or
+        ($HoldRestartOwner -and -not $PublishRestartOwner) -or
         ($PhasedPublication -and -not $PublishSuccessor) -or
         ($SealSuccessor -and -not $ObserveSuccessor) -or
         ($PublishSuccessor -and -not $PrepareSuccessor) -or
@@ -329,16 +331,17 @@ try {
             throw 'Restart owner publication requires its exact command.'
         }
         . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart-owner.ps1')
-        $observation = Test-AgentsChatStoppedHistoryHandoffRestartOwner $Source $scope $ControllerPid $ControllerIdentity
+        $observation = Test-AgentsChatStoppedHistoryHandoffRestartOwner $Source $scope `
+            $ControllerPid $ControllerIdentity -Continue:$HoldRestartOwner
     }
-    if ($HoldRestartDirectory) {
+    if ($HoldRestartDirectory -or $HoldRestartOwner) {
         [Console]::Out.WriteLine((@{
             type='ready'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
             control=$Control; controllerIdentity=$ControllerIdentity; value=$observation
         } | ConvertTo-Json -Depth 8 -Compress))
         [Console]::Out.Flush()
         $null = [Console]::In.ReadLine()
-        throw 'Held restart directory fixture received unexpected controller input.'
+        throw 'Held restart lock publication fixture received unexpected controller input.'
     }
     if ($Hold) {
         if ($PublishSuccessor) { $observation = $observation.observation }
