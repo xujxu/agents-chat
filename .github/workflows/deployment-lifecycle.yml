@@ -267,7 +267,8 @@ jobs:
             'PASS: actual successor abandonment publisher death preserves six exact records for a distinct ninth native observer without continuation authority',
             'PASS: native restart preparation derives a fresh live owner bound to settled six-record evidence without publication or authority',
             'PASS: native restart publication creates one exact seventh preparation while duplicate publication and ordinary authority remain refused',
-            'PASS: actual fresh restart publisher death preserves seven exact records for a distinct eleventh native observer without continuation authority'
+            'PASS: actual fresh restart publisher death preserves seven exact records for a distinct eleventh native observer without continuation authority',
+            'PASS: native restart lock directory publication pins only its exact fresh live preparation without owner committed or state authority'
           )) {
             if ($historyOutput -cnotcontains $receipt) { throw "Missing stopped-history acceptance receipt: $receipt" }
           }

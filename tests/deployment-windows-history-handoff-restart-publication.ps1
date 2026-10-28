@@ -1,5 +1,6 @@
 function Test-AgentsChatStoppedHistoryHandoffRestartPublication(
-    [string]$Source, [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity, [switch]$Hold
+    [string]$Source, [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity,
+    [switch]$Hold, [switch]$Continue
 ) {
     . (Join-Path $Source 'windows-stopped-history-handoff-restart-publication.ps1')
     . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart.ps1')
@@ -24,7 +25,7 @@ function Test-AgentsChatStoppedHistoryHandoffRestartPublication(
     $record = Read-AgentsChatRetirementJson $text -AllowNull
     $projection = Get-AgentsChatTestRestartProjection $Context $ControllerPid $ControllerIdentity $request $record
     Assert-AgentsChatStoppedHistoryHandoffRestartPrepared $Context
-    if ($Hold) { return [ordered]@{ prepared=$descriptor; record=$projection } }
+    if ($Hold -or $Continue) { return [ordered]@{ prepared=$descriptor; record=$projection } }
     $refused = $false
     try { $null = Publish-AgentsChatStoppedHistoryHandoffRestartPrepared @request }
     catch {

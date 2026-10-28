@@ -476,8 +476,8 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     $historyHash = (Get-FileHash -LiteralPath $historyIntent -Algorithm SHA256).Hash
                     $historyStateHash = (Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash
                     foreach ($historyBoundary in @('history', 'finalized-history', 'saved-history', 'completed-history', 'prepared-history', 'abandoned-history',
-                        'lock-directory-history', 'lock-owner-history', 'lock-committed-history', 'lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history')) {
-                        $lockBoundary = $historyBoundary -cin @('lock-directory-history', 'lock-owner-history', 'lock-committed-history', 'lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history')
+                        'lock-directory-history', 'lock-owner-history', 'lock-committed-history', 'lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history', 'restart-directory-history')) {
+                        $lockBoundary = $historyBoundary -cin @('lock-directory-history', 'lock-owner-history', 'lock-committed-history', 'lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history', 'restart-directory-history')
                         $crashMode = switch ($historyBoundary) {
                             'finalized-history' { 'crash-finalized-history' }
                             'completed-history' { 'crash-completed-history' }
@@ -491,7 +491,8 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                             'successor-abandoned-history' { 'crash-lock-committed-history' }
                             'restart-published-history' { 'crash-lock-committed-history' }
                             'restart-prepared-history' { 'crash-lock-committed-history' }
-                            { $lockBoundary -and $_ -cnotin @('lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history') } { "crash-$historyBoundary" }
+                            'restart-directory-history' { 'crash-lock-committed-history' }
+                            { $lockBoundary -and $_ -cnotin @('lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history', 'restart-directory-history') } { "crash-$historyBoundary" }
                             default { 'crash-history' }
                         }
                         $resumeMode = if ($historyBoundary -ceq 'saved-history') { 'resume-history-saved' } else { "resume-$historyBoundary" }
@@ -591,7 +592,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                                 $abandonedHeld.completionSha256) 'Abandonment publisher death changed original completion receipt'
                             $resumeMode = 'resume-abandoned-history'
                         }
-                        if ($historyBoundary -cin @('lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history')) {
+                        if ($historyBoundary -cin @('lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history', 'restart-directory-history')) {
                             $retirer = [Deployment.WindowsControllerProcess]::Start($node,
                                 @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
                                     $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
@@ -633,7 +634,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                                 $historyStateHash) 'Lock retirement publisher death changed original state'
                             $resumeMode = 'resume-lock-retirement-history'
                         }
-                        if ($historyBoundary -cin @('lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history')) {
+                        if ($historyBoundary -cin @('lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history', 'restart-directory-history')) {
                             $executor = [Deployment.WindowsControllerProcess]::Start($node,
                                 @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
                                     $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
@@ -677,7 +678,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                                 $historyStateHash) 'Owner retirement executor death changed original state'
                             $resumeMode = 'resume-lock-owner-retired-history'
                         }
-                        if ($historyBoundary -cin @('lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history')) {
+                        if ($historyBoundary -cin @('lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history', 'restart-directory-history')) {
                             $directoryExecutor = [Deployment.WindowsControllerProcess]::Start($node,
                                 @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
                                     $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
@@ -719,7 +720,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                                 $historyStateHash) 'Directory executor death changed original state'
                             $resumeMode = 'resume-lock-directory-retired-history'
                         }
-                        if ($historyBoundary -cin @('lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history')) {
+                        if ($historyBoundary -cin @('lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history', 'restart-directory-history')) {
                             $settler = [Deployment.WindowsControllerProcess]::Start($node,
                                 @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
                                     $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
@@ -762,7 +763,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                                 $historyStateHash) 'Settler death changed original state'
                             $resumeMode = 'resume-lock-settled-history'
                         }
-                        if ($historyBoundary -cin @('successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history')) {
+                        if ($historyBoundary -cin @('successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history', 'restart-directory-history')) {
                             $successorPublisher = [Deployment.WindowsControllerProcess]::Start($node,
                                 @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
                                     $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
@@ -838,7 +839,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                                 Assert ($settlementChecker.ExitCode -eq 0) 'Fresh settlement proof actor failed'
                             } finally { $settlementChecker.Dispose() }
                         }
-                        if ($historyBoundary -cin @('successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history')) {
+                        if ($historyBoundary -cin @('successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history', 'restart-directory-history')) {
                             $successorChecker = [Deployment.WindowsControllerProcess]::Start($node,
                                 @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
                                     $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
@@ -858,7 +859,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                                 $historyActor = $successorProofFrames[0].Substring('INACTIVE_HISTORY_SUCCESSOR_OBSERVED '.Length)
                             } finally { $successorChecker.Dispose() }
                         }
-                        if ($historyBoundary -cin @('successor-abandoned-history', 'restart-published-history', 'restart-prepared-history')) {
+                        if ($historyBoundary -cin @('successor-abandoned-history', 'restart-published-history', 'restart-prepared-history', 'restart-directory-history')) {
                             $abandoner = [Deployment.WindowsControllerProcess]::Start($node,
                                 @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
                                     $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
@@ -903,11 +904,13 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                             Assert (-not (Test-Path -LiteralPath (Join-Path $control 'lock'))) 'Successor abandoner death restored the retired lock'
                             Assert ((Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash -ceq
                                 $historyStateHash) 'Successor abandoner death changed original state'
-                            $resumeMode = if ($historyBoundary -ceq 'restart-published-history') {
+                            $resumeMode = if ($historyBoundary -ceq 'restart-directory-history') {
+                                'resume-restart-directory-history'
+                            } elseif ($historyBoundary -ceq 'restart-published-history') {
                                 'resume-restart-published-history'
                             } else { 'resume-successor-abandoned-history' }
                         }
-                        if ($historyBoundary -cin @('successor-abandoned-history', 'restart-published-history', 'restart-prepared-history')) {
+                        if ($historyBoundary -cin @('successor-abandoned-history', 'restart-published-history', 'restart-prepared-history', 'restart-directory-history')) {
                             $settledChecker = [Deployment.WindowsControllerProcess]::Start($node,
                                 @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
                                     $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
@@ -979,8 +982,35 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                                 $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
                                 $resumeMode, $historyActor), $control, $environment)
                         try {
-                            $output = $historyResumer.StandardOutput.ReadToEndAsync()
                             $diagnostic = $historyResumer.StandardError.ReadToEndAsync()
+                            if ($historyBoundary -ceq 'restart-directory-history') {
+                                $clock = [Diagnostics.Stopwatch]::StartNew()
+                                while ($true) {
+                                    $line = $historyResumer.StandardOutput.ReadLineAsync()
+                                    $remaining = [Math]::Max(1, 120000 - $clock.ElapsedMilliseconds)
+                                    Assert ($line.Wait([int]$remaining)) 'Live restart publication stage timed out'
+                                    $text = $line.GetAwaiter().GetResult()
+                                    if ($null -eq $text) {
+                                        Assert ($historyResumer.WaitForExit(15000)) 'Live restart publisher closed output without exiting'
+                                        [Console]::Error.WriteLine($diagnostic.GetAwaiter().GetResult())
+                                        throw 'Live restart publisher exited before directory checkpoint'
+                                    }
+                                    if ($text.StartsWith('INACTIVE_HISTORY_RESTART_PREPARED_LIVE ')) { break }
+                                    Write-Output $text
+                                    Assert ($clock.ElapsedMilliseconds -lt 120000) 'Live restart publication stage exceeded budget'
+                                }
+                                $live = $text.Substring('INACTIVE_HISTORY_RESTART_PREPARED_LIVE '.Length) | ConvertFrom-Json
+                                Assert ($live.actorPid -eq $historyResumer.Id -and
+                                    [Deployment.WindowsWorkerJob]::ProcessIdentity($live.actorPid) -ceq $live.actorIdentity -and
+                                    [Deployment.WindowsWorkerJob]::ProcessIdentity($live.pid) -ceq $live.processIdentity) `
+                                    'Restart directory checkpoint lost its actual live owner or bridge'
+                                Assert ((Get-FileHash -LiteralPath (Join-Path $control $live.prepared.path) -Algorithm SHA256).Hash.ToLowerInvariant() -ceq
+                                    $live.prepared.sha256) 'Restart directory checkpoint preparation changed'
+                                Assert (-not (Test-Path -LiteralPath (Join-Path $control 'lock'))) 'Restart directory appeared before explicit command'
+                                $historyResumer.StandardInput.WriteLine('{"type":"create-directory"}')
+                                $historyResumer.StandardInput.Flush()
+                            }
+                            $output = $historyResumer.StandardOutput.ReadToEndAsync()
                             Assert ($historyResumer.WaitForExit(120000)) 'Fresh history actor takeover timed out'
                             Write-Output $output.GetAwaiter().GetResult()
                             $errors = $diagnostic.GetAwaiter().GetResult()

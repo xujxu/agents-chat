@@ -490,6 +490,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   const successorAbandonedCrash = mode === 'crash-successor-abandoned-history';
   const successorAbandonedResume = mode === 'resume-successor-abandoned-history';
   const restartPublishedResume = mode === 'resume-restart-published-history';
+  const restartDirectoryResume = mode === 'resume-restart-directory-history';
   const restartCrash = mode === 'crash-restart-prepared-history';
   const restartResume = mode === 'resume-restart-prepared-history';
   const successorAbandonedCheck = mode === 'check-successor-abandoned-history';
@@ -508,6 +509,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     'crash-successor-abandoned-history': 'Committed', 'resume-successor-abandoned-history': 'Committed',
     'check-successor-abandoned-history': 'Committed',
     'resume-restart-published-history': 'Committed',
+    'resume-restart-directory-history': 'Committed',
     'crash-restart-prepared-history': 'Committed', 'resume-restart-prepared-history': 'Committed',
   };
   const lockStage = lockStages[mode];
@@ -674,10 +676,10 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
       });
       return;
-    } else if (successorAbandonedResume || restartPublishedResume) {
+    } else if (successorAbandonedResume || restartPublishedResume || restartDirectoryResume) {
       await assertRestartPreparation({
         source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
-        publish: restartPublishedResume,
+        publish: restartPublishedResume || restartDirectoryResume, createDirectory: restartDirectoryResume,
       });
     } else if (successorCrash) {
       await holdSuccessorPrepared({ source, control, pwsh, previous: JSON.parse(crashStep) });

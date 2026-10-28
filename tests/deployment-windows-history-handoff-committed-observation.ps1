@@ -27,6 +27,7 @@ param(
     [switch]$ObserveSuccessorAbandoned,
     [switch]$PrepareRestart,
     [switch]$PublishRestart,
+    [switch]$CreateRestartDirectory,
     [string]$AbandonedDev,
     [string]$AbandonedIno,
     [int]$AbandonedBytes,
@@ -53,6 +54,7 @@ try {
         ($ObserveSuccessorAbandoned -and (-not $ObserveSuccessor -or $SealSuccessor)) -or
         ($PrepareRestart -and -not $ObserveSuccessorAbandoned) -or
         ($PublishRestart -and -not $PrepareRestart) -or
+        ($CreateRestartDirectory -and (-not $PublishRestart -or $Hold)) -or
         ($PhasedPublication -and -not $PublishSuccessor) -or
         ($SealSuccessor -and -not $ObserveSuccessor) -or
         ($PublishSuccessor -and -not $PrepareSuccessor) -or
@@ -133,7 +135,7 @@ try {
                         if ($PublishRestart) {
                             . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart-publication.ps1')
                             $observation = Test-AgentsChatStoppedHistoryHandoffRestartPublication $Source $scope `
-                                $ControllerPid $ControllerIdentity -Hold:$Hold
+                                $ControllerPid $ControllerIdentity -Hold:$Hold -Continue:$CreateRestartDirectory
                         } else {
                             . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart.ps1')
                             $observation = Test-AgentsChatStoppedHistoryHandoffRestart $Source $scope `
@@ -299,6 +301,19 @@ try {
             . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-successor.ps1')
             $observation = Test-AgentsChatStoppedHistoryHandoffSuccessor $Source $scope $ControllerPid $ControllerIdentity
         }
+    }
+    if ($CreateRestartDirectory) {
+        [Console]::Out.WriteLine((@{
+            type='restart-published'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+            control=$Control; controllerIdentity=$ControllerIdentity; value=$observation
+        } | ConvertTo-Json -Depth 8 -Compress))
+        [Console]::Out.Flush()
+        if ([Console]::In.ReadLine() -cne '{"type":"create-directory"}') {
+            throw 'Restart directory publication requires its exact command.'
+        }
+        . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart-lock.ps1')
+        $observation = Test-AgentsChatStoppedHistoryHandoffRestartLockDirectory $Source $scope `
+            $ControllerPid $ControllerIdentity
     }
     if ($Hold) {
         if ($PublishSuccessor) { $observation = $observation.observation }
