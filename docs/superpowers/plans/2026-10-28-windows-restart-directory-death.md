@@ -89,3 +89,21 @@ PASS: actual fresh restart directory publisher death preserves the exact incompl
 After acceptance, continue owner publication only through the separately
 retained normal live directory path. Do not recover/reuse the dead owner or
 infer ownership of its incomplete directory.
+
+### Validation investigation
+
+- At `d9b04e11fdbc2590a2a953f2518e2373f7da3c77`, Contracts run
+  `40623195074` passed. Focused run `40623191848`, job `122601866132`,
+  failed at `2026-10-28T04:01:48.3028626Z` in the preceding normal
+  eighteenth directory scenario, before the new death boundary.
+- The cause was `Native worker transport timed out.` with empty native
+  stderr, not the aggregate job limit. The previous ninth-observer receipt
+  was emitted at `2026-10-28T03:59:53.6680837Z`. The old error did not
+  distinguish bootstrap, publication, host command, directory publication
+  or exit, so the exact failing receive is not yet established.
+- Add timestamped fixture phase history to the existing failure, retaining
+  all native proofs, protocol messages and 45/120/15-second bounds. Repeat
+  focused and Contracts on the same diagnostic SHA before attributing the
+  failure to directory proof cost or changing production behavior.
+- The nineteenth boundary remains unaccepted until all 38 actual receipts
+  and same-SHA Contracts pass.

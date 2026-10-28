@@ -63,9 +63,17 @@ export async function assertRestartPreparation({
     '-ObserveSuccessorAbandoned', ...descriptorArgs('Abandoned', previous.successorAbandoned), '-PrepareRestart',
     ...(publish ? ['-PublishRestart'] : []), ...(hold ? ['-Hold'] : []),
     ...(createDirectory ? ['-CreateRestartDirectory'] : []), ...(holdDirectory ? ['-HoldRestartDirectory'] : [])];
+  let phase;
+  const phases = [];
+  const enterPhase = value => {
+    phase = value;
+    phases.push({ phase, at: new Date().toISOString() });
+  };
+  enterPhase('bootstrap-observation');
   const transport = windowsControllerTransport({
     pwsh, label: 'Fresh native restart preparation fixture',
-    refused: cause => new Error('Fresh native restart preparation fixture failed.', { cause }),
+    refused: cause => Object.assign(
+      new Error(`Fresh native restart preparation fixture failed during ${phase}.`, { cause }), { phases }),
     args: nativeArgs,
   });
   let diagnostic = '';
@@ -88,6 +96,7 @@ export async function assertRestartPreparation({
       predecessor, creator: abandoned.creator, settledAt: abandoned.settledAt,
       runtimeAuthority: false, lockAuthority: false,
     });
+    enterPhase('restart-preparation');
     await transport.wire.send({ type: 'prepare' });
     const response = await transport.wire.receive({ timeoutMs: 45000 });
     let value = response;
@@ -129,11 +138,13 @@ export async function assertRestartPreparation({
     assert.ok(record.newOwner.createdAt >= abandoned.settledAt);
     owner = record.newOwner;
     if (!hold && !createDirectory) {
+      enterPhase('preparation-exit');
       assert.deepEqual(await transport.waitForExit(), { code: 0, signal: null });
       transport.wire.close();
     }
     assert.equal(diagnostic, '');
     if (publication) {
+      enterPhase('published-record-validation');
       const descriptor = captureWorkerFields(publication.prepared,
         ['path', 'dev', 'ino', 'bytes', 'sha256'], 'published restart descriptor');
       assert.equal(descriptor.path, `inactive-handoff-${record.attemptId}-prepared.json`);
@@ -161,6 +172,7 @@ export async function assertRestartPreparation({
         };
       }
       if (createDirectory) {
+        enterPhase('host-directory-command');
         const { workerWire } = await load('worker-wire.mjs');
         const controllerWire = workerWire(process.stdin);
         try {
@@ -172,6 +184,7 @@ export async function assertRestartPreparation({
             ['type'], 'restart directory controller command');
           assert.equal(command.type, 'create-directory');
         } finally { controllerWire.close(); }
+        enterPhase('restart-directory-publication');
         await transport.wire.send({ type: 'create-directory' });
         let directoryResponse = await transport.wire.receive({ timeoutMs: 45000 });
         if (holdDirectory) {
@@ -195,6 +208,7 @@ export async function assertRestartPreparation({
         });
         if (holdDirectory) { heldPublication.restartDirectory = directoryIdentity; }
         else {
+          enterPhase('directory-exit');
           assert.deepEqual(await transport.waitForExit(), { code: 0, signal: null });
           assert.equal(diagnostic, '');
           transport.wire.close();
