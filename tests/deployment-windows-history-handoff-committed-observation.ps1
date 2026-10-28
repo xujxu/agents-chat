@@ -29,6 +29,7 @@ param(
     [switch]$PublishRestart,
     [switch]$CreateRestartDirectory,
     [switch]$HoldRestartDirectory,
+    [switch]$PublishRestartOwner,
     [string]$AbandonedDev,
     [string]$AbandonedIno,
     [int]$AbandonedBytes,
@@ -57,6 +58,7 @@ try {
         ($PublishRestart -and -not $PrepareRestart) -or
         ($CreateRestartDirectory -and (-not $PublishRestart -or $Hold)) -or
         ($HoldRestartDirectory -and -not $CreateRestartDirectory) -or
+        ($PublishRestartOwner -and (-not $CreateRestartDirectory -or $HoldRestartDirectory)) -or
         ($PhasedPublication -and -not $PublishSuccessor) -or
         ($SealSuccessor -and -not $ObserveSuccessor) -or
         ($PublishSuccessor -and -not $PrepareSuccessor) -or
@@ -315,7 +317,19 @@ try {
         }
         . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart-lock.ps1')
         $observation = Test-AgentsChatStoppedHistoryHandoffRestartLockDirectory $Source $scope `
-            $ControllerPid $ControllerIdentity -Continue:$HoldRestartDirectory
+            $ControllerPid $ControllerIdentity -Continue:($HoldRestartDirectory -or $PublishRestartOwner)
+    }
+    if ($PublishRestartOwner) {
+        [Console]::Out.WriteLine((@{
+            type='restart-directory-published'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+            control=$Control; controllerIdentity=$ControllerIdentity; value=$observation
+        } | ConvertTo-Json -Depth 8 -Compress))
+        [Console]::Out.Flush()
+        if ([Console]::In.ReadLine() -cne '{"type":"publish-owner"}') {
+            throw 'Restart owner publication requires its exact command.'
+        }
+        . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart-owner.ps1')
+        $observation = Test-AgentsChatStoppedHistoryHandoffRestartOwner $Source $scope $ControllerPid $ControllerIdentity
     }
     if ($HoldRestartDirectory) {
         [Console]::Out.WriteLine((@{

@@ -6,14 +6,16 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { fixtureArgs, descriptorArgs } from './deployment-windows-lock-retirement-observation.mjs';
+import { assertRestartOwnerPublication } from './deployment-windows-restart-owner-publication.mjs';
 
 export async function assertRestartPreparation({
   source, control, pwsh, admission, previous, state, completionBytes, publish = false, hold = false,
-  createDirectory = false, holdDirectory = false,
+  createDirectory = false, holdDirectory = false, publishOwner = false,
 }) {
   assert.ok(!hold || publish);
   assert.ok(!createDirectory || (publish && !hold));
   assert.ok(!holdDirectory || createDirectory);
+  assert.ok(!publishOwner || (createDirectory && !holdDirectory));
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
   const { windowsControllerTransport } = await load('windows-controller-transport.mjs');
@@ -62,7 +64,8 @@ export async function assertRestartPreparation({
     '-SuccessorAttemptId', previous.successorAttemptId, ...descriptorArgs('Successor', previous.successor),
     '-ObserveSuccessorAbandoned', ...descriptorArgs('Abandoned', previous.successorAbandoned), '-PrepareRestart',
     ...(publish ? ['-PublishRestart'] : []), ...(hold ? ['-Hold'] : []),
-    ...(createDirectory ? ['-CreateRestartDirectory'] : []), ...(holdDirectory ? ['-HoldRestartDirectory'] : [])];
+    ...(createDirectory ? ['-CreateRestartDirectory'] : []), ...(holdDirectory ? ['-HoldRestartDirectory'] : []),
+    ...(publishOwner ? ['-PublishRestartOwner'] : [])];
   let phase;
   const phases = [];
   const enterPhase = value => {
@@ -80,6 +83,8 @@ export async function assertRestartPreparation({
   let owner;
   let heldPublication;
   let directoryIdentity;
+  let controllerWire;
+  let ownerSnapshot;
   transport.child.stderr.on('data', bytes => { diagnostic = `${diagnostic}${bytes.toString('utf8')}`.slice(-4096); });
   try {
     const ready = captureWorkerFields(await transport.wire.receive({ timeoutMs: 45000 }),
@@ -174,7 +179,7 @@ export async function assertRestartPreparation({
       if (createDirectory) {
         enterPhase('host-directory-command');
         const { workerWire } = await load('worker-wire.mjs');
-        const controllerWire = workerWire(process.stdin);
+        controllerWire = workerWire(process.stdin);
         try {
           console.log(`INACTIVE_HISTORY_RESTART_PREPARED_LIVE ${JSON.stringify({
             actorPid: process.pid, actorIdentity: identity, pid: ready.pid,
@@ -183,14 +188,14 @@ export async function assertRestartPreparation({
           const command = captureWorkerFields(await controllerWire.receive({ timeoutMs: 45000 }),
             ['type'], 'restart directory controller command');
           assert.equal(command.type, 'create-directory');
-        } finally { controllerWire.close(); }
+        } finally { if (!publishOwner) controllerWire.close(); }
         enterPhase('restart-directory-publication');
         await transport.wire.send({ type: 'create-directory' });
         let directoryResponse = await transport.wire.receive({ timeoutMs: 45000 });
-        if (holdDirectory) {
+        if (holdDirectory || publishOwner) {
           const frame = captureWorkerFields(directoryResponse,
             ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'], 'held restart directory');
-          assert.equal(frame.type, 'ready');
+          assert.equal(frame.type, holdDirectory ? 'ready' : 'restart-directory-published');
           assert.equal(frame.pid, ready.pid);
           assert.equal(frame.processIdentity, ready.processIdentity);
           assert.equal(frame.processIdentity, await processIdentity(frame.pid));
@@ -206,6 +211,14 @@ export async function assertRestartPreparation({
           status: 'restart-lock-directory', attemptId: record.attemptId, prepared: descriptor,
           directory: directoryIdentity, runtimeAuthority: false, lockAuthority: false,
         });
+        if (publishOwner) {
+          try {
+            ownerSnapshot = await assertRestartOwnerPublication({
+              control, identity, ready, record, prepared: descriptor, directory: directoryIdentity,
+              transport, controllerWire, captureWorkerFields, enterPhase,
+            });
+          } finally { controllerWire.close(); }
+        }
         if (holdDirectory) { heldPublication.restartDirectory = directoryIdentity; }
         else {
           enterPhase('directory-exit');
@@ -216,6 +229,7 @@ export async function assertRestartPreparation({
       }
     }
   } catch (cause) {
+    controllerWire?.close();
     const error = await transport.abandon(cause);
     if (error.diagnostic) console.error(error.diagnostic);
     throw error;
@@ -223,7 +237,7 @@ export async function assertRestartPreparation({
   const { acquireLock, releaseLock } = await load('state.mjs');
   if (publish && !hold && !holdDirectory) {
     await assert.rejects(promisify(execFile)(pwsh,
-      nativeArgs.filter(arg => arg !== '-PrepareRestart' && arg !== '-PublishRestart' && arg !== '-CreateRestartDirectory'),
+      nativeArgs.filter(arg => !['-PrepareRestart', '-PublishRestart', '-CreateRestartDirectory', '-PublishRestartOwner'].includes(arg)),
       { timeout: 45000, maxBuffer: 131072, windowsHide: true }),
     error => error.message.includes('Successor abandoned observation failed; retain evidence.'));
   }
@@ -231,7 +245,7 @@ export async function assertRestartPreparation({
     await assert.rejects(acquireLock(control, { pwsh, admission, project: original.project, operationId: randomUUID() }));
     await assert.rejects(releaseLock(control, owner, { pwsh, admission }));
   }
-  for (const snapshot of snapshots) {
+  for (const snapshot of [...snapshots, ...(ownerSnapshot ? [ownerSnapshot] : [])]) {
     assert.deepEqual(await readFile(snapshot.file), snapshot.bytes);
     const current = await lstat(snapshot.file, { bigint: true });
     assert.equal(current.dev, snapshot.identity.dev);
@@ -253,7 +267,8 @@ export async function assertRestartPreparation({
     assert.ok(current.isDirectory());
     assert.equal(current.dev.toString(), directoryIdentity.dev);
     assert.equal(current.ino.toString(), directoryIdentity.ino);
-    assert.deepEqual(await readdir(directory), []);
+    assert.deepEqual(await readdir(directory), publishOwner ? ['owner.json'] : []);
+    if (ownerSnapshot) { await unlink(ownerSnapshot.file); }
     if (!holdDirectory) { await rmdir(directory); }
   } else { await assert.rejects(lstat(directory), { code: 'ENOENT' }); }
   if (hold || holdDirectory) {
@@ -263,7 +278,9 @@ export async function assertRestartPreparation({
     try { await new Promise(() => {}); } finally { clearInterval(timer); }
   }
   for (const snapshot of snapshots.reverse()) await unlink(snapshot.file);
-  console.log(createDirectory
+  console.log(publishOwner
+    ? 'PASS: native restart owner publication pins only its exact fresh live owner while ordinary authority and duplicate publication remain refused'
+    : createDirectory
     ? 'PASS: native restart lock directory publication pins only its exact fresh live preparation without owner committed or state authority'
     : publish
     ? 'PASS: native restart publication creates one exact seventh preparation while duplicate publication and ordinary authority remain refused'

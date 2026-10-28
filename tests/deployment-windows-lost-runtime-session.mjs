@@ -493,6 +493,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   const restartDirectoryResume = mode === 'resume-restart-directory-history';
   const restartDirectoryCrash = mode === 'crash-restart-directory-history';
   const restartDirectoryDeadResume = mode === 'resume-restart-directory-dead-history';
+  const restartOwnerResume = mode === 'resume-restart-owner-history';
   const restartCrash = mode === 'crash-restart-prepared-history';
   const restartResume = mode === 'resume-restart-prepared-history';
   const successorAbandonedCheck = mode === 'check-successor-abandoned-history';
@@ -512,6 +513,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     'check-successor-abandoned-history': 'Committed',
     'resume-restart-published-history': 'Committed',
     'resume-restart-directory-history': 'Committed',
+    'resume-restart-owner-history': 'Committed',
     'crash-restart-directory-history': 'Committed', 'resume-restart-directory-dead-history': 'Committed',
     'crash-restart-prepared-history': 'Committed', 'resume-restart-prepared-history': 'Committed',
   };
@@ -690,10 +692,11 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
       });
       return;
-    } else if (successorAbandonedResume || restartPublishedResume || restartDirectoryResume) {
+    } else if (successorAbandonedResume || restartPublishedResume || restartDirectoryResume || restartOwnerResume) {
       await assertRestartPreparation({
         source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
-        publish: restartPublishedResume || restartDirectoryResume, createDirectory: restartDirectoryResume,
+        publish: restartPublishedResume || restartDirectoryResume || restartOwnerResume,
+        createDirectory: restartDirectoryResume || restartOwnerResume, publishOwner: restartOwnerResume,
       });
     } else if (successorCrash) {
       await holdSuccessorPrepared({ source, control, pwsh, previous: JSON.parse(crashStep) });
