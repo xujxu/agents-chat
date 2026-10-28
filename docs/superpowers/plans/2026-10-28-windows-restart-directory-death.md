@@ -107,3 +107,19 @@ infer ownership of its incomplete directory.
   failure to directory proof cost or changing production behavior.
 - The nineteenth boundary remains unaccepted until all 38 actual receipts
   and same-SHA Contracts pass.
+
+### Accepted evidence
+
+At `8a607553a0fcc2272cad04d71d52f553f13bb3b3`, focused run
+`40630365919`, job `122625073599`, passed. All 38 required receipts were
+matched against actual timestamped log output, including the nineteenth
+boundary at `2026-10-28T05:04:04.3062491Z`. Same-SHA Windows Contracts run
+`40630368605`, job `122625082456`, passed.
+
+The normal eighteenth directory receipt also passed at
+`2026-10-28T04:57:51.5716149Z`. No production behavior or timeout changed.
+This successful rerun does not establish the earlier timeout's exact
+stage or root cause; retain the new phase diagnostics for any recurrence.
+Actual publisher death and conservative residual-directory preservation
+are accepted. Owner publication and subsequent continuation authority
+remain separate, unimplemented boundaries.
