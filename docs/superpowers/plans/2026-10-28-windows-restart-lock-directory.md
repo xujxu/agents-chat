@@ -107,3 +107,25 @@ PASS: native restart lock directory publication pins only its exact fresh live p
 Owner publication, committed capability, immutable state snapshot, first
 transition, handoff-aware release and public routing remain later gates.
 An incomplete directory never authorizes inference or ordinary cleanup.
+
+## Valid missing-directory-module red
+
+Test-only `f4f8b3d3e24aab2be0e1cd197d86a7fc805a02d7`, focused run
+`40610565724` / job `122560821941`, retained the separate eleventh-observer
+receipt at `2026-10-28T01:35:19.1894413Z`, then completed the eighteenth
+boundary's live seventh-file publication and explicit host/native directory
+command. At `2026-10-28T01:41:15.0762634Z` it failed for the missing native
+`windows-stopped-history-handoff-restart-lock.ps1`, not timeout or an
+earlier proof failure.
+
+## Native implementation
+
+Directory creation requires the independent role, strict actual live
+seventh-record publication and exact watched controller. Full ancestor
+observation brackets create-only native directory publication. A separate
+retained directory handle/identity leaves the original retired lock cache
+unchanged. The original retired-directory assertion permits a physical
+directory only through this explicit role plus the strict nonrecursive
+native handle/identity, live preparation and empty-inventory checker;
+flags or names alone remain insufficient. Failures poison and retain.
+No owner, committed record, task/runtime or state write is published.

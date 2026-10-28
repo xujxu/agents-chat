@@ -26,7 +26,14 @@ function Assert-AgentsChatStoppedHistoryHandoffLock([hashtable]$Context) {
             throw 'Retired handoff directory lacks its explicit retained intent proof.'
         }
         Assert-AgentsChatStoppedHistoryHandoffLockRetirementIntent $Context
-        if ($root.Count) { throw 'Retired handoff directory unexpectedly exists.' }
+        if ($root.Count -or $Context.ContainsKey('HistoryHandoffRestartLock')) {
+            if (-not $Context.ContainsKey('HistoryHandoffRestartLockPublisher') -or
+                $Context.HistoryHandoffRestartLockPublisher -ne $true -or
+                -not $Context.ContainsKey('HistoryHandoffRestartLock')) {
+                throw 'Retired handoff directory unexpectedly exists.'
+            }
+            Assert-AgentsChatStoppedHistoryHandoffRestartLock $Context
+        }
         $null = Get-AgentsChatStoppedHistoryHandoffRetiredOwner @request
         return
     }
