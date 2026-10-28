@@ -210,3 +210,18 @@ Owner invokes two full production ancestor observations too; require both
 actual readonly values in order with the same 45-second per-proof,
 120-second overall host-stage and 15-second bridge-exit limits.
 No production callbacks, proof elision or timing heartbeat are added.
+
+### Accepted evidence
+
+At `92a4df9f3dfc3b946d3342cd416c3ba63b59d512`, focused run
+`40658977858` passed both native shards: baseline job `122716942113`
+and restart job `122716942342`. Dependent all-boundaries acceptance job
+`122748580377` passed. Independently comparing the two raw native logs
+against that SHA's workflow matched all 39 actual timestamped receipts;
+the new owner receipt was emitted at `2026-10-28T09:58:02.5710240Z`.
+Same-SHA Windows Contracts run `40658981936`, job `122716954451`, passed.
+
+Exact live owner publication, strict independent-role refusal, duplicate
+preservation/poison and unchanged ordinary authority/state gates are
+accepted. Actual owner-publisher death, fresh committed capability,
+state continuity and public repeat lifecycle remain separate gates.
