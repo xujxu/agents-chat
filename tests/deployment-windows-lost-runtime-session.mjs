@@ -496,6 +496,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   const restartOwnerResume = mode === 'resume-restart-owner-history';
   const restartOwnerCrash = mode === 'crash-restart-owner-history';
   const restartOwnerDeadResume = mode === 'resume-restart-owner-dead-history';
+  const restartCommittedResume = mode === 'resume-restart-committed-history';
   const restartCrash = mode === 'crash-restart-prepared-history';
   const restartResume = mode === 'resume-restart-prepared-history';
   const successorAbandonedCheck = mode === 'check-successor-abandoned-history';
@@ -517,6 +518,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     'resume-restart-directory-history': 'Committed',
     'resume-restart-owner-history': 'Committed',
     'crash-restart-owner-history': 'Committed', 'resume-restart-owner-dead-history': 'Committed',
+    'resume-restart-committed-history': 'Committed',
     'crash-restart-directory-history': 'Committed', 'resume-restart-directory-dead-history': 'Committed',
     'crash-restart-prepared-history': 'Committed', 'resume-restart-prepared-history': 'Committed',
   };
@@ -706,11 +708,12 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
       });
       return;
-    } else if (successorAbandonedResume || restartPublishedResume || restartDirectoryResume || restartOwnerResume) {
+    } else if (successorAbandonedResume || restartPublishedResume || restartDirectoryResume || restartOwnerResume || restartCommittedResume) {
       await assertRestartPreparation({
         source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
-        publish: restartPublishedResume || restartDirectoryResume || restartOwnerResume,
-        createDirectory: restartDirectoryResume || restartOwnerResume, publishOwner: restartOwnerResume,
+        publish: restartPublishedResume || restartDirectoryResume || restartOwnerResume || restartCommittedResume,
+        createDirectory: restartDirectoryResume || restartOwnerResume || restartCommittedResume,
+        publishOwner: restartOwnerResume || restartCommittedResume, commitRestart: restartCommittedResume,
       });
     } else if (successorCrash) {
       await holdSuccessorPrepared({ source, control, pwsh, previous: JSON.parse(crashStep) });
