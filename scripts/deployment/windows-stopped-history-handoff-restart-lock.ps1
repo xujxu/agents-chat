@@ -28,6 +28,18 @@ function Assert-AgentsChatStoppedHistoryHandoffRestartLock([hashtable]$Context) 
         }
         return
     }
+    if ($lock.ContainsKey('DirectoryRetired')) {
+        if ($lock.DirectoryRetired -ne $true -or $lock.OwnerRetired -ne $true -or -not $observer -or
+            -not $Context.ContainsKey('HistoryHandoffRestartDirectoryRetirer') -or
+            $Context.HistoryHandoffRestartDirectoryRetirer -ne $true -or
+            -not $Context.ContainsKey('HistoryHandoffRestartRetirement') -or
+            $null -ne $lock.Directory -or $null -ne $lock.OwnerFile -or
+            @(Get-ChildItem -LiteralPath $Context.Control -Force | Where-Object { $_.Name -ieq 'lock' }).Count) {
+            throw 'Restart lock directory retirement lacks retained independent native proof.'
+        }
+        Assert-AgentsChatRetirementDescriptor $lock.OwnerDescriptor 'lock\owner.json' 65536
+        return
+    }
     $lock.Directory.Check()
     $identity = $lock.Directory.CaptureIdentity()
     if ($identity.Dev -cne $lock.DirectoryIdentity.dev -or
@@ -41,11 +53,11 @@ function Assert-AgentsChatStoppedHistoryHandoffRestartLock([hashtable]$Context) 
     }
     $children = @(Get-ChildItem -LiteralPath (Join-Path $Context.Control 'lock') -Force)
     if ($lock.ContainsKey('OwnerRetired')) {
-        # Only a distinct owner retirer bound to the exact retained retirement intent may leave the directory empty.
+        # An empty directory is accepted only from the exact retained retirement intent, or provisionally
+        # while a takeover observer has not yet bound that intent.
         if ($lock.OwnerRetired -ne $true -or -not $observer -or
-            -not $Context.ContainsKey('HistoryHandoffRestartOwnerRetirer') -or
-            $Context.HistoryHandoffRestartOwnerRetirer -ne $true -or
-            -not $Context.ContainsKey('HistoryHandoffRestartRetirement') -or
+            $Context.ContainsKey('HistoryHandoffRestartRetirement') -eq
+                $Context.ContainsKey('HistoryHandoffRestartOwnerRetiredPending') -or
             -not $lock.ContainsKey('OwnerFile') -or $null -ne $lock.OwnerFile -or
             -not $lock.ContainsKey('OwnerDescriptor') -or $null -eq $lock.OwnerDescriptor -or $children.Count) {
             throw 'Restart lock owner retirement lacks retained independent native proof.'

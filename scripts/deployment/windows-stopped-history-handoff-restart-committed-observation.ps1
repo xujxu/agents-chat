@@ -1,7 +1,9 @@
 . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-restart-commit.ps1')
 . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-restart-observation.ps1')
 
-function Open-AgentsChatStoppedHistoryHandoffRestartLockObservation([hashtable]$Context, $Descriptor, [string]$Name) {
+function Open-AgentsChatStoppedHistoryHandoffRestartLockObservation(
+    [hashtable]$Context, $Descriptor, [string]$Name, [switch]$RetirementRequested
+) {
     if (-not $Context.ContainsKey('HistoryHandoffLockObserver') -or
         $Context.HistoryHandoffLockObserver -ne $true -or
         -not $Context.HistoryHandoffLock.DirectoryRetired -or
@@ -32,10 +34,23 @@ function Open-AgentsChatStoppedHistoryHandoffRestartLockObservation([hashtable]$
     if ($identity.Dev -cne $record.lockIdentity.dev -or $identity.Ino -cne $record.lockIdentity.ino) {
         throw 'Restart lock directory identity differs.'
     }
-    $owner = Open-AgentsChatRetirementFile $Context $record.lock 'lock\owner.json'
-    $Context.HistoryHandoffRestartLock = @{
-        Directory=$directory; DirectoryIdentity=[ordered]@{ dev=$identity.Dev; ino=$identity.Ino }
-        OwnerFile=$owner; OwnerDescriptor=(Get-AgentsChatStoppedHandoffDescriptor $owner 'lock\owner.json')
+    if ($RetirementRequested -and @(Get-ChildItem -LiteralPath (Join-Path $Context.Control 'lock') -Force).Count -eq 0) {
+        # An owner-retired directory stays provisional until the exact retirement intent is bound.
+        $Context.HistoryHandoffRestartLock = @{
+            Directory=$directory; DirectoryIdentity=[ordered]@{ dev=$identity.Dev; ino=$identity.Ino }
+            OwnerFile=$null; OwnerRetired=$true
+            OwnerDescriptor=[ordered]@{
+                path=$record.lock.path; dev=$record.lock.dev; ino=$record.lock.ino
+                bytes=$record.lock.bytes; sha256=$record.lock.sha256
+            }
+        }
+        $Context.HistoryHandoffRestartOwnerRetiredPending = $true
+    } else {
+        $owner = Open-AgentsChatRetirementFile $Context $record.lock 'lock\owner.json'
+        $Context.HistoryHandoffRestartLock = @{
+            Directory=$directory; DirectoryIdentity=[ordered]@{ dev=$identity.Dev; ino=$identity.Ino }
+            OwnerFile=$owner; OwnerDescriptor=(Get-AgentsChatStoppedHandoffDescriptor $owner 'lock\owner.json')
+        }
     }
     $Context.HistoryHandoffRestartLockObserver = $true
     $Context.HistoryHandoffRestartCommittedPending = @{

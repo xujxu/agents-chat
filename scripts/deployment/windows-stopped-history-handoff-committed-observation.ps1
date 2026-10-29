@@ -173,7 +173,8 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
     }
     $Context.HistoryHandoffLockObserver = $true
     if ($hasRestartCommitted) {
-        Open-AgentsChatStoppedHistoryHandoffRestartLockObservation $Context $Request.restartCommitted $restartCommittedName
+        Open-AgentsChatStoppedHistoryHandoffRestartLockObservation $Context $Request.restartCommitted $restartCommittedName `
+            -RetirementRequested:$hasRestartRetirement
     }
     if ($hasRetirement) {
         Initialize-AgentsChatStoppedHistoryHandoffLockRetirementObservation $Context $Request.retirement
