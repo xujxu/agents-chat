@@ -44,3 +44,4 @@ Every historical read of the original state goes through `Open-AgentsChatStopped
 - [ ] The observer returns `{status:'restart-state-observed', attemptId, previousAttemptId, previousOperationId, project, prepared, committed, stateIntent, state, lockIdentity, lock, runtimeAuthority:false, lockAuthority:false, taskAuthority:false}`.
 - [ ] The writer path still opens the real original state; no global state path substitution.
 - [ ] Actions green with every required receipt; Contracts green.
+- Note: run `40860429807` (`e47da08a`) failed in the `state` shard with `Unsupported retirement JSON value.` because the observer parsed the state intent without `-AllowNull` while its `nextState` carries null phase fields. Fixed in `b9153aa1`; validation rerun as `40864324083` with Contracts `40864419394`.
