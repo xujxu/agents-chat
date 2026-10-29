@@ -76,6 +76,11 @@ function Assert-AgentsChatStoppedWorkerInventory([hashtable]$Context) {
     }
     foreach ($item in Get-ChildItem -LiteralPath $Context.Control -Force) {
         if ($handoff -and $item.Name -ceq 'lock') { continue }
+        if ($handoff -and $item.Name -ceq 'state.json.lock' -and
+            $Context.ContainsKey('HistoryHandoffRestartStateStage')) {
+            $Context.HistoryHandoffRestartStateStage.Check()
+            continue
+        }
         if ($item.Name -match '^(worker-|task-retirement|service-)' -or
             $item.Name -in @('task-maintenance', 'lock', 'recovery-lock', 'state.json.lock') -or
             $item.Name -like 'state.json.lock.pending-*') {

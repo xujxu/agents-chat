@@ -47,6 +47,7 @@ function Write-AgentsChatStoppedHistoryHandoffRestartState(
         $stage = [Deployment.WindowsPrivateFile]::Publish($stagePath, $text)
         $Context.Files.Add($stage)
         if ($stage.ReadText() -cne $text) { throw 'Restart state write stage differs.' }
+        $Context.HistoryHandoffRestartStateStage = $stage
         $null = Get-AgentsChatStoppedHistoryHandoffSuccessorAbandonedObservation $Context $ControllerPid $ControllerIdentity
         if ((Get-AgentsChatStoppedHistoryHandoffRestartStateText $Context) -cne $text) {
             throw 'Restart state write intent changed.'
@@ -60,6 +61,7 @@ function Write-AgentsChatStoppedHistoryHandoffRestartState(
             [Text.Encoding]::UTF8.GetBytes($text))).ToLowerInvariant()
         $staged = [Deployment.WindowsPrivateFile]::CaptureSourceSecurity($Context.Control, 'state.json.lock', 'file')
         $before = [Deployment.WindowsPrivateFile]::CaptureSourceSecurity($Context.Control, 'state.json', 'file')
+        $null = $Context.Remove('HistoryHandoffRestartStateStage')
         Remove-AgentsChatStoppedHistoryHandoffRestartStateHandles $Context $stage.CaptureIdentity()
         Remove-AgentsChatStoppedHistoryHandoffRestartStateHandles $Context $state.CaptureIdentity()
         [Deployment.WindowsPrivateFile]::PublishSourceFile(
