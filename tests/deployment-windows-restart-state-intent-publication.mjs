@@ -47,13 +47,13 @@ export async function assertRestartStateIntentPublication({
   assert.equal(new Date(intent.createdAt).toISOString(), intent.createdAt);
   assert.ok(intent.createdAt >= committedRecord.committedAt);
   assert.ok(intent.createdAt <= new Date().toISOString());
-  const oldState = validateState(JSON.parse(record.oldState));
+  const oldState = validateState(JSON.parse(original.oldState));
   assert.equal(oldState.project, original.project);
   assert.equal(oldState.operationId, original.previousOperationId);
   const nextState = {
-    version: 1, operationId: record.newOwner.operationId, project: original.project, operation: record.operation,
+    version: 1, operationId: record.newOwner.operationId, project: original.project, operation: original.operation,
     phase: 'preflight', previousPhase: null, sourceCommit: null, targetCommit: null, backupId: null,
-    priorRuntime: 'stopped', runtimeIdentity: record.observation.retiredRuntime.generation,
+    priorRuntime: 'stopped', runtimeIdentity: original.observation.retiredRuntime.generation,
     startedAt: record.newOwner.createdAt, updatedAt: intent.createdAt, errorCode: null,
   };
   assert.deepEqual(validateState(structuredClone(nextState)), nextState);
@@ -61,7 +61,7 @@ export async function assertRestartStateIntentPublication({
     version: 1, phase: 'stopped-history-handoff-restart-state-intent', attemptId: record.attemptId,
     control, project: original.project, controlIdentity: original.controlIdentity,
     previousOperationId: original.previousOperationId, prepared, committed, newOwner: record.newOwner,
-    lockIdentity: directory, lock: owner, state: record.state, oldState: record.oldState, nextState,
+    lockIdentity: directory, lock: owner, state: original.state, oldState: original.oldState, nextState,
     creator: {
       pid: process.pid, processIdentity: identity,
       bridgePid: ready.pid, bridgeIdentity: ready.processIdentity,
