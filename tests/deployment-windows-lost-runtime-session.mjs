@@ -497,7 +497,9 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   const restartOwnerCrash = mode === 'crash-restart-owner-history';
   const restartOwnerDeadResume = mode === 'resume-restart-owner-dead-history';
   const restartCommittedResume = mode === 'resume-restart-committed-history';
-  const restartStateIntentResume = mode === 'resume-restart-state-intent-history';
+  const restartStateIntentResume = mode === 'resume-restart-state-intent-history'
+    || mode === 'resume-restart-state-written-history';
+  const restartStateWrittenResume = mode === 'resume-restart-state-written-history';
   const restartCommittedCrash = mode === 'crash-restart-committed-history';
   const restartCommittedDeadResume = mode === 'resume-restart-committed-dead-history';
   const restartCrash = mode === 'crash-restart-prepared-history';
@@ -521,7 +523,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     'resume-restart-directory-history': 'Committed',
     'resume-restart-owner-history': 'Committed',
     'crash-restart-owner-history': 'Committed', 'resume-restart-owner-dead-history': 'Committed',
-    'resume-restart-committed-history': 'Committed', 'resume-restart-state-intent-history': 'Committed',
+    'resume-restart-committed-history': 'Committed', 'resume-restart-state-intent-history': 'Committed', 'resume-restart-state-written-history': 'Committed',
     'crash-restart-committed-history': 'Committed', 'resume-restart-committed-dead-history': 'Committed',
     'crash-restart-directory-history': 'Committed', 'resume-restart-directory-dead-history': 'Committed',
     'crash-restart-prepared-history': 'Committed', 'resume-restart-prepared-history': 'Committed',
@@ -730,6 +732,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         createDirectory: restartDirectoryResume || restartOwnerResume || restartCommittedResume || restartStateIntentResume,
         publishOwner: restartOwnerResume || restartCommittedResume || restartStateIntentResume,
         commitRestart: restartCommittedResume || restartStateIntentResume, prepareState: restartStateIntentResume,
+        writeState: restartStateWrittenResume,
       });
     } else if (successorCrash) {
       await holdSuccessorPrepared({ source, control, pwsh, previous: JSON.parse(crashStep) });

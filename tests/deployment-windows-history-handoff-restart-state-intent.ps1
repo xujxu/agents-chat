@@ -1,5 +1,5 @@
 function Test-AgentsChatStoppedHistoryHandoffRestartStateIntent(
-    [string]$Source, [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity
+    [string]$Source, [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity, [switch]$Continue
 ) {
     . (Join-Path $Source 'windows-stopped-history-handoff-restart-state-intent.ps1')
     $refused = $false
@@ -35,6 +35,7 @@ function Test-AgentsChatStoppedHistoryHandoffRestartStateIntent(
         stateIntent=$descriptor; directory=$lock.DirectoryIdentity; owner=$lock.OwnerDescriptor
         runtimeAuthority=$false; lockAuthority=$false; stateAuthority=$false
     }
+    if ($Continue) { return $result }
     $refused = $false
     try { $null = Publish-AgentsChatStoppedHistoryHandoffRestartStateIntent $Context $ControllerPid $ControllerIdentity }
     catch {

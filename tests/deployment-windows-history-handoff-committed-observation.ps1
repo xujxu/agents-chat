@@ -34,6 +34,7 @@ param(
     [switch]$CommitRestart,
     [switch]$HoldRestartCommitted,
     [switch]$PrepareRestartState,
+    [switch]$WriteRestartState,
     [string]$AbandonedDev,
     [string]$AbandonedIno,
     [int]$AbandonedBytes,
@@ -67,6 +68,7 @@ try {
         ($CommitRestart -and (-not $PublishRestartOwner -or $HoldRestartOwner)) -or
         ($HoldRestartCommitted -and -not $CommitRestart) -or
         ($PrepareRestartState -and (-not $CommitRestart -or $HoldRestartCommitted)) -or
+        ($WriteRestartState -and -not $PrepareRestartState) -or
         ($PhasedPublication -and -not $PublishSuccessor) -or
         ($SealSuccessor -and -not $ObserveSuccessor) -or
         ($PublishSuccessor -and -not $PrepareSuccessor) -or
@@ -363,7 +365,20 @@ try {
             throw 'Restart state intent requires its exact command.'
         }
         . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart-state-intent.ps1')
-        $observation = Test-AgentsChatStoppedHistoryHandoffRestartStateIntent $Source $scope $ControllerPid $ControllerIdentity
+        $observation = Test-AgentsChatStoppedHistoryHandoffRestartStateIntent $Source $scope $ControllerPid $ControllerIdentity `
+            -Continue:$WriteRestartState
+    }
+    if ($WriteRestartState) {
+        [Console]::Out.WriteLine((@{
+            type='restart-state-intent-published'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+            control=$Control; controllerIdentity=$ControllerIdentity; value=$observation
+        } | ConvertTo-Json -Depth 8 -Compress))
+        [Console]::Out.Flush()
+        if ([Console]::In.ReadLine() -cne '{"type":"write-restart-state"}') {
+            throw 'Restart state write requires its exact command.'
+        }
+        . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart-state-write.ps1')
+        $observation = Test-AgentsChatStoppedHistoryHandoffRestartStateWrite $Source $scope $ControllerPid $ControllerIdentity
     }
     if ($HoldRestartDirectory -or $HoldRestartOwner -or $HoldRestartCommitted) {
         [Console]::Out.WriteLine((@{

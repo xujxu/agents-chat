@@ -6,7 +6,7 @@ import { assertRestartPublicationProofs } from './deployment-windows-restart-pub
 
 export async function assertRestartStateIntentPublication({
   control, identity, ready, original, record, prepared, committed, directory, owner, transport, controllerWire,
-  captureWorkerFields, enterPhase, validateState,
+  captureWorkerFields, enterPhase, validateState, writeState = false, processIdentity,
 }) {
   enterPhase('host-state-intent-command');
   console.log(`INACTIVE_HISTORY_RESTART_COMMITTED_LIVE ${JSON.stringify({
@@ -21,7 +21,19 @@ export async function assertRestartStateIntentPublication({
   await assertRestartPublicationProofs({
     publication: 'state-intent', transport, ready, control, identity, captureWorkerFields, enterPhase,
   });
-  const result = captureWorkerFields(await transport.wire.receive({ timeoutMs: 45000 }),
+  let response = await transport.wire.receive({ timeoutMs: 45000 });
+  if (writeState) {
+    const frame = captureWorkerFields(response,
+      ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'], 'continued restart state intent');
+    assert.equal(frame.type, 'restart-state-intent-published');
+    assert.equal(frame.pid, ready.pid);
+    assert.equal(frame.processIdentity, ready.processIdentity);
+    assert.equal(frame.processIdentity, await processIdentity(frame.pid));
+    assert.equal(frame.control, control);
+    assert.equal(frame.controllerIdentity, identity);
+    response = frame.value;
+  }
+  const result = captureWorkerFields(response,
     ['status', 'attemptId', 'prepared', 'committed', 'stateIntent', 'directory', 'owner',
       'runtimeAuthority', 'lockAuthority', 'stateAuthority'],
     'restart state intent publication');
@@ -68,5 +80,5 @@ export async function assertRestartStateIntentPublication({
     },
     createdAt: intent.createdAt,
   });
-  return { file, bytes, identity: current, descriptor };
+  return { file, bytes, identity: current, descriptor, nextState };
 }

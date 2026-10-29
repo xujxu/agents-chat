@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 export async function assertRestartPublicationProofs({
   publication, transport, ready, control, identity, captureWorkerFields, enterPhase,
 }) {
-  assert.ok(['directory', 'owner', 'committed', 'state-intent'].includes(publication));
+  assert.ok(['directory', 'owner', 'committed', 'state-intent', 'state-write'].includes(publication));
   for (const stage of ['before', 'after']) {
     enterPhase(`restart-${publication}-${stage}-proof`);
     const proof = captureWorkerFields(await transport.wire.receive({ timeoutMs: 45000 }),
