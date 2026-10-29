@@ -119,16 +119,22 @@ function Open-AgentsChatInactiveTask([string]$TaskName, [string]$Project, $Prove
             else { ([Security.Principal.NTAccount]::new($userId)).Translate([Security.Principal.SecurityIdentifier]) }
         $context.PrincipalSid = $sid.Value
         if ($null -ne $ProvedObservation) {
-            $proved = $ProvedObservation.configuration
-            if ($ProvedObservation -isnot [Collections.IDictionary] -or $proved -isnot [string] -or
-                $ProvedObservation.status -cne 'inactive-task-observed' -or $ProvedObservation.project -cne $Project -or
-                $ProvedObservation.taskName -cne $TaskName -or $ProvedObservation.definition -cne $context.NativeDefinition -or
-                $ProvedObservation.securityDescriptor -cne $context.SecurityDescriptor -or
-                $ProvedObservation.principalSid -cne $context.PrincipalSid -or
-                $ProvedObservation.configurationSha256 -cne $context.ConfigurationSha256 -or
-                -not [IO.Path]::IsPathRooted($proved) -or [IO.Path]::GetFullPath($proved) -cne $proved -or
-                [IO.Path]::GetFileName($proved) -cne 'configuration.json') {
+            if ($ProvedObservation -isnot [Collections.IDictionary]) {
                 throw 'Inactive task differs from its proved handoff observation.'
+            }
+            $proved = $ProvedObservation.configuration
+            $differs = @(foreach ($pair in @(
+                @('status', 'inactive-task-observed'), @('project', $Project), @('taskName', $TaskName),
+                @('definition', $context.NativeDefinition), @('securityDescriptor', $context.SecurityDescriptor),
+                @('principalSid', $context.PrincipalSid), @('configurationSha256', $context.ConfigurationSha256)
+            )) {
+                if ($ProvedObservation[$pair[0]] -isnot [string] -or $ProvedObservation[$pair[0]] -cne $pair[1]) { $pair[0] }
+            })
+            if ($proved -isnot [string] -or -not [IO.Path]::IsPathRooted($proved) -or
+                [IO.Path]::GetFullPath($proved) -cne $proved -or
+                [IO.Path]::GetFileName($proved) -cne 'configuration.json') { $differs += 'configuration' }
+            if ($differs.Count) {
+                throw "Inactive task differs from its proved handoff observation: $($differs -join ', ')."
             }
             $context.Files.Add([Deployment.WindowsPrivateFile]::OpenDirectory([IO.Path]::GetDirectoryName($proved)))
             $context.Configuration = $proved
