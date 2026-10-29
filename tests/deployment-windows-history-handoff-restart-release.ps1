@@ -1,5 +1,6 @@
 function Test-AgentsChatStoppedHistoryHandoffRestartRelease(
-    [string]$Source, [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity, [switch]$Continue
+    [string]$Source, [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity, [switch]$Continue,
+    [switch]$StateWritten
 ) {
     . (Join-Path $Source 'windows-stopped-history-handoff-restart-release.ps1')
     $ownerPath = Join-Path $Context.Control 'lock\owner.json'
@@ -20,6 +21,15 @@ function Test-AgentsChatStoppedHistoryHandoffRestartRelease(
     }
     $committed = $Context.HistoryHandoffRestartCommitted
     $committedText = $committed.File.ReadText()
+    if ($StateWritten -ne $Context.ContainsKey('HistoryHandoffRestartState')) {
+        throw 'Restart release state-write precondition differs.'
+    }
+    if ($StateWritten) {
+        $stateIntent = $Context.HistoryHandoffRestartStateIntent
+        $writtenState = $Context.HistoryHandoffRestartState
+        $intentText = $stateIntent.File.ReadText()
+        $writtenText = $writtenState.File.ReadText()
+    }
     $preparedText = $Context.HistoryHandoffRestartPrepared.File.ReadText()
     $stateHash = (Get-FileHash -LiteralPath (Join-Path $Context.Control 'state.json') -Algorithm SHA256).Hash
     $directory = $lock.DirectoryIdentity
@@ -35,6 +45,34 @@ function Test-AgentsChatStoppedHistoryHandoffRestartRelease(
     }
     foreach ($field in @('path', 'dev', 'ino', 'bytes', 'sha256')) {
         if ($result.committed[$field] -cne $committed.Descriptor[$field]) { throw 'Restart release committed binding differs.' }
+    }
+    if ($StateWritten) {
+        if (-not $result.Contains('stateIntent') -or -not $result.Contains('writtenState')) {
+            throw 'Post-write restart release omitted its state binding.'
+        }
+        foreach ($field in @('path', 'dev', 'ino', 'bytes', 'sha256')) {
+            if ($result.stateIntent[$field] -cne $stateIntent.Descriptor[$field] -or
+                $result.writtenState[$field] -cne $writtenState.Descriptor[$field]) {
+                throw 'Post-write restart release state binding differs.'
+            }
+        }
+        foreach ($name in @($result.retirement.path, $result.released.path)) {
+            $document = [Text.Json.JsonDocument]::Parse([IO.File]::ReadAllText((Join-Path $Context.Control $name)))
+            try {
+                $root = $document.RootElement
+                foreach ($field in @('path', 'dev', 'ino', 'bytes', 'sha256')) {
+                    if ($root.GetProperty('stateIntent').GetProperty($field).ToString() -cne [string]$stateIntent.Descriptor[$field] -or
+                        $root.GetProperty('writtenState').GetProperty($field).ToString() -cne [string]$writtenState.Descriptor[$field]) {
+                        throw 'Post-write restart release record state binding differs.'
+                    }
+                }
+            } finally { $document.Dispose() }
+        }
+        if ($stateIntent.File.ReadText() -cne $intentText -or $writtenState.File.ReadText() -cne $writtenText) {
+            throw 'Post-write restart release changed its ninth record or written state.'
+        }
+    } elseif ($result.Contains('stateIntent') -or $result.Contains('writtenState')) {
+        throw 'Pre-write restart release reported a state binding.'
     }
     if ((Test-Path -LiteralPath $ownerPath) -or (Test-Path -LiteralPath (Join-Path $Context.Control 'lock'))) {
         throw 'Restart release retained its lock.'

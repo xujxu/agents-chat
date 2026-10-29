@@ -73,7 +73,8 @@ try {
         ($PrepareRestartState -and (-not $CommitRestart -or $HoldRestartCommitted)) -or
         ($WriteRestartState -and -not $PrepareRestartState) -or
         ($HoldRestartState -and -not $WriteRestartState) -or
-        ($ReleaseRestart -and (-not $CommitRestart -or $HoldRestartCommitted -or $PrepareRestartState)) -or
+        ($ReleaseRestart -and (-not $CommitRestart -or $HoldRestartCommitted -or
+            ($PrepareRestartState -and (-not $WriteRestartState -or $HoldRestartState)))) -or
         ($HoldRestartReleased -and -not $ReleaseRestart) -or
         ($PhasedPublication -and -not $PublishSuccessor) -or
         ($SealSuccessor -and -not $ObserveSuccessor) -or
@@ -361,7 +362,7 @@ try {
         $observation = Test-AgentsChatStoppedHistoryHandoffRestartCommit $Source $scope $ControllerPid $ControllerIdentity `
             -Continue:($PrepareRestartState -or $ReleaseRestart)
     }
-    if ($ReleaseRestart) {
+    if ($ReleaseRestart -and -not $WriteRestartState) {
         [Console]::Out.WriteLine((@{
             type='restart-committed-published'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
             control=$Control; controllerIdentity=$ControllerIdentity; value=$observation
@@ -398,7 +399,20 @@ try {
         }
         . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart-state-write.ps1')
         $observation = Test-AgentsChatStoppedHistoryHandoffRestartStateWrite $Source $scope $ControllerPid $ControllerIdentity `
-            -Continue:$HoldRestartState
+            -Continue:($HoldRestartState -or $ReleaseRestart)
+    }
+    if ($ReleaseRestart -and $WriteRestartState) {
+        [Console]::Out.WriteLine((@{
+            type='restart-state-written-published'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+            control=$Control; controllerIdentity=$ControllerIdentity; value=$observation
+        } | ConvertTo-Json -Depth 8 -Compress))
+        [Console]::Out.Flush()
+        if ([Console]::In.ReadLine() -cne '{"type":"release-restart"}') {
+            throw 'Post-write restart release requires its exact command.'
+        }
+        . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart-release.ps1')
+        $observation = Test-AgentsChatStoppedHistoryHandoffRestartRelease $Source $scope $ControllerPid $ControllerIdentity `
+            -Continue:$HoldRestartReleased -StateWritten
     }
     if ($HoldRestartDirectory -or $HoldRestartOwner -or $HoldRestartCommitted -or $HoldRestartState -or $HoldRestartReleased) {
         [Console]::Out.WriteLine((@{

@@ -21,12 +21,14 @@ async function readRecord(control, descriptor, name) {
 
 export async function assertRestartReleasePublication({
   control, identity, ready, original, record, prepared, committed, directory, owner, transport, controllerWire,
-  captureWorkerFields, enterPhase, holdReleased = false, processIdentity,
+  captureWorkerFields, enterPhase, holdReleased = false, processIdentity, stateIntent, writtenState,
 }) {
+  assert.equal(stateIntent === undefined, writtenState === undefined);
+  const written = writtenState ? { stateIntent, writtenState } : {};
   enterPhase('host-release-command');
-  console.log(`INACTIVE_HISTORY_RESTART_COMMITTED_LIVE ${JSON.stringify({
+  console.log(`${writtenState ? 'INACTIVE_HISTORY_RESTART_STATE_WRITTEN_LIVE' : 'INACTIVE_HISTORY_RESTART_COMMITTED_LIVE'} ${JSON.stringify({
     actorPid: process.pid, actorIdentity: identity, pid: ready.pid,
-    processIdentity: ready.processIdentity, prepared, directory, owner, committed,
+    processIdentity: ready.processIdentity, prepared, directory, owner, committed, ...written,
   })}`);
   const command = captureWorkerFields(await controllerWire.receive({ timeoutMs: 45000 }),
     ['type'], 'restart release controller command');
@@ -50,7 +52,7 @@ export async function assertRestartReleasePublication({
   }
   const result = captureWorkerFields(response,
     ['status', 'attemptId', 'prepared', 'committed', 'retirement', 'released', 'state',
-      'runtimeAuthority', 'lockAuthority', 'taskAuthority'],
+      ...(writtenState ? ['stateIntent', 'writtenState'] : []), 'runtimeAuthority', 'lockAuthority', 'taskAuthority'],
     'restart release');
   const retirementDescriptor = captureWorkerFields(result.retirement,
     ['path', 'dev', 'ino', 'bytes', 'sha256'], 'restart release retirement descriptor');
@@ -58,7 +60,7 @@ export async function assertRestartReleasePublication({
     ['path', 'dev', 'ino', 'bytes', 'sha256'], 'restart released descriptor');
   assert.deepEqual(result, {
     status: 'restart-released', attemptId: record.attemptId, prepared, committed,
-    retirement: retirementDescriptor, released: releasedDescriptor, state: original.state,
+    retirement: retirementDescriptor, released: releasedDescriptor, state: original.state, ...written,
     runtimeAuthority: false, lockAuthority: false, taskAuthority: false,
   });
   await assert.rejects(lstat(path.join(control, 'lock')), { code: 'ENOENT' });
@@ -73,11 +75,20 @@ export async function assertRestartReleasePublication({
   const binding = {
     attemptId: record.attemptId, control, project: original.project, controlIdentity: original.controlIdentity,
     previousOperationId: original.previousOperationId, prepared, committed, newOwner: record.newOwner,
-    lockIdentity: directory, lock: owner, state: original.state, creator,
+    lockIdentity: directory, lock: owner, state: original.state, ...written, creator,
   };
   const { createdAt } = retirement.value;
   assert.equal(new Date(createdAt).toISOString(), createdAt);
   assert.ok(createdAt >= committedRecord.committedAt);
+  if (writtenState) {
+    const stateFile = path.join(control, 'state.json');
+    const current = await lstat(stateFile, { bigint: true });
+    assert.equal(current.dev.toString(), writtenState.dev);
+    assert.equal(current.ino.toString(), writtenState.ino);
+    assert.equal(createHash('sha256').update(await readFile(stateFile)).digest('hex'), writtenState.sha256);
+    const intentRecord = JSON.parse(await readFile(path.join(control, stateIntent.path)));
+    assert.ok(createdAt >= intentRecord.createdAt);
+  }
   assert.deepEqual(retirement.value, {
     version: 1, phase: 'stopped-history-handoff-restart-release-prepared', ...binding, createdAt,
   });

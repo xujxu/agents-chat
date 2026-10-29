@@ -6,8 +6,9 @@ import { assertRestartPublicationProofs } from './deployment-windows-restart-pub
 
 export async function assertRestartStateWritePublication({
   control, identity, ready, record, intent, transport, controllerWire, captureWorkerFields, enterPhase,
-  holdState = false, processIdentity,
+  holdState = false, releaseRestart = false, processIdentity,
 }) {
+  assert.ok(!holdState || !releaseRestart);
   enterPhase('host-state-write-command');
   console.log(`INACTIVE_HISTORY_RESTART_STATE_INTENT_LIVE ${JSON.stringify({
     actorPid: process.pid, actorIdentity: identity, pid: ready.pid,
@@ -22,10 +23,10 @@ export async function assertRestartStateWritePublication({
     publication: 'state-write', transport, ready, control, identity, captureWorkerFields, enterPhase,
   });
   let response = await transport.wire.receive({ timeoutMs: 45000 });
-  if (holdState) {
+  if (holdState || releaseRestart) {
     const frame = captureWorkerFields(response,
       ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'], 'held restart state write');
-    assert.equal(frame.type, 'ready');
+    assert.equal(frame.type, releaseRestart ? 'restart-state-written-published' : 'ready');
     assert.equal(frame.pid, ready.pid);
     assert.equal(frame.processIdentity, ready.processIdentity);
     assert.equal(frame.processIdentity, await processIdentity(frame.pid));

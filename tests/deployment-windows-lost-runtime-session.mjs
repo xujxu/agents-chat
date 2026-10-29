@@ -502,10 +502,12 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   const restartOwnerDeadResume = mode === 'resume-restart-owner-dead-history';
   const restartCommittedResume = mode === 'resume-restart-committed-history'
     || mode === 'resume-restart-released-history';
-  const restartReleasedResume = mode === 'resume-restart-released-history';
+  const restartReleasedResume = mode === 'resume-restart-released-history'
+    || mode === 'resume-restart-state-released-history';
   const restartStateIntentResume = mode === 'resume-restart-state-intent-history'
-    || mode === 'resume-restart-state-written-history';
-  const restartStateWrittenResume = mode === 'resume-restart-state-written-history';
+    || mode === 'resume-restart-state-written-history' || mode === 'resume-restart-state-released-history';
+  const restartStateWrittenResume = mode === 'resume-restart-state-written-history'
+    || mode === 'resume-restart-state-released-history';
   const restartCommittedCrash = mode === 'crash-restart-committed-history';
   const restartCommittedDeadResume = mode === 'resume-restart-committed-dead-history';
   const restartStateCrash = mode === 'crash-restart-state-history';
@@ -536,6 +538,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     'resume-restart-owner-history': 'Committed',
     'crash-restart-owner-history': 'Committed', 'resume-restart-owner-dead-history': 'Committed',
     'resume-restart-committed-history': 'Committed', 'resume-restart-state-intent-history': 'Committed', 'resume-restart-state-written-history': 'Committed',
+    'resume-restart-state-released-history': 'Committed',
     'resume-restart-released-history': 'Committed',
     'crash-restart-committed-history': 'Committed', 'resume-restart-committed-dead-history': 'Committed',
     'crash-restart-state-history': 'Committed', 'resume-restart-state-dead-history': 'Committed',

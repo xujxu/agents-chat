@@ -29,7 +29,7 @@ export async function assertRestartPreparation({
   assert.ok(!prepareState || (commitRestart && !holdCommitted));
   assert.ok(!writeState || prepareState);
   assert.ok(!holdState || writeState);
-  assert.ok(!releaseRestart || (commitRestart && !holdCommitted && !prepareState));
+  assert.ok(!releaseRestart || (commitRestart && !holdCommitted && (!prepareState || (writeState && !holdState))));
   assert.ok(!holdReleased || releaseRestart);
   const held = hold || holdDirectory || holdOwner || holdCommitted || holdState || holdReleased;
   const load = name => import(pathToFileURL(path.join(source, name)).href);
@@ -250,7 +250,7 @@ export async function assertRestartPreparation({
               holdCommitted, processIdentity, prepareState: prepareState || releaseRestart,
             });
             snapshots.push(committedSnapshot);
-            if (releaseRestart) {
+            if (releaseRestart && !writeState) {
               const releaseSnapshots = await assertRestartReleasePublication({
                 control, identity, ready, original, record, prepared: descriptor, committed: committedSnapshot.descriptor,
                 directory: directoryIdentity, owner: ownerSnapshot.descriptor, transport, controllerWire,
@@ -274,8 +274,23 @@ export async function assertRestartPreparation({
               if (writeState) {
                 writtenState = await assertRestartStateWritePublication({
                   control, identity, ready, record, intent: intentSnapshot, transport, controllerWire,
-                  captureWorkerFields, enterPhase, holdState, processIdentity,
+                  captureWorkerFields, enterPhase, holdState, releaseRestart, processIdentity,
                 });
+                if (releaseRestart) {
+                  const releaseSnapshots = await assertRestartReleasePublication({
+                    control, identity, ready, original, record, prepared: descriptor, committed: committedSnapshot.descriptor,
+                    directory: directoryIdentity, owner: ownerSnapshot.descriptor, transport, controllerWire,
+                    captureWorkerFields, enterPhase, holdReleased, processIdentity,
+                    stateIntent: intentSnapshot.descriptor, writtenState: writtenState.descriptor,
+                  });
+                  snapshots.push(...releaseSnapshots);
+                  if (holdReleased) {
+                    [heldPublication.restartRelease, heldPublication.restartReleased] =
+                      releaseSnapshots.map(snapshot => snapshot.descriptor);
+                    heldPublication.restartStateIntent = intentSnapshot.descriptor;
+                    heldPublication.restartState = writtenState.descriptor;
+                  }
+                }
                 if (holdState) {
                   heldPublication.restartStateIntent = intentSnapshot.descriptor;
                   heldPublication.restartState = writtenState.descriptor;
@@ -358,7 +373,9 @@ export async function assertRestartPreparation({
   }
   for (const snapshot of snapshots.reverse()) await unlink(snapshot.file);
   if (writtenState) { await writeFile(stateFile, state); }
-  console.log(releaseRestart
+  console.log(releaseRestart && writeState
+    ? 'PASS: native live restart owner releases only its exact committed lock after its acknowledged state write while nine records and written state remain exact without authority'
+    : releaseRestart
     ? 'PASS: native live restart owner releases only its exact committed lock before any state write while original state and eight records remain exact without authority'
     : writeState
     ? 'PASS: native restart state write publishes exactly its ninth-record next state through one acknowledged stage without runtime lock or task authority'
