@@ -689,9 +689,6 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
         restart: true, blockedDirectory: true, blockedOwner: true, blockedCommitted: true, blockedState: true,
       });
-      // The original state inode was replaced by the actual write; only bytes are restored, so generic
-      // archive readers must keep refusing and this boundary ends at its transition proof.
-      return;
     } else if (restartCommittedCrash) {
       await assertRestartPreparation({
         source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
@@ -752,7 +749,6 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         commitRestart: restartCommittedResume || restartStateIntentResume, prepareState: restartStateIntentResume,
         writeState: restartStateWrittenResume,
       });
-      if (restartStateWrittenResume) return;
     } else if (successorCrash) {
       await holdSuccessorPrepared({ source, control, pwsh, previous: JSON.parse(crashStep) });
       throw new Error('Held successor preparation publisher unexpectedly returned.');
@@ -1435,12 +1431,18 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       await assert.rejects(api.openWindowsInactiveRollbackHistoryArchive(options));
       assert.deepEqual(await readFile(completionFile), changedCompletion);
     } finally { await writeFile(completionFile, completionBytes); }
-    const proof = await api.openWindowsInactiveRollbackHistoryArchive(options);
-    try {
-      assert.equal((await proof.check()).status, 'retired');
-      assert.equal(proof.completeHistory, undefined);
+    if (restartStateWrittenResume || restartStateDeadResume) {
+      // The actual write replaced the original state inode; only its bytes were restored in place, so
+      // identity-pinned generic archive readers must refuse without the explicit ninth-record transition.
+      await assert.rejects(api.openWindowsInactiveRollbackHistoryArchive(options));
+    } else {
+      const proof = await api.openWindowsInactiveRollbackHistoryArchive(options);
+      try {
+        assert.equal((await proof.check()).status, 'retired');
+        assert.equal(proof.completeHistory, undefined);
+      }
+      finally { await proof.close(); }
     }
-    finally { await proof.close(); }
     await assert.rejects(api.openWindowsInactiveRollbackHistoryRetirement(options));
     const { requireNoServiceMaintenance } = await load('state.mjs');
     await assert.rejects(requireNoServiceMaintenance(control));
