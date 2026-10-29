@@ -162,8 +162,17 @@ export async function assertSuccessorAbandonedAfterDeath({
     '-Source', source, '-Control', control, '-ControllerPid', String(process.pid), '-ControllerIdentity', identity,
     '-Request', JSON.stringify(value)];
   const args = restart ? restartArgs(request) : sixArgs;
-  const observe = input => promisify(execFile)(pwsh, input,
-    { timeout: 300000, maxBuffer: 131072, windowsHide: true });
+  let observation = 0;
+  const observe = async input => {
+    // Stderr timing lets a timed-out takeover show which native observation consumed its budget.
+    const index = ++observation;
+    const started = Date.now();
+    try {
+      return await promisify(execFile)(pwsh, input, { timeout: 300000, maxBuffer: 131072, windowsHide: true });
+    } finally {
+      console.error(`NATIVE_OBSERVATION ${index} ${Date.now() - started}ms`);
+    }
+  };
   const expected = restart ? {
     status: 'restart-prepared-observed', attemptId: previous.restartAttemptId,
     previousAttemptId: previous.successorAttemptId, previousOperationId: original.previousOperationId,
