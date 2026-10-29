@@ -313,7 +313,8 @@ jobs:
             'PASS: actual fresh restart committed publisher death preserves its exact eighth record owner directory and seven records without state authority',
             'PASS: native restart state intent binds exact old and next preflight state after its eighth record without writing state or granting authority',
             'PASS: native restart state write publishes exactly its ninth-record next state through one acknowledged stage without runtime lock or task authority',
-            'PASS: actual restart state writer death preserves its written state nine records owner and directory for a distinct observer without authority'
+            'PASS: actual restart state writer death preserves its written state nine records owner and directory for a distinct observer without authority',
+            'PASS: distinct restart committed observer proves eight records dead owner and directory without state lock or task authority'
           )) {
             if ($historyOutput -cnotcontains $receipt) { throw "Missing stopped-history acceptance receipt: $receipt" }
           }
