@@ -1,14 +1,14 @@
 . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-restart-owner.ps1')
 
 function Get-AgentsChatStoppedHistoryHandoffRestartCommittedRecord(
-    [hashtable]$Context, $Creator, [string]$CommittedAt, [switch]$Observed
+    [hashtable]$Context, $Creator, [string]$CommittedAt, [switch]$ObservedOwner
 ) {
     Assert-AgentsChatStoppedHistoryHandoffRestartLock $Context
     $observed = $Context.HistoryHandoffObservedCommit
     $prepared = $Context.HistoryHandoffRestartPrepared
     $request = $prepared.Request
     Assert-AgentsChatRetirementCreator $Creator $observed.ControllerPid $observed.ControllerIdentity
-    if ($Observed) {
+    if ($ObservedOwner) {
         if ($Creator.pid -ne $request.ControllerPid -or
             $Creator.processIdentity -cne $request.ControllerIdentity -or
             $Creator.pid -eq $observed.ControllerPid -or $Creator.bridgePid -eq $PID) {
@@ -71,7 +71,7 @@ function Assert-AgentsChatStoppedHistoryHandoffRestartCommitted([hashtable]$Cont
         }
     }
     $record = Get-AgentsChatStoppedHistoryHandoffRestartCommittedRecord $Context $retained.Creator $retained.CommittedAt `
-        -Observed:$observer
+        -ObservedOwner:$observer
     $actual = $expected = $null
     try {
         $actual = [Text.Json.JsonDocument]::Parse($retained.File.ReadText())
