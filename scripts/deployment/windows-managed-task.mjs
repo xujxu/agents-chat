@@ -221,13 +221,13 @@ async function captureTaskAdmission({ scope, control, lock: suppliedLock, admiss
   signal?.throwIfAborted();
   const retained = (inactive ? inactiveScopes : scopes).get(scope);
   if (!retained) throw refused(new Error('Original retained managed task scope is required.'));
-  if (retained.publication) throw refused(new Error('Inactive admission is already published.'));
   if (handoff && (!retained.handoff || JSON.stringify(handoff) !== JSON.stringify(retained.handoff))) {
     throw refused(new Error('Handoff-aware admission requires its handoff-aware inspection.'));
   }
   if (!handoff && retained.handoff) {
     throw refused(new Error('Handoff-aware inspection requires its handoff-aware admission.'));
   }
+  if (retained.publication) throw refused(new Error('Inactive admission is already published.'));
   const lock = captureLockOwner(suppliedLock);
   const { root } = await externalWorkerDirectory(control, lock.project);
   if (retained.observation.project !== lock.project) throw refused(new Error('Managed task project differs.'));
