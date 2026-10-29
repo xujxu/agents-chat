@@ -57,5 +57,6 @@ Attempt status is the first rule that matches:
 - Modify: `scripts/deployment/state.mjs` (`reconcileInterruptedOperation` maintenance branch)
 - Modify: `scripts/deployment/saved-worker-engine.mjs` and `tests/deployment-saved-worker.test.mjs`, if the saved closure includes `state.mjs` imports.
 
-- [ ] Implement the module and the reconcile field. Every other result keeps its exact current shape.
-- [ ] Actions green with every required receipt; Contracts green.
+- [x] Implement the module and the reconcile field. Every other result keeps its exact current shape.
+- [x] Actions green with every required receipt; Contracts green.
+- Accepted in run `40864324083` at `b9153aa1` (five shards, all 48 required receipts present) with Contracts `40864419394`.

@@ -41,7 +41,8 @@ Every historical read of the original state goes through `Open-AgentsChatStopped
   - `windows-stopped-history-handoff-committed-observation.ps1`, `windows-stopped-history-handoff-restart-observation.ps1` (request keys, namespace, observer initialization);
   - `windows-stopped-history-handoff-restart-state-intent.ps1` (intender XOR observer).
 
-- [ ] The observer returns `{status:'restart-state-observed', attemptId, previousAttemptId, previousOperationId, project, prepared, committed, stateIntent, state, lockIdentity, lock, runtimeAuthority:false, lockAuthority:false, taskAuthority:false}`.
-- [ ] The writer path still opens the real original state; no global state path substitution.
-- [ ] Actions green with every required receipt; Contracts green.
+- [x] The observer returns `{status:'restart-state-observed', attemptId, previousAttemptId, previousOperationId, project, prepared, committed, stateIntent, state, lockIdentity, lock, runtimeAuthority:false, lockAuthority:false, taskAuthority:false}`.
+- [x] The writer path still opens the real original state; no global state path substitution.
+- [x] Actions green with every required receipt; Contracts green.
+- Accepted in run `40864324083` at `b9153aa1` (five shards, all 48 required receipts present) with Contracts `40864419394`.
 - Note: run `40860429807` (`e47da08a`) failed in the `state` shard with `Unsupported retirement JSON value.` because the observer parsed the state intent without `-AllowNull` while its `nextState` carries null phase fields. Fixed in `b9153aa1`; validation rerun as `40864324083` with Contracts `40864419394`.

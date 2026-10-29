@@ -29,6 +29,7 @@
 - Modify: `windows-stopped-history-handoff-restart-observation.ps1` (initialize committed observation before final prepared assertion)
 - Modify: `windows-stopped-history-handoff-restart-lock.ps1`, `windows-stopped-history-handoff-lock.ps1`, `windows-stopped-history-handoff-restart-commit.ps1` (observer roles)
 
-- [ ] Observer returns `{status:'restart-committed-observed', attemptId, previousAttemptId, previousOperationId, project, prepared, committed, lockIdentity, lock, runtimeAuthority:false, lockAuthority:false, taskAuthority:false}`.
-- [ ] Commit, state intent and state write remain refused for the observer.
-- [ ] Actions green with every required receipt; Contracts green.
+- [x] Observer returns `{status:'restart-committed-observed', attemptId, previousAttemptId, previousOperationId, project, prepared, committed, lockIdentity, lock, runtimeAuthority:false, lockAuthority:false, taskAuthority:false}`.
+- [x] Commit, state intent and state write remain refused for the observer.
+- [x] Actions green with every required receipt; Contracts green.
+- Accepted in run `40864324083` at `b9153aa1` (five shards, all 48 required receipts present) with Contracts `40864419394`.

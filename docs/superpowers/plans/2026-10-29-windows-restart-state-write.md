@@ -40,4 +40,5 @@
 - [x] Stage admission fix `ea0c6a51`: the retained `state.json.lock` stage is admitted by inventory only after its own `.Check()` while the writer re-observes ancestors.
 - [x] Native write receipt: run `40831077522` commitment job `123305455678` printed the gate receipt at `2026-10-29T07:44:52Z`.
 - [x] Boundary flow fix `614e3c11`: written/dead state boundaries end at their transition proof, because generic identity-pinned archive readers correctly refuse once the original inode is replaced.
-- [ ] Actions green and all required receipts present across the four shards; Contracts green.
+- [x] Actions green and all required receipts present across the four shards; Contracts green.
+- Accepted in run `40864324083` at `b9153aa1` (five shards, all 48 required receipts present) with Contracts `40864419394`. The state boundaries run in a fifth `state` shard because the actual write replaces the shared state inode.

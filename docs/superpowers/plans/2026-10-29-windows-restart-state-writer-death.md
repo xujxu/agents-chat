@@ -16,4 +16,5 @@
 - [x] `crash-restart-state-history` / `resume-restart-state-dead-history` in `tests/deployment-windows-lost-runtime-session.mjs`.
 - [x] Boundary `restart-state-dead-history` in all `tests/deployment-windows-inactive-task.ps1` boundary arrays after `restart-state-written-history`.
 - [x] Required receipt `PASS: actual restart state writer death preserves its written state nine records owner and directory for a distinct observer without authority`.
-- [ ] Because production already refuses at the namespace, this gate may be green on first Actions run; record that as the expected outcome rather than inventing a red.
+- [x] Because production already refuses at the namespace, this gate may be green on first Actions run; record that as the expected outcome rather than inventing a red.
+- Accepted in run `40864324083` at `b9153aa1` (five shards, all 48 required receipts present) with Contracts `40864419394`. Green on its first valid native run, as expected.
