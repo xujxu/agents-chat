@@ -17,6 +17,17 @@ function Assert-AgentsChatStoppedHistoryHandoffRestartLock([hashtable]$Context) 
     $bound = $publisher -or $Context.ContainsKey('HistoryHandoffRestartPrepared')
     if ($bound) { Assert-AgentsChatStoppedHistoryHandoffRestartPrepared $Context }
     $lock = $Context.HistoryHandoffRestartLock
+    if ($lock.ContainsKey('Released')) {
+        if ($lock.Released -ne $true -or -not $publisher -or
+            -not $Context.ContainsKey('HistoryHandoffRestartReleaser') -or
+            $Context.HistoryHandoffRestartReleaser -ne $true -or
+            -not $Context.ContainsKey('HistoryHandoffRestartRelease') -or
+            $null -ne $lock.Directory -or -not $lock.ContainsKey('OwnerFile') -or $null -ne $lock.OwnerFile -or
+            @(Get-ChildItem -LiteralPath $Context.Control -Force | Where-Object { $_.Name -ieq 'lock' }).Count) {
+            throw 'Restart lock release lacks retained independent native proof.'
+        }
+        return
+    }
     $lock.Directory.Check()
     $identity = $lock.Directory.CaptureIdentity()
     if ($identity.Dev -cne $lock.DirectoryIdentity.dev -or
