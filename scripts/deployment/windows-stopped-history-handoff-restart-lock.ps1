@@ -40,7 +40,18 @@ function Assert-AgentsChatStoppedHistoryHandoffRestartLock([hashtable]$Context) 
         throw 'Restart lock directory inventory differs.'
     }
     $children = @(Get-ChildItem -LiteralPath (Join-Path $Context.Control 'lock') -Force)
-    if ($lock.ContainsKey('OwnerFile') -or $lock.ContainsKey('OwnerDescriptor')) {
+    if ($lock.ContainsKey('OwnerRetired')) {
+        # Only a distinct owner retirer bound to the exact retained retirement intent may leave the directory empty.
+        if ($lock.OwnerRetired -ne $true -or -not $observer -or
+            -not $Context.ContainsKey('HistoryHandoffRestartOwnerRetirer') -or
+            $Context.HistoryHandoffRestartOwnerRetirer -ne $true -or
+            -not $Context.ContainsKey('HistoryHandoffRestartRetirement') -or
+            -not $lock.ContainsKey('OwnerFile') -or $null -ne $lock.OwnerFile -or
+            -not $lock.ContainsKey('OwnerDescriptor') -or $null -eq $lock.OwnerDescriptor -or $children.Count) {
+            throw 'Restart lock owner retirement lacks retained independent native proof.'
+        }
+        Assert-AgentsChatRetirementDescriptor $lock.OwnerDescriptor 'lock\owner.json' 65536
+    } elseif ($lock.ContainsKey('OwnerFile') -or $lock.ContainsKey('OwnerDescriptor')) {
         if ((-not $observer -and (-not $Context.ContainsKey('HistoryHandoffRestartOwnerPublisher') -or
             $Context.HistoryHandoffRestartOwnerPublisher -ne $true)) -or
             -not $lock.ContainsKey('OwnerFile') -or -not $lock.ContainsKey('OwnerDescriptor') -or

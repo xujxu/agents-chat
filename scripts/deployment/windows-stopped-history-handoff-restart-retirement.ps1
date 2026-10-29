@@ -199,8 +199,9 @@ function Get-AgentsChatStoppedHistoryHandoffRestartRetirementObservation(
         $retained = $Context.HistoryHandoffRestartRetirement
         $record = Get-AgentsChatStoppedHistoryHandoffRestartRetirementRecord $Context $retained.Creator $retained.Time
         $lock = $Context.HistoryHandoffRestartLock
+        $status = if ($lock.ContainsKey('OwnerRetired')) { 'restart-lock-retirement-owner-retired' } else { 'restart-lock-retirement-observed' }
         return [ordered]@{
-            status='restart-lock-retirement-observed'; attemptId=$record.attemptId
+            status=$status; attemptId=$record.attemptId
             prepared=$record.prepared; committed=$record.committed; retirement=$retained.Descriptor
             lockIdentity=$lock.DirectoryIdentity; lock=$lock.OwnerDescriptor; state=$record.state
             owner=$record.owner; retirer=$record.creator
