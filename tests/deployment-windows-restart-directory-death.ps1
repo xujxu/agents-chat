@@ -1,7 +1,8 @@
 function Stop-AgentsChatRestartDirectoryPublisher(
     [string]$Node, [string]$Source, [string]$Control, [string]$Pwsh,
-    $Environment, [string]$HistoryActor, [string]$StateHash, [switch]$Owner
+    $Environment, [string]$HistoryActor, [string]$StateHash, [switch]$Owner, [switch]$Committed
 ) {
+    if ($Committed) { $Owner = $true }
     function Read-RestartDirectoryCheckpoint($Process, $Diagnostic, [string]$Prefix) {
         $clock = [Diagnostics.Stopwatch]::StartNew()
         while ($true) {
@@ -22,7 +23,7 @@ function Stop-AgentsChatRestartDirectoryPublisher(
     $publisher = [Deployment.WindowsControllerProcess]::Start($Node,
         @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
             $Source, $Control, $Pwsh,
-            $(if ($Owner) { 'crash-restart-owner-history' } else { 'crash-restart-directory-history' }),
+            $(if ($Committed) { 'crash-restart-committed-history' } elseif ($Owner) { 'crash-restart-owner-history' } else { 'crash-restart-directory-history' }),
             $HistoryActor), $Control, $Environment)
     try {
         $diagnostic = $publisher.StandardError.ReadToEndAsync()
@@ -41,7 +42,11 @@ function Stop-AgentsChatRestartDirectoryPublisher(
             . (Join-Path $PSScriptRoot 'deployment-windows-restart-owner-controller.ps1')
             Send-AgentsChatRestartOwnerCommand $publisher $diagnostic $live $Control
         }
-        $prefix = if ($Owner) { 'INACTIVE_HISTORY_RESTART_OWNER_HELD ' } else { 'INACTIVE_HISTORY_RESTART_DIRECTORY_HELD ' }
+        if ($Committed) {
+            . (Join-Path $PSScriptRoot 'deployment-windows-restart-commit-controller.ps1')
+            Send-AgentsChatRestartCommitCommand $publisher $diagnostic $live $Control
+        }
+        $prefix = if ($Committed) { 'INACTIVE_HISTORY_RESTART_COMMITTED_HELD ' } elseif ($Owner) { 'INACTIVE_HISTORY_RESTART_OWNER_HELD ' } else { 'INACTIVE_HISTORY_RESTART_DIRECTORY_HELD ' }
         $metadata = Read-RestartDirectoryCheckpoint $publisher $diagnostic $prefix
         $held = $metadata | ConvertFrom-Json
         Assert ($held.actorPid -eq $publisher.Id -and $held.actorIdentity -ceq $live.actorIdentity -and
@@ -58,7 +63,8 @@ function Stop-AgentsChatRestartDirectoryPublisher(
         $errors = $diagnostic.GetAwaiter().GetResult()
         if ($errors) { [Console]::Error.WriteLine($errors) }
         foreach ($descriptor in @($held.prepared, $held.committed, $held.retirement,
-            $held.terminal, $held.successor, $held.successorAbandoned, $held.restartPrepared)) {
+            $held.terminal, $held.successor, $held.successorAbandoned, $held.restartPrepared) +
+            @($(if ($Committed) { $held.restartCommitted }))) {
             Assert ((Get-FileHash -LiteralPath (Join-Path $Control $descriptor.path) -Algorithm SHA256).Hash.ToLowerInvariant() -ceq
                 $descriptor.sha256) 'Restart directory publisher death changed immutable evidence'
         }
@@ -71,6 +77,13 @@ function Stop-AgentsChatRestartDirectoryPublisher(
             Assert ($held.restartOwner.path -ceq 'lock\owner.json' -and
                 (Get-FileHash -LiteralPath (Join-Path $Control $held.restartOwner.path) -Algorithm SHA256).Hash.ToLowerInvariant() -ceq
                 $held.restartOwner.sha256) 'Restart owner publisher death changed owner bytes'
+            if ($Committed) {
+                Assert ($held.restartCommitted.path -ceq ($held.restartPrepared.path -creplace '-prepared\.json$', '-committed.json') -and
+                    $held.restartCommitted.path -cne $held.restartPrepared.path) 'Restart committed publisher death changed its record name'
+            } else {
+                $committedName = $held.restartPrepared.path -creplace '-prepared\.json$', '-committed.json'
+                Assert (-not (Test-Path -LiteralPath (Join-Path $Control $committedName))) 'Restart owner publisher death introduced commitment'
+            }
         } else {
             Assert ($children.Count -eq 0) 'Restart directory publisher death introduced an owner or foreign child'
         }

@@ -6,7 +6,7 @@ import { assertRestartPublicationProofs } from './deployment-windows-restart-pub
 
 export async function assertRestartCommitPublication({
   control, identity, ready, original, record, prepared, directory, owner, transport, controllerWire,
-  captureWorkerFields, enterPhase,
+  captureWorkerFields, enterPhase, holdCommitted = false, processIdentity,
 }) {
   enterPhase('host-commit-command');
   console.log(`INACTIVE_HISTORY_RESTART_OWNER_LIVE ${JSON.stringify({
@@ -21,7 +21,19 @@ export async function assertRestartCommitPublication({
   await assertRestartPublicationProofs({
     publication: 'committed', transport, ready, control, identity, captureWorkerFields, enterPhase,
   });
-  const result = captureWorkerFields(await transport.wire.receive({ timeoutMs: 45000 }),
+  let response = await transport.wire.receive({ timeoutMs: 45000 });
+  if (holdCommitted) {
+    const frame = captureWorkerFields(response,
+      ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'], 'held restart commitment');
+    assert.equal(frame.type, 'ready');
+    assert.equal(frame.pid, ready.pid);
+    assert.equal(frame.processIdentity, ready.processIdentity);
+    assert.equal(frame.processIdentity, await processIdentity(frame.pid));
+    assert.equal(frame.control, control);
+    assert.equal(frame.controllerIdentity, identity);
+    response = frame.value;
+  }
+  const result = captureWorkerFields(response,
     ['status', 'attemptId', 'prepared', 'committed', 'directory', 'owner', 'runtimeAuthority', 'lockAuthority'],
     'restart committed publication');
   const descriptor = captureWorkerFields(result.committed,
@@ -56,5 +68,5 @@ export async function assertRestartCommitPublication({
     },
     committedAt: committed.committedAt,
   });
-  return { file, bytes, identity: current };
+  return { file, bytes, identity: current, descriptor };
 }

@@ -32,6 +32,7 @@ param(
     [switch]$PublishRestartOwner,
     [switch]$HoldRestartOwner,
     [switch]$CommitRestart,
+    [switch]$HoldRestartCommitted,
     [string]$AbandonedDev,
     [string]$AbandonedIno,
     [int]$AbandonedBytes,
@@ -63,6 +64,7 @@ try {
         ($PublishRestartOwner -and (-not $CreateRestartDirectory -or $HoldRestartDirectory)) -or
         ($HoldRestartOwner -and -not $PublishRestartOwner) -or
         ($CommitRestart -and (-not $PublishRestartOwner -or $HoldRestartOwner)) -or
+        ($HoldRestartCommitted -and -not $CommitRestart) -or
         ($PhasedPublication -and -not $PublishSuccessor) -or
         ($SealSuccessor -and -not $ObserveSuccessor) -or
         ($PublishSuccessor -and -not $PrepareSuccessor) -or
@@ -348,7 +350,7 @@ try {
         . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart-commit.ps1')
         $observation = Test-AgentsChatStoppedHistoryHandoffRestartCommit $Source $scope $ControllerPid $ControllerIdentity
     }
-    if ($HoldRestartDirectory -or $HoldRestartOwner) {
+    if ($HoldRestartDirectory -or $HoldRestartOwner -or $HoldRestartCommitted) {
         [Console]::Out.WriteLine((@{
             type='ready'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
             control=$Control; controllerIdentity=$ControllerIdentity; value=$observation

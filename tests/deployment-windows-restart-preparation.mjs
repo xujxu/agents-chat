@@ -13,6 +13,7 @@ import { assertRestartCommitPublication } from './deployment-windows-restart-com
 export async function assertRestartPreparation({
   source, control, pwsh, admission, previous, state, completionBytes, publish = false, hold = false,
   createDirectory = false, holdDirectory = false, publishOwner = false, holdOwner = false, commitRestart = false,
+  holdCommitted = false,
 }) {
   assert.ok(!hold || publish);
   assert.ok(!createDirectory || (publish && !hold));
@@ -20,6 +21,8 @@ export async function assertRestartPreparation({
   assert.ok(!publishOwner || (createDirectory && !holdDirectory));
   assert.ok(!holdOwner || publishOwner);
   assert.ok(!commitRestart || (publishOwner && !holdOwner));
+  assert.ok(!holdCommitted || commitRestart);
+  const held = hold || holdDirectory || holdOwner || holdCommitted;
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
   const { windowsControllerTransport } = await load('windows-controller-transport.mjs');
@@ -70,7 +73,7 @@ export async function assertRestartPreparation({
     ...(publish ? ['-PublishRestart'] : []), ...(hold ? ['-Hold'] : []),
     ...(createDirectory ? ['-CreateRestartDirectory'] : []), ...(holdDirectory ? ['-HoldRestartDirectory'] : []),
     ...(publishOwner ? ['-PublishRestartOwner'] : []), ...(holdOwner ? ['-HoldRestartOwner'] : []),
-    ...(commitRestart ? ['-CommitRestart'] : [])];
+    ...(commitRestart ? ['-CommitRestart'] : []), ...(holdCommitted ? ['-HoldRestartCommitted'] : [])];
   let phase;
   const phases = [];
   const enterPhase = value => {
@@ -171,7 +174,7 @@ export async function assertRestartPreparation({
         newOwner: record.newOwner, predecessor: record.predecessor,
       });
       snapshots.push({ file, bytes, identity: current });
-      if (hold || holdDirectory || holdOwner) {
+      if (held) {
         heldPublication = {
           ...previous, abandonmentPublisherActor: {
             actorPid: previous.actorPid, actorIdentity: previous.actorIdentity,
@@ -229,15 +232,18 @@ export async function assertRestartPreparation({
         }
         if (commitRestart) {
           try {
-            snapshots.push(await assertRestartCommitPublication({
+            const committedSnapshot = await assertRestartCommitPublication({
               control, identity, ready, original, record, prepared: descriptor, directory: directoryIdentity,
               owner: ownerSnapshot.descriptor, transport, controllerWire, captureWorkerFields, enterPhase,
-            }));
+              holdCommitted, processIdentity,
+            });
+            snapshots.push(committedSnapshot);
+            if (holdCommitted) { heldPublication.restartCommitted = committedSnapshot.descriptor; }
           } finally { controllerWire.close(); }
         }
-        if (holdDirectory || holdOwner) {
+        if (holdDirectory || holdOwner || holdCommitted) {
           heldPublication.restartDirectory = directoryIdentity;
-          if (holdOwner) { heldPublication.restartOwner = ownerSnapshot.descriptor; }
+          if (holdOwner || holdCommitted) { heldPublication.restartOwner = ownerSnapshot.descriptor; }
         } else {
           enterPhase(commitRestart ? 'committed-exit' : 'directory-exit');
           assert.deepEqual(await transport.waitForExit(), { code: 0, signal: null });
@@ -253,13 +259,13 @@ export async function assertRestartPreparation({
     throw error;
   }
   const { acquireLock, releaseLock } = await load('state.mjs');
-  if (publish && !hold && !holdDirectory && !holdOwner) {
+  if (publish && !held) {
     await assert.rejects(promisify(execFile)(pwsh,
       nativeArgs.filter(arg => !['-PrepareRestart', '-PublishRestart', '-CreateRestartDirectory', '-PublishRestartOwner', '-CommitRestart'].includes(arg)),
       { timeout: 45000, maxBuffer: 131072, windowsHide: true }),
     error => error.message.includes('Successor abandoned observation failed; retain evidence.'));
   }
-  if (!hold && !holdDirectory && !holdOwner) {
+  if (!held) {
     await assert.rejects(acquireLock(control, { pwsh, admission, project: original.project, operationId: randomUUID() }));
     await assert.rejects(releaseLock(control, owner, { pwsh, admission }));
   }
@@ -286,11 +292,12 @@ export async function assertRestartPreparation({
     assert.equal(current.dev.toString(), directoryIdentity.dev);
     assert.equal(current.ino.toString(), directoryIdentity.ino);
     assert.deepEqual(await readdir(directory), publishOwner ? ['owner.json'] : []);
-    if (ownerSnapshot && !holdOwner) { await unlink(ownerSnapshot.file); }
-    if (!holdDirectory && !holdOwner) { await rmdir(directory); }
+    if (ownerSnapshot && !held) { await unlink(ownerSnapshot.file); }
+    if (!held) { await rmdir(directory); }
   } else { await assert.rejects(lstat(directory), { code: 'ENOENT' }); }
-  if (hold || holdDirectory || holdOwner) {
-    const marker = holdOwner ? 'INACTIVE_HISTORY_RESTART_OWNER_HELD'
+  if (held) {
+    const marker = holdCommitted ? 'INACTIVE_HISTORY_RESTART_COMMITTED_HELD'
+      : holdOwner ? 'INACTIVE_HISTORY_RESTART_OWNER_HELD'
       : holdDirectory ? 'INACTIVE_HISTORY_RESTART_DIRECTORY_HELD' : 'INACTIVE_HISTORY_RESTART_PREPARED_HELD';
     console.log(`${marker} ${JSON.stringify(heldPublication)}`);
     const timer = setInterval(() => {}, 1000);

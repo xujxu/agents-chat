@@ -53,10 +53,11 @@ export async function holdSuccessorAbandoned({ source, control, pwsh, previous }
 
 export async function assertSuccessorAbandonedAfterDeath({
   source, control, pwsh, admission, previous, state, completionBytes, restart = false, blockedDirectory = false,
-  blockedOwner = false,
+  blockedOwner = false, blockedCommitted = false,
 }) {
   assert.ok(!blockedDirectory || restart);
   assert.ok(!blockedOwner || blockedDirectory);
+  assert.ok(!blockedCommitted || blockedOwner);
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
   const identity = await processIdentity(process.pid);
@@ -76,7 +77,8 @@ export async function assertSuccessorAbandonedAfterDeath({
   }
   const snapshots = [];
   for (const descriptor of [previous.prepared, previous.committed, previous.retirement,
-    previous.terminal, previous.successor, previous.successorAbandoned, ...(restart ? [previous.restartPrepared] : [])]) {
+    previous.terminal, previous.successor, previous.successorAbandoned, ...(restart ? [previous.restartPrepared] : []),
+    ...(blockedCommitted ? [previous.restartCommitted] : [])]) {
     const file = path.join(control, descriptor.path);
     const bytes = await readFile(file);
     const current = await lstat(file, { bigint: true });
@@ -174,8 +176,29 @@ export async function assertSuccessorAbandonedAfterDeath({
       assert.equal(owner.processIdentity, previous.actorIdentity);
       ownerSnapshot = { file, bytes, identity: current };
     }
-    await assert.rejects(observe(args), error => refused(error) &&
-      error.message.includes('Committed lock directory identity differs.'));
+    if (blockedCommitted) {
+      const committed = snapshots[7];
+      assert.equal(previous.restartCommitted.path, `inactive-handoff-${previous.restartAttemptId}-committed.json`);
+      assert.ok(committed.bytes.length <= 65536);
+      assert.equal(committed.identity.nlink, 1n);
+      const record = JSON.parse(committed.bytes);
+      assert.equal(new Date(record.committedAt).toISOString(), record.committedAt);
+      assert.ok(record.committedAt >= JSON.parse(published.bytes).newOwner.createdAt);
+      assert.deepEqual(record, {
+        version: 1, phase: 'stopped-history-handoff-restart-committed', attemptId: previous.restartAttemptId,
+        control, project: original.project, controlIdentity: original.controlIdentity,
+        previousOperationId: original.previousOperationId, prepared: previous.restartPrepared,
+        newOwner: JSON.parse(published.bytes).newOwner, lockIdentity: previous.restartDirectory,
+        lock: previous.restartOwner,
+        creator: {
+          pid: previous.actorPid, processIdentity: previous.actorIdentity,
+          bridgePid: previous.pid, bridgeIdentity: previous.processIdentity,
+        },
+        committedAt: record.committedAt,
+      });
+    }
+    await assert.rejects(observe(args), error => refused(error) && error.message.includes(blockedCommitted
+      ? 'Retired prepared handoff namespace differs.' : 'Committed lock directory identity differs.'));
   } else {
     const first = await observe(args);
     assert.equal(first.stderr, '');
@@ -260,7 +283,9 @@ export async function assertSuccessorAbandonedAfterDeath({
   } else { await assert.rejects(lstat(directory), { code: 'ENOENT' }); }
   if (restart) {
     for (const snapshot of snapshots.reverse()) await unlink(snapshot.file);
-    console.log(blockedOwner
+    console.log(blockedCommitted
+      ? 'PASS: actual fresh restart committed publisher death preserves its exact eighth record owner directory and seven records without state authority'
+      : blockedOwner
       ? 'PASS: actual fresh restart owner publisher death preserves its exact owner directory and seven records without committed authority'
       : blockedDirectory
       ? 'PASS: actual fresh restart directory publisher death preserves the exact incomplete directory and seven records without continuation authority'
