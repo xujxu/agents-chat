@@ -31,7 +31,7 @@ export async function assertRestartPreparation({
   assert.ok(!holdState || writeState);
   assert.ok(!releaseRestart || (commitRestart && !holdCommitted && (!prepareState || (writeState && !holdState))));
   assert.ok(!holdReleased || releaseRestart);
-  assert.ok(!holdReleaseIntent || (releaseRestart && !prepareState && !holdReleased));
+  assert.ok(!holdReleaseIntent || (releaseRestart && !holdReleased));
   const held = hold || holdDirectory || holdOwner || holdCommitted || holdState || holdReleased || holdReleaseIntent;
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
@@ -283,10 +283,15 @@ export async function assertRestartPreparation({
                   const releaseSnapshots = await assertRestartReleasePublication({
                     control, identity, ready, original, record, prepared: descriptor, committed: committedSnapshot.descriptor,
                     directory: directoryIdentity, owner: ownerSnapshot.descriptor, transport, controllerWire,
-                    captureWorkerFields, enterPhase, holdReleased, processIdentity,
+                    captureWorkerFields, enterPhase, holdReleased, holdIntent: holdReleaseIntent, processIdentity,
                     stateIntent: intentSnapshot.descriptor, writtenState: writtenState.descriptor,
                   });
                   snapshots.push(...releaseSnapshots);
+                  if (holdReleaseIntent) {
+                    heldPublication.restartRelease = releaseSnapshots[0].descriptor;
+                    heldPublication.restartStateIntent = intentSnapshot.descriptor;
+                    heldPublication.restartState = writtenState.descriptor;
+                  }
                   if (holdReleased) {
                     [heldPublication.restartRelease, heldPublication.restartReleased] =
                       releaseSnapshots.map(snapshot => snapshot.descriptor);

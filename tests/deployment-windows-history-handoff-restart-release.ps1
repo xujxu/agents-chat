@@ -2,7 +2,7 @@ function Test-AgentsChatStoppedHistoryHandoffRestartRelease(
     [string]$Source, [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity, [switch]$Continue,
     [switch]$StateWritten, [switch]$IntentOnly
 ) {
-    if ($IntentOnly -and ($StateWritten -or -not $Continue)) { throw 'Held restart release intent requires a pre-write hold.' }
+    if ($IntentOnly -and -not $Continue) { throw 'Held restart release intent requires a hold.' }
     . (Join-Path $Source 'windows-stopped-history-handoff-restart-release.ps1')
     $ownerPath = Join-Path $Context.Control 'lock\owner.json'
     $lock = $Context.HistoryHandoffRestartLock
@@ -44,13 +44,19 @@ function Test-AgentsChatStoppedHistoryHandoffRestartRelease(
         $result = Invoke-AgentsChatRestartPublicationProofFrames $Context $ControllerPid $ControllerIdentity release-intent
         if ($result.status -cne 'restart-release-prepared' -or $result.attemptId -cne $attempt -or
             $result.retirement.path -cne "inactive-handoff-$attempt-lock-retirement.json" -or
-            $result.Contains('released') -or $result.Contains('stateIntent') -or $result.Contains('writtenState') -or
+            $result.Contains('released') -or $result.Contains('stateIntent') -ne [bool]$StateWritten -or
+            $result.Contains('writtenState') -ne [bool]$StateWritten -or
             $result.runtimeAuthority -ne $false -or $result.lockAuthority -ne $false -or $result.taskAuthority -ne $false) {
             throw 'Restart release intent result differs.'
         }
         foreach ($field in @('path', 'dev', 'ino', 'bytes', 'sha256')) {
             if ($result.committed[$field] -cne $committed.Descriptor[$field] -or
                 $result.lock[$field] -cne $owner[$field]) { throw 'Restart release intent binding differs.' }
+            if ($StateWritten -and ($result.stateIntent[$field] -cne $stateIntent.Descriptor[$field] -or
+                $result.writtenState[$field] -cne $writtenState.Descriptor[$field] -or
+                $stateIntent.File.ReadText() -cne $intentText -or $writtenState.File.ReadText() -cne $writtenText)) {
+                throw 'Post-write restart release intent state binding differs.'
+            }
         }
         # The live releaser holds its exact tenth record before deleting any part of the committed lock.
         if (-not (Test-Path -LiteralPath $ownerPath -PathType Leaf) -or $lock.OwnerFile.ReadText() -cne $ownerText -or

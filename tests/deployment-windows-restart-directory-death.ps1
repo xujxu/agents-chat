@@ -3,7 +3,7 @@ function Stop-AgentsChatRestartDirectoryPublisher(
     $Environment, [string]$HistoryActor, [string]$StateHash, [switch]$Owner, [switch]$Committed, [switch]$State,
     [switch]$Released, [switch]$ReleaseIntent
 ) {
-    if ($ReleaseIntent -and ($State -or $Released)) { throw 'Restart release intent death requires pre-write commitment.' }
+    if ($ReleaseIntent -and $Released) { throw 'Restart release intent death precedes its released lock.' }
     if ($State -or $Released -or $ReleaseIntent) { $Committed = $true }
     if ($Committed) { $Owner = $true }
     function Read-RestartDirectoryCheckpoint($Process, $Diagnostic, [string]$Prefix) {
@@ -26,7 +26,7 @@ function Stop-AgentsChatRestartDirectoryPublisher(
     $publisher = [Deployment.WindowsControllerProcess]::Start($Node,
         @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
             $Source, $Control, $Pwsh,
-            $(if ($ReleaseIntent) { 'crash-restart-release-intent-history' } elseif ($Released -and $State) { 'crash-restart-state-released-history' } elseif ($Released) { 'crash-restart-released-history' } elseif ($State) { 'crash-restart-state-history' } elseif ($Committed) { 'crash-restart-committed-history' } elseif ($Owner) { 'crash-restart-owner-history' } else { 'crash-restart-directory-history' }),
+            $(if ($ReleaseIntent -and $State) { 'crash-restart-state-release-intent-history' } elseif ($ReleaseIntent) { 'crash-restart-release-intent-history' } elseif ($Released -and $State) { 'crash-restart-state-released-history' } elseif ($Released) { 'crash-restart-released-history' } elseif ($State) { 'crash-restart-state-history' } elseif ($Committed) { 'crash-restart-committed-history' } elseif ($Owner) { 'crash-restart-owner-history' } else { 'crash-restart-directory-history' }),
             $HistoryActor), $Control, $Environment)
     try {
         $diagnostic = $publisher.StandardError.ReadToEndAsync()

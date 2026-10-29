@@ -63,7 +63,7 @@ export async function assertSuccessorAbandonedAfterDeath({
   assert.ok(!blockedState || blockedCommitted);
   assert.ok(!blockedReleased || blockedCommitted);
   assert.ok(!blockedRetirement || (blockedCommitted && !blockedState && !blockedReleased));
-  assert.ok(!blockedReleaseIntent || (blockedCommitted && !blockedState && !blockedReleased && !blockedRetirement));
+  assert.ok(!blockedReleaseIntent || (blockedCommitted && !blockedReleased && !blockedRetirement));
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
   const identity = await processIdentity(process.pid);
@@ -189,6 +189,7 @@ export async function assertSuccessorAbandonedAfterDeath({
   let releasedObserved = false;
   let retirementPublished = false;
   let retirementObserved = false;
+  let releaseIntentRefused = false;
   if (blockedDirectory) {
     if (blockedReleased) {
       await assert.rejects(lstat(directory), { code: 'ENOENT' });
@@ -244,6 +245,24 @@ export async function assertSuccessorAbandonedAfterDeath({
         },
         committedAt: record.committedAt,
       });
+      if (blockedReleaseIntent && blockedState) {
+        // The dead post-write releaser's exact tenth record binds its acknowledged written state and itself.
+        const intent = JSON.parse(snapshots[9].bytes);
+        assert.equal(previous.restartRelease.path, `inactive-handoff-${previous.restartAttemptId}-lock-retirement.json`);
+        assert.equal(snapshots[9].identity.nlink, 1n);
+        assert.equal(new Date(intent.createdAt).toISOString(), intent.createdAt);
+        assert.ok(intent.createdAt >= record.committedAt);
+        assert.ok(intent.createdAt >= JSON.parse(snapshots[8].bytes).createdAt);
+        assert.deepEqual(intent, {
+          version: 1, phase: 'stopped-history-handoff-restart-release-prepared', attemptId: previous.restartAttemptId,
+          control, project: original.project, controlIdentity: original.controlIdentity,
+          previousOperationId: original.previousOperationId, prepared: previous.restartPrepared,
+          committed: previous.restartCommitted, newOwner: JSON.parse(published.bytes).newOwner,
+          lockIdentity: previous.restartDirectory, lock: previous.restartOwner, state: original.state,
+          stateIntent: previous.restartStateIntent, writtenState: previous.restartState,
+          creator: record.creator, createdAt: intent.createdAt,
+        });
+      }
       if (blockedReleased) {
         const releaseIndex = blockedState ? 9 : 8;
         const [retirement, released] = [snapshots[releaseIndex], snapshots[releaseIndex + 1]];
@@ -290,7 +309,7 @@ export async function assertSuccessorAbandonedAfterDeath({
       await assert.rejects(observe(restartArgs(committedRequest)),
         error => error.message.includes('Restart committed observation failed; retain evidence.'));
       releasedObserved = true;
-    } else if (blockedRetirement || blockedReleaseIntent) {
+    } else if (blockedRetirement || (blockedReleaseIntent && !blockedState)) {
       // A dead releaser's exact release intent is the same dead-owner retirement authority as a distinct retirer's.
       const { captureWorkerFields } = await load('worker-identity.mjs');
       snapshots.push(await assertDeadRestartRetirement({
@@ -394,8 +413,8 @@ export async function assertSuccessorAbandonedAfterDeath({
       };
       const stateRefused = error => error.message.includes('Restart state observation failed; retain evidence.');
       for (let pass = 0; pass < 2; pass++) {
-        if (blockedReleased) {
-          // After the dead owner's post-write release, its lock and two release records are outside every observer.
+        if (blockedReleased || blockedReleaseIntent) {
+          // After the dead owner's post-write release records, its lock and release records are outside every observer.
           await assert.rejects(observe(restartArgs(stateRequest)), stateRefused);
           continue;
         }
@@ -413,7 +432,14 @@ export async function assertSuccessorAbandonedAfterDeath({
       ]) {
         await assert.rejects(observe(restartArgs({ ...stateRequest, ...wrong })), stateRefused);
       }
-      if (blockedReleased) { releasedObserved = true; } else { stateObserved = true; }
+      if (blockedReleaseIntent) {
+        // Archive-only dead-owner retirement is never valid after the acknowledged write, at any entrance.
+        await assert.rejects(observe(restartArgs({ ...committedRequest, restartRetirement: previous.restartRelease })),
+          error => error.message.includes('Restart lock retirement observation failed; retain evidence.'));
+        await assert.rejects(observe(restartArgs({ ...stateRequest, restartRetirement: previous.restartRelease })));
+        await assert.rejects(observe(restartArgs({ ...committedRequest, retireRestart: true })));
+        releaseIntentRefused = true;
+      } else if (blockedReleased) { releasedObserved = true; } else { stateObserved = true; }
     }
   } else {
     const first = await observe(args);
@@ -476,7 +502,8 @@ export async function assertSuccessorAbandonedAfterDeath({
   if (blockedState) {
     const report = await reconcileInterruptedOperation(control);
     const restartRecords = blockedReleased
-      ? ['prepared', 'committed', 'lock-retirement', 'lock-retired', 'state-intent'] : ['prepared', 'committed', 'state-intent'];
+      ? ['prepared', 'committed', 'lock-retirement', 'lock-retired', 'state-intent']
+      : blockedReleaseIntent ? ['prepared', 'committed', 'lock-retirement', 'state-intent'] : ['prepared', 'committed', 'state-intent'];
     assert.deepEqual(report, {
       status: 'blocked', operationId: JSON.parse(writtenState).operationId, phase: 'preflight',
       message: 'Service, task or worker retirement evidence exists. Retain it; inspect before restart or recovery.',
@@ -491,8 +518,8 @@ export async function assertSuccessorAbandonedAfterDeath({
         unrecognized: [],
       },
     });
-    assert.equal(snapshots.length, blockedReleased ? 11 : 9);
-    if (!blockedReleased) { reconciled = true; }
+    assert.equal(snapshots.length, blockedReleased ? 11 : blockedReleaseIntent ? 10 : 9);
+    if (!blockedReleased && !blockedReleaseIntent) { reconciled = true; }
   }
   if (retirementPublished || retirementObserved) {
     const report = await reconcileInterruptedOperation(control);
@@ -546,7 +573,7 @@ export async function assertSuccessorAbandonedAfterDeath({
     assert.equal(current.dev, originalIdentity.dev);
     assert.equal(current.ino, originalIdentity.ino);
   }
-  if (blockedDirectory && !blockedReleased && !blockedRetirement && !blockedReleaseIntent) {
+  if (blockedDirectory && !blockedReleased && !blockedRetirement && !(blockedReleaseIntent && !blockedState)) {
     const current = await lstat(directory, { bigint: true });
     assert.equal(current.dev.toString(), previous.restartDirectory.dev);
     assert.equal(current.ino.toString(), previous.restartDirectory.ino);
@@ -583,7 +610,12 @@ export async function assertSuccessorAbandonedAfterDeath({
         ? 'PASS: ordinary reconciliation reports the post-write released restart attempt as a state transition while staying blocked without authority'
         : 'PASS: ordinary reconciliation reports the released restart attempt as lock-settled while staying blocked without authority');
     }
-    console.log(blockedReleaseIntent
+    if (releaseIntentRefused) {
+      console.log('PASS: ordinary reconciliation reports the dead post-write release intent as a state transition while staying blocked without authority');
+    }
+    console.log(blockedReleaseIntent && blockedState
+      ? 'PASS: actual post-write restart releaser death after its exact release intent preserves ten records written state owner and directory and refuses archive-only lock retirement without authority'
+      : blockedReleaseIntent
       ? 'PASS: actual restart releaser death after its exact release intent lets distinct fresh actors retire and settle only the dead owner lock without authority'
       : blockedRetirement
       ? 'PASS: actual restart lock retirer death preserves its exact intent dead owner and directory for a distinct observer without deletion authority'

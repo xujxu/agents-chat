@@ -77,7 +77,7 @@ try {
         ($ReleaseRestart -and (-not $CommitRestart -or $HoldRestartCommitted -or
             ($PrepareRestartState -and (-not $WriteRestartState -or $HoldRestartState)))) -or
         ($HoldRestartReleased -and -not $ReleaseRestart) -or
-        ($HoldRestartReleaseIntent -and (-not $ReleaseRestart -or $PrepareRestartState -or $HoldRestartReleased)) -or
+        ($HoldRestartReleaseIntent -and (-not $ReleaseRestart -or $HoldRestartReleased)) -or
         ($PhasedPublication -and -not $PublishSuccessor) -or
         ($SealSuccessor -and -not $ObserveSuccessor) -or
         ($PublishSuccessor -and -not $PrepareSuccessor) -or
@@ -414,7 +414,7 @@ try {
         }
         . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart-release.ps1')
         $observation = Test-AgentsChatStoppedHistoryHandoffRestartRelease $Source $scope $ControllerPid $ControllerIdentity `
-            -Continue:$HoldRestartReleased -StateWritten
+            -Continue:($HoldRestartReleased -or $HoldRestartReleaseIntent) -IntentOnly:$HoldRestartReleaseIntent -StateWritten
     }
     if ($HoldRestartDirectory -or $HoldRestartOwner -or $HoldRestartCommitted -or $HoldRestartState -or $HoldRestartReleased -or
         $HoldRestartReleaseIntent) {
