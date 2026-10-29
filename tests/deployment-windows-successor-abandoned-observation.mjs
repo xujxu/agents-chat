@@ -344,9 +344,30 @@ export async function assertSuccessorAbandonedAfterDeath({
     await assert.rejects(observe(sixArgs),
       error => error.message.includes('Successor abandoned observation failed; retain evidence.'));
   }
-  const { acquireLock, releaseLock } = await load('state.mjs');
+  const { acquireLock, releaseLock, reconcileInterruptedOperation } = await load('state.mjs');
   await assert.rejects(acquireLock(control, { pwsh, admission, project: original.project, operationId: randomUUID() }));
   await assert.rejects(releaseLock(control, restart ? JSON.parse(published.bytes).newOwner : successor.newOwner, { pwsh, admission }));
+  let reconciled = false;
+  if (blockedState) {
+    const report = await reconcileInterruptedOperation(control);
+    assert.deepEqual(report, {
+      status: 'blocked', operationId: JSON.parse(writtenState).operationId, phase: 'preflight',
+      message: 'Service, task or worker retirement evidence exists. Retain it; inspect before restart or recovery.',
+      handoff: {
+        authority: false,
+        attempts: [
+          { attemptId: previous.attemptId, records: ['prepared', 'committed', 'lock-retirement', 'lock-retired'],
+            status: 'lock-settled' },
+          { attemptId: previous.successorAttemptId, records: ['prepared', 'abandoned'], status: 'abandoned' },
+          { attemptId: previous.restartAttemptId, records: ['prepared', 'committed', 'state-intent'],
+            status: 'state-transition' },
+        ].sort((left, right) => left.attemptId < right.attemptId ? -1 : 1),
+        unrecognized: [],
+      },
+    });
+    assert.equal(snapshots.length, 9);
+    reconciled = true;
+  }
   for (const snapshot of [...snapshots, ...(ownerSnapshot ? [ownerSnapshot] : [])]) {
     assert.deepEqual(await readFile(snapshot.file), snapshot.bytes);
     const current = await lstat(snapshot.file, { bigint: true });
@@ -377,6 +398,9 @@ export async function assertSuccessorAbandonedAfterDeath({
     if (writtenState) { await writeFile(stateFile, state); }
     if (committedObserved) {
       console.log('PASS: distinct restart committed observer proves eight records dead owner and directory without state lock or task authority');
+    }
+    if (reconciled) {
+      console.log('PASS: ordinary reconciliation reports nine exact handoff records as three attempts while staying blocked without authority');
     }
     if (stateObserved) {
       console.log('PASS: distinct restart state observer resolves original state only through its ninth record and proves the exact written state without lock or task authority');

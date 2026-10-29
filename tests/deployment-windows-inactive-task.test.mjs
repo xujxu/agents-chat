@@ -27,6 +27,50 @@ test('prepared handoff bridge descriptor is exact, bounded and detached', async 
   ]) assert.throws(() => read({ ...input, ...patch }, attemptId));
   assert.throws(() => read(input, '00000000-0000-0000-0000-000000000000'));
 });
+test('handoff reconciliation report groups exact record names by attempt without authority', async () => {
+  const { describeWindowsStoppedHistoryHandoffEntries: describe } =
+    await import('../scripts/deployment/windows-stopped-history-handoff-report.mjs');
+  const first = '11111111-1111-4111-8111-111111111111';
+  const successor = '22222222-2222-4222-8222-222222222222';
+  const restart = '33333333-3333-4333-8333-333333333333';
+  const lone = '44444444-4444-4444-8444-444444444444';
+  const names = [
+    'state.json', 'lock', `retired-${first}-inactive-rollback-history-intent.json`,
+    `inactive-handoff-${first}-lock-retired.json`, `inactive-handoff-${first}-prepared.json`,
+    `INACTIVE-HANDOFF-${first.toUpperCase()}-COMMITTED.JSON`, `inactive-handoff-${first}-lock-retirement.json`,
+    `inactive-handoff-${successor}-abandoned.json`, `inactive-handoff-${successor}-prepared.json`,
+    `inactive-handoff-${restart}-state-intent.json`, `inactive-handoff-${restart}-committed.json`,
+    `inactive-handoff-${restart}-prepared.json`, `inactive-handoff-${lone}-committed.json`,
+    `inactive-handoff-${restart}-snapshot.json`, 'inactive-handoff-malformed.json',
+    'inactive-handoff-00000000-0000-0000-0000-000000000000-prepared.json',
+  ];
+  const report = describe(names);
+  assert.deepEqual(report, {
+    authority: false,
+    attempts: [
+      { attemptId: first, records: ['prepared', 'committed', 'lock-retirement', 'lock-retired'], status: 'lock-settled' },
+      { attemptId: successor, records: ['prepared', 'abandoned'], status: 'abandoned' },
+      { attemptId: restart, records: ['prepared', 'committed', 'state-intent'], status: 'state-transition' },
+      { attemptId: lone, records: ['committed'], status: 'incomplete' },
+    ],
+    unrecognized: [
+      'inactive-handoff-00000000-0000-0000-0000-000000000000-prepared.json',
+      `inactive-handoff-${restart}-snapshot.json`, 'inactive-handoff-malformed.json',
+    ],
+  });
+  assert.ok(Object.isFrozen(report) && Object.isFrozen(report.attempts) && Object.isFrozen(report.unrecognized));
+  assert.ok(report.attempts.every(attempt => Object.isFrozen(attempt) && Object.isFrozen(attempt.records)));
+  names.length = 0;
+  assert.equal(report.attempts.length, 4);
+  assert.deepEqual(describe([`inactive-handoff-${first}-prepared.json`]).attempts,
+    [{ attemptId: first, records: ['prepared'], status: 'prepared' }]);
+  assert.deepEqual(describe([`inactive-handoff-${first}-prepared.json`, `inactive-handoff-${first}-committed.json`]).attempts,
+    [{ attemptId: first, records: ['prepared', 'committed'], status: 'committed' }]);
+  assert.deepEqual(describe([`inactive-handoff-${first}-prepared.json`, `inactive-handoff-${first}-committed.json`,
+    `inactive-handoff-${first}-lock-retirement.json`]).attempts,
+  [{ attemptId: first, records: ['prepared', 'committed', 'lock-retirement'], status: 'lock-retiring' }]);
+  assert.equal(describe(['state.json', 'retired-x.json']), null);
+});
 const retiredRuntime = {
   pid: 1234, identity: '1234:638900000000000000',
   generation: '11111111-1111-4111-8111-111111111111',

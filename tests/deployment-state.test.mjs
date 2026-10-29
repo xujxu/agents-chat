@@ -62,6 +62,36 @@ for (const marker of ['task-retirement.json', 'task-retirement-checkpoint.json',
   });
 }
 
+test('Windows reconciliation reports handoff attempts while staying blocked without authority', {
+  skip: process.platform !== 'win32',
+}, async t => {
+  const root = await temporaryDeployment(t);
+  const lock = await acquireLock(root, { project: root, operationId: 'handoff-report' });
+  const ownerPath = path.join(root, 'lock', 'owner.json');
+  const owner = await readFile(ownerPath);
+  const attemptId = '12345678-1234-4234-8234-123456789abc';
+  await writeFile(path.join(root, 'not-handoff.json'), '');
+  const baseline = await reconcileInterruptedOperation(root);
+  assert.equal(baseline.handoff, undefined);
+  for (const kind of ['prepared', 'committed', 'state-intent']) {
+    await writeFile(path.join(root, `inactive-handoff-${attemptId}-${kind}.json`), '{"version":1,');
+  }
+  await writeFile(path.join(root, 'inactive-handoff-malformed.json'), '');
+  const report = await reconcileInterruptedOperation(root);
+  assert.deepEqual(report, {
+    status: 'blocked', operationId: null, phase: null,
+    message: 'Service, task or worker retirement evidence exists. Retain it; inspect before restart or recovery.',
+    handoff: {
+      authority: false,
+      attempts: [{ attemptId, records: ['prepared', 'committed', 'state-intent'], status: 'state-transition' }],
+      unrecognized: ['inactive-handoff-malformed.json'],
+    },
+  });
+  assert.deepEqual(await readFile(ownerPath), owner);
+  await assert.rejects(releaseLock(root, lock), /maintenance/i);
+  await assert.rejects(requireNoServiceMaintenance(root), /maintenance/i);
+});
+
 test('prior-runtime-restored is a failed pre-source outcome, never a new deployment acceptance', async t => {
   for (const phase of ['stopped', 'copying', 'rotating', 'backup-ready']) {
     assert.equal(nextPhase(phase, 'prior-runtime-restored'), 'prior-runtime-restored');
