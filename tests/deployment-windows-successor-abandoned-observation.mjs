@@ -107,6 +107,7 @@ export async function assertSuccessorAbandonedAfterDeath({
   const stateIdentity = await lstat(stateFile, { bigint: true });
   let writtenState;
   let committedObserved = false;
+  let stateObserved = false;
   if (blockedState) {
     const intent = JSON.parse(snapshots[8].bytes);
     assert.equal(previous.restartStateIntent.path, `inactive-handoff-${previous.restartAttemptId}-state-intent.json`);
@@ -256,6 +257,39 @@ export async function assertSuccessorAbandonedAfterDeath({
       })), committedRefused);
       committedObserved = true;
     }
+    if (blockedState) {
+      const committedRequest = { ...request, restartCommitted: previous.restartCommitted };
+      const fixtureRefused = error => error.message.includes('Native restart observation fixture failed');
+      await assert.rejects(observe(restartArgs(committedRequest)), fixtureRefused);
+      const stateRequest = {
+        ...committedRequest, restartStateIntent: previous.restartStateIntent, restartState: previous.restartState,
+      };
+      const stateExpected = {
+        status: 'restart-state-observed', attemptId: previous.restartAttemptId,
+        previousAttemptId: previous.successorAttemptId, previousOperationId: original.previousOperationId,
+        project: original.project, prepared: previous.restartPrepared, committed: previous.restartCommitted,
+        stateIntent: previous.restartStateIntent, state: previous.restartState,
+        lockIdentity: previous.restartDirectory, lock: previous.restartOwner,
+        runtimeAuthority: false, lockAuthority: false, taskAuthority: false,
+      };
+      const stateRefused = error => error.message.includes('Restart state observation failed; retain evidence.');
+      for (let pass = 0; pass < 2; pass++) {
+        const result = await observe(restartArgs(stateRequest));
+        assert.equal(result.stderr, '');
+        assert.deepEqual(JSON.parse(result.stdout), stateExpected);
+      }
+      const { restartState: _omitted, ...intentOnly } = stateRequest;
+      await assert.rejects(observe(restartArgs(intentOnly)), fixtureRefused);
+      for (const wrong of [
+        { restartState: { ...stateRequest.restartState, ino: stateRequest.restartState.ino === '1' ? '2' : '1' } },
+        { restartState: { ...original.state } },
+        { restartStateIntent: { ...stateRequest.restartStateIntent, path: previous.restartCommitted.path } },
+        { restartStateIntent: { ...stateRequest.restartStateIntent, ino: stateRequest.restartStateIntent.ino === '1' ? '2' : '1' } },
+      ]) {
+        await assert.rejects(observe(restartArgs({ ...stateRequest, ...wrong })), stateRefused);
+      }
+      stateObserved = true;
+    }
   } else {
     const first = await observe(args);
     assert.equal(first.stderr, '');
@@ -343,6 +377,9 @@ export async function assertSuccessorAbandonedAfterDeath({
     if (writtenState) { await writeFile(stateFile, state); }
     if (committedObserved) {
       console.log('PASS: distinct restart committed observer proves eight records dead owner and directory without state lock or task authority');
+    }
+    if (stateObserved) {
+      console.log('PASS: distinct restart state observer resolves original state only through its ninth record and proves the exact written state without lock or task authority');
     }
     console.log(blockedState
       ? 'PASS: actual restart state writer death preserves its written state nine records owner and directory for a distinct observer without authority'

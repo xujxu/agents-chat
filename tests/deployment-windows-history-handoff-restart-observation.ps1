@@ -23,8 +23,42 @@ try {
     )
     $observeCommitted = $inputRecord -is [Collections.IDictionary] -and $inputRecord.Contains('restartCommitted')
     if ($observeCommitted) { $fields += 'restartCommitted' }
+    $observeState = $observeCommitted -and ($inputRecord.Contains('restartStateIntent') -or $inputRecord.Contains('restartState'))
+    if ($observeState) { $fields += @('restartStateIntent', 'restartState') }
     Assert-AgentsChatRetirementFields $inputRecord $fields
     . (Join-Path $Source 'windows-stopped-history-handoff-restart-observation.ps1')
+    if ($observeState) {
+        . (Join-Path $Source 'windows-stopped-history-handoff-restart-state-observation.ps1')
+        $scope = Open-AgentsChatStoppedHistoryHandoffRestartStateObservation $Control $ControllerPid $ControllerIdentity `
+            $inputRecord.attemptId $inputRecord.prepared $inputRecord.committed $inputRecord.retirement `
+            $inputRecord.terminal $inputRecord.successor $inputRecord.successorAbandoned $inputRecord.restart `
+            $inputRecord.restartCommitted $inputRecord.restartStateIntent $inputRecord.restartState
+        $observation = Get-AgentsChatStoppedHistoryHandoffRestartStateObservation $scope $ControllerPid $ControllerIdentity
+        if ($scope.HistoryHandoffRestartStateObserver -ne $true -or
+            $scope.HistoryHandoffRestartCommittedObserver -ne $true -or
+            $scope.HistoryHandoffRestartLockObserver -ne $true -or
+            $scope.ContainsKey('HistoryHandoffRestartCommitter') -or
+            $scope.ContainsKey('HistoryHandoffRestartLockPublisher') -or
+            $scope.ContainsKey('HistoryHandoffRestartOwnerPublisher') -or
+            $scope.ContainsKey('HistoryHandoffRestartStateIntender') -or
+            $scope.ContainsKey('HistoryHandoffRestartStateWriter')) {
+            throw 'Restart state observer gained a mutation role.'
+        }
+        foreach ($case in @(
+            @{ name='Publish-AgentsChatStoppedHistoryHandoffRestartStateIntent'; message='Restart state intent requires its independent native role.' },
+            @{ name='Write-AgentsChatStoppedHistoryHandoffRestartState'; message='Restart state write requires its independent native role.' }
+        )) {
+            $refused = $false
+            try { $null = & $case.name $scope $ControllerPid $ControllerIdentity }
+            catch {
+                if ($_.Exception.Message -cne $case.message) { throw }
+                $refused = $true
+            }
+            if (-not $refused) { throw 'Read-only restart state observer accepted mutation.' }
+        }
+        [Console]::Out.WriteLine(($observation | ConvertTo-Json -Depth 12 -Compress))
+        return
+    }
     if ($observeCommitted) {
         . (Join-Path $Source 'windows-stopped-history-handoff-restart-committed-observation.ps1')
         . (Join-Path $Source 'windows-stopped-history-handoff-restart-state-intent.ps1')

@@ -1,13 +1,21 @@
 . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-restart-publication.ps1')
 
 function Assert-AgentsChatStoppedHistoryHandoffRestartLock([hashtable]$Context) {
-    if (-not $Context.ContainsKey('HistoryHandoffRestartLockPublisher') -or
-        $Context.HistoryHandoffRestartLockPublisher -ne $true -or
-        $Context.ContainsKey('HistoryHandoffRestartObserver') -or
-        -not $Context.ContainsKey('HistoryHandoffRestartLock')) {
+    $publisher = $Context.ContainsKey('HistoryHandoffRestartLockPublisher') -and
+        $Context.HistoryHandoffRestartLockPublisher -eq $true -and
+        -not $Context.ContainsKey('HistoryHandoffRestartObserver') -and
+        -not $Context.ContainsKey('HistoryHandoffRestartLockObserver')
+    $observer = $Context.ContainsKey('HistoryHandoffRestartLockObserver') -and
+        $Context.HistoryHandoffRestartLockObserver -eq $true -and
+        -not $Context.ContainsKey('HistoryHandoffRestartLockPublisher') -and
+        -not $Context.ContainsKey('HistoryHandoffRestartOwnerPublisher')
+    if ($publisher -eq $observer -or -not $Context.ContainsKey('HistoryHandoffRestartLock')) {
         throw 'Restart lock lacks retained independent native publication proof.'
     }
-    Assert-AgentsChatStoppedHistoryHandoffRestartPrepared $Context
+    # An observer binds its lock before the restart prepared record is initialized; the owner
+    # binding below is enforced on every later assertion once that record is retained.
+    $bound = $publisher -or $Context.ContainsKey('HistoryHandoffRestartPrepared')
+    if ($bound) { Assert-AgentsChatStoppedHistoryHandoffRestartPrepared $Context }
     $lock = $Context.HistoryHandoffRestartLock
     $lock.Directory.Check()
     $identity = $lock.Directory.CaptureIdentity()
@@ -22,18 +30,20 @@ function Assert-AgentsChatStoppedHistoryHandoffRestartLock([hashtable]$Context) 
     }
     $children = @(Get-ChildItem -LiteralPath (Join-Path $Context.Control 'lock') -Force)
     if ($lock.ContainsKey('OwnerFile') -or $lock.ContainsKey('OwnerDescriptor')) {
-        if (-not $Context.ContainsKey('HistoryHandoffRestartOwnerPublisher') -or
-            $Context.HistoryHandoffRestartOwnerPublisher -ne $true -or
+        if ((-not $observer -and (-not $Context.ContainsKey('HistoryHandoffRestartOwnerPublisher') -or
+            $Context.HistoryHandoffRestartOwnerPublisher -ne $true)) -or
             -not $lock.ContainsKey('OwnerFile') -or -not $lock.ContainsKey('OwnerDescriptor') -or
             $null -eq $lock.OwnerFile -or $null -eq $lock.OwnerDescriptor -or
             $children.Count -ne 1 -or $children[0].PSIsContainer -or $children[0].Name -cne 'owner.json') {
             throw 'Restart lock owner lacks retained independent native publication proof.'
         }
-        $request = $Context.HistoryHandoffRestartPrepared.Request
-        $record = Get-AgentsChatStoppedHistoryHandoffRestartBinding -Context $Context @request
         $lock.OwnerFile.Check()
-        if ($lock.OwnerFile.ReadText() -cne ($record.newOwner | ConvertTo-Json -Compress)) {
-            throw 'Restart lock owner bytes differ.'
+        if ($bound) {
+            $request = $Context.HistoryHandoffRestartPrepared.Request
+            $record = Get-AgentsChatStoppedHistoryHandoffRestartBinding -Context $Context @request
+            if ($lock.OwnerFile.ReadText() -cne ($record.newOwner | ConvertTo-Json -Compress)) {
+                throw 'Restart lock owner bytes differ.'
+            }
         }
         Assert-AgentsChatRetirementDescriptor $lock.OwnerDescriptor 'lock\owner.json' 65536
         $descriptor = Get-AgentsChatStoppedHandoffDescriptor $lock.OwnerFile 'lock\owner.json'
@@ -43,7 +53,7 @@ function Assert-AgentsChatStoppedHistoryHandoffRestartLock([hashtable]$Context) 
             }
         }
         $lock.OwnerFile.Check()
-    } elseif ($children.Count) {
+    } elseif ($observer -or $children.Count) {
         throw 'Restart lock directory inventory differs.'
     }
     $lock.Directory.Check()

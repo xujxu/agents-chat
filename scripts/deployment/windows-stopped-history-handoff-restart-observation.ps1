@@ -1,6 +1,6 @@
 . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-restart-publication.ps1')
 
-function Initialize-AgentsChatStoppedHistoryHandoffRestartObservation([hashtable]$Context, $Descriptor) {
+function Initialize-AgentsChatStoppedHistoryHandoffRestartObservation([hashtable]$Context, $Descriptor, $Committed) {
     if (-not $Context.ContainsKey('HistoryHandoffSuccessorAbandonedObserver') -or
         $Context.HistoryHandoffSuccessorAbandonedObserver -ne $true -or
         $Context.ContainsKey('HistoryHandoffRestartPreparer') -or
@@ -37,6 +37,9 @@ function Initialize-AgentsChatStoppedHistoryHandoffRestartObservation([hashtable
         }
     }
     $Context.HistoryHandoffRestartObserver = $true
+    if ($null -ne $Committed) {
+        Initialize-AgentsChatStoppedHistoryHandoffRestartCommittedObservation $Context $Committed
+    }
     Assert-AgentsChatStoppedHistoryHandoffRestartPrepared $Context
 }
 
@@ -70,13 +73,14 @@ function Get-AgentsChatStoppedHistoryHandoffRestartPreparedObservation(
 
 function Open-AgentsChatStoppedHistoryHandoffRestartObservation(
     [string]$Control, [int]$ControllerPid, [string]$ControllerIdentity,
-    [string]$AttemptId, $Prepared, $Committed, $Retirement, $Terminal, $Successor, $Abandoned, $Restart
+    [string]$AttemptId, $Prepared, $Committed, $Retirement, $Terminal, $Successor, $Abandoned, $Restart,
+    $RestartCommitted
 ) {
     $scope = $null
     try {
         if ($null -eq $Restart) { throw 'Restart prepared descriptor is required.' }
         $scope = Open-AgentsChatStoppedHistoryHandoffCommittedObservation $Control $ControllerPid $ControllerIdentity `
-            $AttemptId $Prepared $Committed $Retirement $Terminal $Successor $Abandoned $Restart
+            $AttemptId $Prepared $Committed $Retirement $Terminal $Successor $Abandoned $Restart $RestartCommitted
         Assert-AgentsChatStoppedHistoryHandoffRestartPrepared $scope
         return $scope
     } catch {

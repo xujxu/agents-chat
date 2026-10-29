@@ -1,19 +1,25 @@
 . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-restart-owner.ps1')
 
 function Get-AgentsChatStoppedHistoryHandoffRestartCommittedRecord(
-    [hashtable]$Context, $Creator, [string]$CommittedAt
+    [hashtable]$Context, $Creator, [string]$CommittedAt, [switch]$Observed
 ) {
     Assert-AgentsChatStoppedHistoryHandoffRestartLock $Context
     $observed = $Context.HistoryHandoffObservedCommit
+    $prepared = $Context.HistoryHandoffRestartPrepared
+    $request = $prepared.Request
     Assert-AgentsChatRetirementCreator $Creator $observed.ControllerPid $observed.ControllerIdentity
-    if ($Creator.pid -ne $observed.ControllerPid -or
+    if ($Observed) {
+        if ($Creator.pid -ne $request.ControllerPid -or
+            $Creator.processIdentity -cne $request.ControllerIdentity -or
+            $Creator.pid -eq $observed.ControllerPid -or $Creator.bridgePid -eq $PID) {
+            throw 'Restart committed creator differs from its restart owner.'
+        }
+    } elseif ($Creator.pid -ne $observed.ControllerPid -or
         $Creator.processIdentity -cne $observed.ControllerIdentity -or
         $Creator.bridgePid -ne $PID -or
         $Creator.bridgeIdentity -cne [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)) {
         throw 'Restart committed creator differs from its actual publisher.'
     }
-    $prepared = $Context.HistoryHandoffRestartPrepared
-    $request = $prepared.Request
     $record = Get-AgentsChatStoppedHistoryHandoffRestartBinding -Context $Context @request
     $lock = $Context.HistoryHandoffRestartLock
     if (-not $lock.ContainsKey('OwnerFile') -or -not $lock.ContainsKey('OwnerDescriptor')) {
@@ -35,10 +41,16 @@ function Get-AgentsChatStoppedHistoryHandoffRestartCommittedRecord(
 }
 
 function Assert-AgentsChatStoppedHistoryHandoffRestartCommitted([hashtable]$Context) {
-    if (-not $Context.ContainsKey('HistoryHandoffRestartCommitter') -or
-        $Context.HistoryHandoffRestartCommitter -ne $true -or
-        $Context.ContainsKey('HistoryHandoffRestartObserver') -or
-        -not $Context.ContainsKey('HistoryHandoffRestartCommitted')) {
+    $committer = $Context.ContainsKey('HistoryHandoffRestartCommitter') -and
+        $Context.HistoryHandoffRestartCommitter -eq $true -and
+        -not $Context.ContainsKey('HistoryHandoffRestartObserver') -and
+        -not $Context.ContainsKey('HistoryHandoffRestartCommittedObserver')
+    $observer = $Context.ContainsKey('HistoryHandoffRestartCommittedObserver') -and
+        $Context.HistoryHandoffRestartCommittedObserver -eq $true -and
+        $Context.ContainsKey('HistoryHandoffRestartObserver') -and
+        $Context.HistoryHandoffRestartObserver -eq $true -and
+        -not $Context.ContainsKey('HistoryHandoffRestartCommitter')
+    if ($committer -eq $observer -or -not $Context.ContainsKey('HistoryHandoffRestartCommitted')) {
         throw 'Restart committed record lacks retained independent native proof.'
     }
     $retained = $Context.HistoryHandoffRestartCommitted
@@ -58,7 +70,8 @@ function Assert-AgentsChatStoppedHistoryHandoffRestartCommitted([hashtable]$Cont
             throw 'Restart committed descriptor differs.'
         }
     }
-    $record = Get-AgentsChatStoppedHistoryHandoffRestartCommittedRecord $Context $retained.Creator $retained.CommittedAt
+    $record = Get-AgentsChatStoppedHistoryHandoffRestartCommittedRecord $Context $retained.Creator $retained.CommittedAt `
+        -Observed:$observer
     $actual = $expected = $null
     try {
         $actual = [Text.Json.JsonDocument]::Parse($retained.File.ReadText())
