@@ -40,7 +40,7 @@ function Get-AgentsChatStoppedHistoryHandoffRestartLockSettlementRecord([hashtab
         controlIdentity=$intent.controlIdentity; previousOperationId=$intent.previousOperationId
         prepared=$intent.prepared; committed=$intent.committed; retirement=$retained.Descriptor
         newOwner=$intent.newOwner; lockIdentity=$intent.lockIdentity; lock=$intent.lock; state=$intent.state
-        owner=$intent.owner; retirer=$intent.creator; creator=$Creator; settledAt=$SettledAt
+        owner=$(if ($intent.Contains('owner')) { $intent.owner } else { $intent.creator }); retirer=$intent.creator; creator=$Creator; settledAt=$SettledAt
     }
 }
 

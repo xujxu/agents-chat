@@ -127,14 +127,18 @@ function Publish-AgentsChatStoppedHistoryHandoffRestartReleaseRecord(
     return $Context[$Key].Descriptor
 }
 
-function Remove-AgentsChatStoppedHistoryHandoffRestartLock(
-    [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity
-) {
+function Assert-AgentsChatStoppedHistoryHandoffRestartReleaser([hashtable]$Context) {
     if (-not $Context.ContainsKey('HistoryHandoffRestartReleaser') -or
         $Context.HistoryHandoffRestartReleaser -ne $true -or
         $Context.ContainsKey('HistoryHandoffRestartObserver')) {
         throw 'Restart release requires its independent native role.'
     }
+}
+
+function Publish-AgentsChatStoppedHistoryHandoffRestartReleaseIntent(
+    [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity
+) {
+    Assert-AgentsChatStoppedHistoryHandoffRestartReleaser $Context
     try {
         if ($Context.Poisoned) { throw 'Restart release scope is poisoned.' }
         if ($Context.ContainsKey('HistoryHandoffRestartRelease') -or $Context.ContainsKey('HistoryHandoffRestartReleased')) {
@@ -183,6 +187,50 @@ function Remove-AgentsChatStoppedHistoryHandoffRestartLock(
             bridgePid=$PID; bridgeIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
         }
         $retirement = Publish-AgentsChatStoppedHistoryHandoffRestartReleaseRecord $Context $creator 'HistoryHandoffRestartRelease'
+        Assert-AgentsChatStoppedHistoryHandoffRestartLock $Context
+        $lock = $Context.HistoryHandoffRestartLock
+        $request = $Context.HistoryHandoffRestartPrepared.Request
+        $record = Get-AgentsChatStoppedHistoryHandoffRestartBinding -Context $Context @request
+        $result = [ordered]@{
+            status='restart-release-prepared'; attemptId=$request.AttemptId
+            prepared=$Context.HistoryHandoffRestartPrepared.Descriptor
+            committed=$Context.HistoryHandoffRestartCommitted.Descriptor
+            retirement=$retirement; lockIdentity=$lock.DirectoryIdentity; lock=$lock.OwnerDescriptor; state=$record.state
+        }
+        if ($written) {
+            $result.stateIntent = $Context.HistoryHandoffRestartStateIntent.Descriptor
+            $result.writtenState = $Context.HistoryHandoffRestartState.Descriptor
+        }
+        $result.runtimeAuthority = $false
+        $result.lockAuthority = $false
+        $result.taskAuthority = $false
+        return $result
+    } catch {
+        $Context.Poisoned = $true
+        throw [InvalidOperationException]::new('Restart release failed; retain evidence.', $_.Exception)
+    }
+}
+
+function Remove-AgentsChatStoppedHistoryHandoffRestartLock(
+    [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity
+) {
+    Assert-AgentsChatStoppedHistoryHandoffRestartReleaser $Context
+    try {
+        if ($Context.Poisoned) { throw 'Restart release scope is poisoned.' }
+        if ($Context.ContainsKey('HistoryHandoffRestartReleased')) { throw 'Restart release already retained.' }
+        if ($Context.ContainsKey('HistoryHandoffRestartRelease')) {
+            # Only the live releaser that published its exact tenth record may continue from it.
+            $observed = $Context.HistoryHandoffObservedCommit
+            if ($ControllerPid -ne $observed.ControllerPid -or $ControllerIdentity -cne $observed.ControllerIdentity) {
+                throw 'Restart release controller differs.'
+            }
+            Assert-AgentsChatStoppedHistoryHandoffRestartRelease $Context
+        } else {
+            $null = Publish-AgentsChatStoppedHistoryHandoffRestartReleaseIntent $Context $ControllerPid $ControllerIdentity
+        }
+        $written = $Context.ContainsKey('HistoryHandoffRestartState')
+        $retirement = $Context.HistoryHandoffRestartRelease.Descriptor
+        $creator = $Context.HistoryHandoffRestartRelease.Creator
         $lock = $Context.HistoryHandoffRestartLock
         $owner = $lock.OwnerDescriptor
         Assert-AgentsChatStoppedHistoryHandoffRestartLock $Context

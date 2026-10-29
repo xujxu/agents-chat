@@ -36,7 +36,17 @@ function Get-AgentsChatStoppedHistoryHandoffRestartRetirementRecord([hashtable]$
     $prepared = $Context.HistoryHandoffRestartPrepared
     $request = $prepared.Request
     $committed = $Context.HistoryHandoffRestartCommitted
-    if ($Creator.processIdentity -ceq $request.ControllerIdentity -or $Creator.bridgeIdentity -ceq $committed.Creator.bridgeIdentity) {
+    $release = $Context.HistoryHandoffRestartRetirement -is [hashtable] -and
+        $Context.HistoryHandoffRestartRetirement.ContainsKey('Release') -and $Context.HistoryHandoffRestartRetirement.Release -eq $true
+    if ($release) {
+        # A dead live releaser's exact tenth record names the committed owner itself as its creator.
+        if (-not $Context.ContainsKey('HistoryHandoffRestartRetirementObserver')) {
+            throw 'Restart release intent takeover requires its independent observer.'
+        }
+        foreach ($field in @('pid', 'processIdentity', 'bridgePid', 'bridgeIdentity')) {
+            if ($Creator[$field] -cne $committed.Creator[$field]) { throw 'Restart release intent creator differs from its committed owner.' }
+        }
+    } elseif ($Creator.processIdentity -ceq $request.ControllerIdentity -or $Creator.bridgeIdentity -ceq $committed.Creator.bridgeIdentity) {
         throw 'Restart lock retirement creator is not distinct from its owner.'
     }
     $owner = Assert-AgentsChatStoppedHistoryHandoffRestartOwnerAbsent $Context
@@ -48,15 +58,19 @@ function Get-AgentsChatStoppedHistoryHandoffRestartRetirementRecord([hashtable]$
         [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal)
     if ($parsed -gt [DateTimeOffset]::UtcNow) { throw 'Restart lock retirement is in the future.' }
     $lock = $Context.HistoryHandoffRestartLock
-    return [ordered]@{
-        version=1; phase='stopped-history-handoff-restart-lock-retirement-prepared'
+    $value = [ordered]@{
+        version=1
+        phase=$(if ($release) { 'stopped-history-handoff-restart-release-prepared' } else { 'stopped-history-handoff-restart-lock-retirement-prepared' })
         attemptId=$request.AttemptId; control=$Context.Control; project=$Context.Project
         controlIdentity=$Context.HistoryRecord.controlIdentity
         previousOperationId=$Context.OperationId
         prepared=$prepared.Descriptor; committed=$committed.Descriptor; newOwner=$record.newOwner
         lockIdentity=$lock.DirectoryIdentity; lock=$lock.OwnerDescriptor; state=$record.state
-        owner=$owner; creator=$Creator; createdAt=$CreatedAt
     }
+    if (-not $release) { $value.owner = $owner }
+    $value.creator = $Creator
+    $value.createdAt = $CreatedAt
+    return $value
 }
 
 function Assert-AgentsChatStoppedHistoryHandoffRestartRetirement([hashtable]$Context) {
@@ -162,11 +176,16 @@ function Initialize-AgentsChatStoppedHistoryHandoffRestartRetirementObservation(
     $name = "inactive-handoff-$($Context.HistoryHandoffRestartPrepared.Request.AttemptId)-lock-retirement.json"
     $file = Open-AgentsChatRetirementFile $Context $Descriptor $name
     $record = Read-AgentsChatRetirementJson ($file.ReadText())
-    Assert-AgentsChatRetirementFields $record @(
+    $release = $record.phase -ceq 'stopped-history-handoff-restart-release-prepared'
+    if ($release -and $record.Contains('stateIntent')) {
+        # After the acknowledged state write, archive-only dead-owner cleanup is never valid.
+        throw 'Post-write restart release takeover requires new-operation recovery.'
+    }
+    Assert-AgentsChatRetirementFields $record (@(
         'version', 'phase', 'attemptId', 'control', 'project', 'controlIdentity', 'previousOperationId',
-        'prepared', 'committed', 'newOwner', 'lockIdentity', 'lock', 'state', 'owner', 'creator', 'createdAt'
-    )
-    if ($record.phase -cne 'stopped-history-handoff-restart-lock-retirement-prepared' -or
+        'prepared', 'committed', 'newOwner', 'lockIdentity', 'lock', 'state') +
+        @($(if (-not $release) { 'owner' })) + @('creator', 'createdAt'))
+    if (($record.phase -cne 'stopped-history-handoff-restart-lock-retirement-prepared' -and -not $release) -or
         $record.createdAt -isnot [string]) {
         throw 'Restart lock retirement observation phase differs.'
     }
@@ -174,6 +193,7 @@ function Initialize-AgentsChatStoppedHistoryHandoffRestartRetirementObservation(
         File=$file; Descriptor=(Get-AgentsChatStoppedHandoffDescriptor $file $name)
         Creator=$record.creator; Time=$record.createdAt
     }
+    if ($release) { $Context.HistoryHandoffRestartRetirement.Release = $true }
     $Context.HistoryHandoffRestartRetirementObserver = $true
     $null = $Context.Remove('HistoryHandoffRestartOwnerRetiredPending')
     Assert-AgentsChatStoppedHistoryHandoffRestartRetirement $Context
@@ -207,7 +227,7 @@ function Get-AgentsChatStoppedHistoryHandoffRestartRetirementObservation(
             status=$status; attemptId=$record.attemptId
             prepared=$record.prepared; committed=$record.committed; retirement=$retained.Descriptor
             lockIdentity=$lock.DirectoryIdentity; lock=$lock.OwnerDescriptor; state=$record.state
-            owner=$record.owner; retirer=$record.creator
+            owner=$(if ($record.Contains('owner')) { $record.owner } else { $record.creator }); retirer=$record.creator
             runtimeAuthority=$false; lockAuthority=$false; taskAuthority=$false
         }
         if ($Context.ContainsKey('HistoryHandoffRestartSettlement')) {
