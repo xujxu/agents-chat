@@ -28,28 +28,37 @@ function Open-AgentsChatStoppedHistoryHandoffRestartLockObservation(
     Assert-AgentsChatRetirementIdentity $record.lockIdentity
     Assert-AgentsChatRetirementDescriptor $record.lock 'lock\owner.json' 65536
     if ($record.committedAt -isnot [string]) { throw 'Restart committed timestamp differs.' }
-    $directory = [Deployment.WindowsPrivateFile]::OpenDirectory((Join-Path $Context.Control 'lock'))
-    $Context.Files.Add($directory)
-    $identity = $directory.CaptureIdentity()
-    if ($identity.Dev -cne $record.lockIdentity.dev -or $identity.Ino -cne $record.lockIdentity.ino) {
-        throw 'Restart lock directory identity differs.'
+    $retiredOwner = [ordered]@{
+        path=$record.lock.path; dev=$record.lock.dev; ino=$record.lock.ino
+        bytes=$record.lock.bytes; sha256=$record.lock.sha256
     }
-    if ($RetirementRequested -and @(Get-ChildItem -LiteralPath (Join-Path $Context.Control 'lock') -Force).Count -eq 0) {
-        # An owner-retired directory stays provisional until the exact retirement intent is bound.
+    $root = @(Get-ChildItem -LiteralPath $Context.Control -Force | Where-Object { $_.Name -ieq 'lock' })
+    if ($RetirementRequested -and $root.Count -eq 0) {
+        # An absent or owner-retired directory stays provisional until the exact retirement intent is bound.
         $Context.HistoryHandoffRestartLock = @{
-            Directory=$directory; DirectoryIdentity=[ordered]@{ dev=$identity.Dev; ino=$identity.Ino }
-            OwnerFile=$null; OwnerRetired=$true
-            OwnerDescriptor=[ordered]@{
-                path=$record.lock.path; dev=$record.lock.dev; ino=$record.lock.ino
-                bytes=$record.lock.bytes; sha256=$record.lock.sha256
-            }
+            Directory=$null; DirectoryIdentity=[ordered]@{ dev=$record.lockIdentity.dev; ino=$record.lockIdentity.ino }
+            OwnerFile=$null; OwnerRetired=$true; DirectoryRetired=$true; OwnerDescriptor=$retiredOwner
         }
         $Context.HistoryHandoffRestartOwnerRetiredPending = $true
     } else {
-        $owner = Open-AgentsChatRetirementFile $Context $record.lock 'lock\owner.json'
-        $Context.HistoryHandoffRestartLock = @{
-            Directory=$directory; DirectoryIdentity=[ordered]@{ dev=$identity.Dev; ino=$identity.Ino }
-            OwnerFile=$owner; OwnerDescriptor=(Get-AgentsChatStoppedHandoffDescriptor $owner 'lock\owner.json')
+        $directory = [Deployment.WindowsPrivateFile]::OpenDirectory((Join-Path $Context.Control 'lock'))
+        $Context.Files.Add($directory)
+        $identity = $directory.CaptureIdentity()
+        if ($identity.Dev -cne $record.lockIdentity.dev -or $identity.Ino -cne $record.lockIdentity.ino) {
+            throw 'Restart lock directory identity differs.'
+        }
+        if ($RetirementRequested -and @(Get-ChildItem -LiteralPath (Join-Path $Context.Control 'lock') -Force).Count -eq 0) {
+            $Context.HistoryHandoffRestartLock = @{
+                Directory=$directory; DirectoryIdentity=[ordered]@{ dev=$identity.Dev; ino=$identity.Ino }
+                OwnerFile=$null; OwnerRetired=$true; OwnerDescriptor=$retiredOwner
+            }
+            $Context.HistoryHandoffRestartOwnerRetiredPending = $true
+        } else {
+            $owner = Open-AgentsChatRetirementFile $Context $record.lock 'lock\owner.json'
+            $Context.HistoryHandoffRestartLock = @{
+                Directory=$directory; DirectoryIdentity=[ordered]@{ dev=$identity.Dev; ino=$identity.Ino }
+                OwnerFile=$owner; OwnerDescriptor=(Get-AgentsChatStoppedHandoffDescriptor $owner 'lock\owner.json')
+            }
         }
     }
     $Context.HistoryHandoffRestartLockObserver = $true

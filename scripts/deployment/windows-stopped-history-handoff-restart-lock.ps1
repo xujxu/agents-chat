@@ -30,9 +30,8 @@ function Assert-AgentsChatStoppedHistoryHandoffRestartLock([hashtable]$Context) 
     }
     if ($lock.ContainsKey('DirectoryRetired')) {
         if ($lock.DirectoryRetired -ne $true -or $lock.OwnerRetired -ne $true -or -not $observer -or
-            -not $Context.ContainsKey('HistoryHandoffRestartDirectoryRetirer') -or
-            $Context.HistoryHandoffRestartDirectoryRetirer -ne $true -or
-            -not $Context.ContainsKey('HistoryHandoffRestartRetirement') -or
+            $Context.ContainsKey('HistoryHandoffRestartRetirement') -eq
+                $Context.ContainsKey('HistoryHandoffRestartOwnerRetiredPending') -or
             $null -ne $lock.Directory -or $null -ne $lock.OwnerFile -or
             @(Get-ChildItem -LiteralPath $Context.Control -Force | Where-Object { $_.Name -ieq 'lock' }).Count) {
             throw 'Restart lock directory retirement lacks retained independent native proof.'
