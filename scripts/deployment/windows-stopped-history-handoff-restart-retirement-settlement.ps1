@@ -1,12 +1,29 @@
 . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-restart-retirement-directory.ps1')
 
+function Test-AgentsChatRestartLockSettlerCurrent($Creator, [int]$ControllerPid, [string]$ControllerIdentity) {
+    return $Creator.pid -eq $ControllerPid -and $Creator.processIdentity -ceq $ControllerIdentity -and
+        $Creator.bridgePid -eq $PID -and $Creator.bridgeIdentity -ceq [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+}
+
+function Assert-AgentsChatRestartLockSettler($Creator, [int]$ControllerPid, [string]$ControllerIdentity) {
+    Assert-AgentsChatRetirementFields $Creator @('pid', 'processIdentity', 'bridgePid', 'bridgeIdentity')
+    if ($Creator.pid -isnot [int] -or $Creator.bridgePid -isnot [int] -or $Creator.pid -eq $Creator.bridgePid) {
+        throw 'Invalid restart lock settler.'
+    }
+    if ($Creator.pid -ne $ControllerPid -or $Creator.processIdentity -cne $ControllerIdentity) {
+        Assert-AgentsChatRetirementCreator $Creator $ControllerPid $ControllerIdentity
+        return
+    }
+    # The settling controller may outlive its bridge; only a current or dead settler bridge is accepted.
+    Assert-AgentsChatCompletionProcessIdentity $Creator.bridgePid $Creator.bridgeIdentity
+    if (-not (Test-AgentsChatRestartLockSettlerCurrent $Creator $ControllerPid $ControllerIdentity)) {
+        Assert-AgentsChatCompletionProcessAbsent $Creator.bridgePid $Creator.bridgeIdentity
+    }
+}
+
 function Get-AgentsChatStoppedHistoryHandoffRestartLockSettlementRecord([hashtable]$Context, $Creator, [string]$SettledAt) {
     $observed = $Context.HistoryHandoffObservedCommit
-    Assert-AgentsChatRetirementCreator $Creator $observed.ControllerPid $observed.ControllerIdentity
-    if ($Creator.pid -ne $observed.ControllerPid -or $Creator.processIdentity -cne $observed.ControllerIdentity -or
-        $Creator.bridgePid -ne $PID -or $Creator.bridgeIdentity -cne [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)) {
-        throw 'Restart lock settlement creator differs from its actual settler.'
-    }
+    Assert-AgentsChatRestartLockSettler $Creator $observed.ControllerPid $observed.ControllerIdentity
     $lock = $Context.HistoryHandoffRestartLock
     if (-not $lock.ContainsKey('DirectoryRetired') -or $lock.DirectoryRetired -ne $true) {
         throw 'Restart lock settlement requires its exact directory-retired stage.'
@@ -28,9 +45,10 @@ function Get-AgentsChatStoppedHistoryHandoffRestartLockSettlementRecord([hashtab
 }
 
 function Assert-AgentsChatStoppedHistoryHandoffRestartLockSettlement([hashtable]$Context) {
-    if (-not $Context.ContainsKey('HistoryHandoffRestartSettler') -or
-        $Context.HistoryHandoffRestartSettler -ne $true -or
-        -not $Context.ContainsKey('HistoryHandoffRestartSettlement')) {
+    $settler = $Context.ContainsKey('HistoryHandoffRestartSettler') -and $Context.HistoryHandoffRestartSettler -eq $true
+    $observer = $Context.ContainsKey('HistoryHandoffRestartSettlementObserver') -and
+        $Context.HistoryHandoffRestartSettlementObserver -eq $true
+    if (-not ($settler -or $observer) -or -not $Context.ContainsKey('HistoryHandoffRestartSettlement')) {
         throw 'Restart lock settlement lacks retained independent native proof.'
     }
     $retained = $Context.HistoryHandoffRestartSettlement
@@ -65,12 +83,10 @@ function Get-AgentsChatStoppedHistoryHandoffRestartLockSettlementValue(
     [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity
 ) {
     $value = Get-AgentsChatStoppedHistoryHandoffRestartRetirementObservation $Context $ControllerPid $ControllerIdentity
-    if ($value.status -cne 'restart-lock-retirement-directory-retired') {
+    if ($value.status -cne 'restart-lock-settled') {
         throw 'Restart lock settlement did not preserve its exact absent stage.'
     }
     Assert-AgentsChatStoppedHistoryHandoffRestartLockSettlement $Context
-    $value.status = 'restart-lock-settled'
-    $value.settlement = $Context.HistoryHandoffRestartSettlement.Descriptor
     return $value
 }
 
@@ -85,6 +101,11 @@ function Publish-AgentsChatStoppedHistoryHandoffRestartLockSettlement(
     }
     try {
         if ($Context.ContainsKey('HistoryHandoffRestartSettlement')) {
+            $retained = $Context.HistoryHandoffRestartSettlement
+            if ($Context.ContainsKey('HistoryHandoffRestartSettlementObserver') -or
+                -not (Test-AgentsChatRestartLockSettlerCurrent $retained.Creator $ControllerPid $ControllerIdentity)) {
+                throw 'Fresh restart lock settler cannot replace an observed settlement.'
+            }
             return Get-AgentsChatStoppedHistoryHandoffRestartLockSettlementValue $Context $ControllerPid $ControllerIdentity
         }
         $observed = Get-AgentsChatStoppedHistoryHandoffRestartRetirementObservation $Context $ControllerPid $ControllerIdentity
@@ -113,4 +134,31 @@ function Publish-AgentsChatStoppedHistoryHandoffRestartLockSettlement(
         $Context.Poisoned = $true
         throw [InvalidOperationException]::new('Restart lock settlement failed; retain evidence.', $_.Exception)
     }
+}
+
+function Initialize-AgentsChatStoppedHistoryHandoffRestartLockSettlementObservation([hashtable]$Context, $Descriptor) {
+    if (-not $Context.ContainsKey('HistoryHandoffRestartRetirementObserver') -or
+        $Context.HistoryHandoffRestartRetirementObserver -ne $true -or
+        $Context.ContainsKey('HistoryHandoffRestartSettlement') -or
+        $Context.ContainsKey('HistoryHandoffRestartSettler') -or
+        $Context.ContainsKey('HistoryHandoffRestartSettlementObserver')) {
+        throw 'Restart lock settlement observation bootstrap differs.'
+    }
+    $name = "inactive-handoff-$($Context.HistoryHandoffRestartPrepared.Request.AttemptId)-lock-retired.json"
+    $file = Open-AgentsChatRetirementFile $Context $Descriptor $name
+    $record = Read-AgentsChatRetirementJson ($file.ReadText())
+    Assert-AgentsChatRetirementFields $record @(
+        'version', 'phase', 'attemptId', 'control', 'project', 'controlIdentity', 'previousOperationId',
+        'prepared', 'committed', 'retirement', 'newOwner', 'lockIdentity', 'lock', 'state', 'owner', 'retirer',
+        'creator', 'settledAt'
+    )
+    if ($record.phase -cne 'stopped-history-handoff-restart-lock-retired' -or $record.settledAt -isnot [string]) {
+        throw 'Restart lock settlement observation phase differs.'
+    }
+    $Context.HistoryHandoffRestartSettlement = @{
+        File=$file; Descriptor=(Get-AgentsChatStoppedHandoffDescriptor $file $name)
+        Creator=$record.creator; Time=$record.settledAt
+    }
+    $Context.HistoryHandoffRestartSettlementObserver = $true
+    Assert-AgentsChatStoppedHistoryHandoffRestartLockSettlement $Context
 }

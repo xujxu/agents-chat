@@ -11,6 +11,10 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
     $hasRestartState = $Request -is [Collections.IDictionary] -and
         ($Request.Contains('restartStateIntent') -or $Request.Contains('restartState'))
     $hasRestartRetirement = $Request -is [Collections.IDictionary] -and $Request.Contains('restartRetirement')
+    $hasRestartSettlement = $Request -is [Collections.IDictionary] -and $Request.Contains('restartSettlement')
+    if ($hasRestartSettlement -and -not $hasRestartRetirement) {
+        throw 'Committed handoff restart settlement requires its retirement intent.'
+    }
     if ($hasTerminal -and -not $hasRetirement) { throw 'Committed handoff terminal requires retirement.' }
     if ($hasSuccessor -and -not $hasTerminal) { throw 'Committed handoff successor requires terminal.' }
     if ($hasSuccessorAbandoned -and -not $hasSuccessor) { throw 'Committed handoff successor terminal requires preparation.' }
@@ -31,6 +35,7 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
     if ($hasRestartCommitted) { $fields += 'restartCommitted' }
     if ($hasRestartState) { $fields += @('restartStateIntent', 'restartState') }
     if ($hasRestartRetirement) { $fields += 'restartRetirement' }
+    if ($hasRestartSettlement) { $fields += 'restartSettlement' }
     Assert-AgentsChatRetirementFields $Request $fields
     Assert-AgentsChatCompletionGuid $Request.attemptId
     Assert-AgentsChatCompletionProcessIdentity $Request.controllerPid $Request.controllerIdentity
@@ -84,6 +89,11 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
         $restartRetirementName = "inactive-handoff-$restartAttempt-lock-retirement.json"
         Assert-AgentsChatRetirementDescriptor $Request.restartRetirement $restartRetirementName 65536
         $names += $restartRetirementName
+    }
+    if ($hasRestartSettlement) {
+        $restartSettlementName = "inactive-handoff-$restartAttempt-lock-retired.json"
+        Assert-AgentsChatRetirementDescriptor $Request.restartSettlement $restartSettlementName 65536
+        $names += $restartSettlementName
     }
     Assert-AgentsChatStoppedHistoryHandoffNamespace $Context $names
     $prepared = Open-AgentsChatRetirementFile $Context $Request.prepared $preparedName
@@ -193,6 +203,9 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
         if ($hasRestartState) { Initialize-AgentsChatStoppedHistoryHandoffRestartStateObservation $Context }
         if ($hasRestartRetirement) {
             Initialize-AgentsChatStoppedHistoryHandoffRestartRetirementObservation $Context $Request.restartRetirement
+        }
+        if ($hasRestartSettlement) {
+            Initialize-AgentsChatStoppedHistoryHandoffRestartLockSettlementObservation $Context $Request.restartSettlement
         }
     } elseif ($hasRestart) {
         Initialize-AgentsChatStoppedHistoryHandoffRestartObservation $Context $Request.restart
@@ -327,7 +340,7 @@ function Get-AgentsChatStoppedHistoryHandoffCommittedObservation(
 function Open-AgentsChatStoppedHistoryHandoffCommittedObservation(
     [string]$Control, [int]$ControllerPid, [string]$ControllerIdentity,
     [string]$AttemptId, $Prepared, $Committed, $Retirement, $Terminal, $Successor, $SuccessorAbandoned, $Restart,
-    $RestartCommitted, $RestartStateIntent, $RestartState, $RestartRetirement
+    $RestartCommitted, $RestartStateIntent, $RestartState, $RestartRetirement, $RestartSettlement
 ) {
     $scope = $null
     try {
@@ -344,6 +357,7 @@ function Open-AgentsChatStoppedHistoryHandoffCommittedObservation(
         if ($null -ne $RestartStateIntent) { $request.restartStateIntent = $RestartStateIntent }
         if ($null -ne $RestartState) { $request.restartState = $RestartState }
         if ($null -ne $RestartRetirement) { $request.restartRetirement = $RestartRetirement }
+        if ($null -ne $RestartSettlement) { $request.restartSettlement = $RestartSettlement }
         $scope = Open-AgentsChatStoppedWorkerCleanup $Control -HistoryArchive -HistoryHandoffObservation $request
         $null = Get-AgentsChatStoppedHistoryHandoffCommittedObservation $scope $ControllerPid $ControllerIdentity
         return $scope

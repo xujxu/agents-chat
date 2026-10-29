@@ -203,13 +203,21 @@ function Get-AgentsChatStoppedHistoryHandoffRestartRetirementObservation(
         $status = if ($lock.ContainsKey('DirectoryRetired')) { 'restart-lock-retirement-directory-retired' }
             elseif ($lock.ContainsKey('OwnerRetired')) { 'restart-lock-retirement-owner-retired' }
             else { 'restart-lock-retirement-observed' }
-        return [ordered]@{
+        $value = [ordered]@{
             status=$status; attemptId=$record.attemptId
             prepared=$record.prepared; committed=$record.committed; retirement=$retained.Descriptor
             lockIdentity=$lock.DirectoryIdentity; lock=$lock.OwnerDescriptor; state=$record.state
             owner=$record.owner; retirer=$record.creator
             runtimeAuthority=$false; lockAuthority=$false; taskAuthority=$false
         }
+        if ($Context.ContainsKey('HistoryHandoffRestartSettlement')) {
+            if ($status -cne 'restart-lock-retirement-directory-retired') {
+                throw 'Restart lock settlement survived without its absent directory.'
+            }
+            $value.status = 'restart-lock-settled'
+            $value.settlement = $Context.HistoryHandoffRestartSettlement.Descriptor
+        }
+        return $value
     } catch {
         $Context.Poisoned = $true
         throw [InvalidOperationException]::new('Restart lock retirement observation failed; retain evidence.', $_.Exception)
@@ -219,7 +227,7 @@ function Get-AgentsChatStoppedHistoryHandoffRestartRetirementObservation(
 function Open-AgentsChatStoppedHistoryHandoffRestartRetirementObservation(
     [string]$Control, [int]$ControllerPid, [string]$ControllerIdentity,
     [string]$AttemptId, $Prepared, $Committed, $Retirement, $Terminal, $Successor, $Abandoned, $Restart,
-    $RestartCommitted, $RestartRetirement
+    $RestartCommitted, $RestartRetirement, $RestartSettlement
 ) {
     try {
         if ($null -eq $RestartCommitted -or $null -eq $RestartRetirement) {
@@ -227,7 +235,7 @@ function Open-AgentsChatStoppedHistoryHandoffRestartRetirementObservation(
         }
         return Open-AgentsChatStoppedHistoryHandoffRestartObservation $Control $ControllerPid $ControllerIdentity `
             $AttemptId $Prepared $Committed $Retirement $Terminal $Successor $Abandoned $Restart $RestartCommitted `
-            $null $null $RestartRetirement
+            $null $null $RestartRetirement $RestartSettlement
     } catch {
         throw [InvalidOperationException]::new('Restart lock retirement observation failed; retain evidence.', $_.Exception)
     }
