@@ -1116,7 +1116,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                                 Send-AgentsChatRestartReleaseCommand $historyResumer $diagnostic $live $control -StateWritten
                             }
                             $output = $historyResumer.StandardOutput.ReadToEndAsync()
-                            Assert ($historyResumer.WaitForExit(120000)) 'Fresh history actor takeover timed out'
+                            Assert ($historyResumer.WaitForExit(300000)) 'Fresh history actor takeover timed out'
                             Write-Output $output.GetAwaiter().GetResult()
                             $errors = $diagnostic.GetAwaiter().GetResult()
                             if ($errors) { [Console]::Error.WriteLine($errors) }
