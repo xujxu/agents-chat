@@ -53,6 +53,7 @@ export const workerEngineFiles = Object.freeze([
   'windows-inactive-worker-cleanup.ps1',
   'windows-inactive-history-archive.ps1',
   'windows-inactive-history-recovery.ps1',
+  'windows-stopped-history-state-transition.ps1',
   'windows-stopped-history-handoff.mjs', 'windows-stopped-history-handoff-controller.ps1',
   'windows-stopped-history-handoff-record.mjs', 'windows-stopped-history-handoff-record.ps1',
   'windows-stopped-history-handoff-owner.ps1', 'windows-stopped-history-handoff-preparation.ps1',
