@@ -31,7 +31,11 @@ The next state is the first write a normal update would make, for the new owner 
 - [x] Node `assertRestartStateIntentPublication` prints `INACTIVE_HISTORY_RESTART_COMMITTED_LIVE`, forwards the host command, verifies the exact ninth record, and `state.json` stays byte- and inode-identical.
 - [x] Host `Send-AgentsChatRestartStateIntentCommand`; boundary `restart-state-intent-history` (restart shard); mode `resume-restart-state-intent-history`.
 - [x] Required receipt: `PASS: native restart state intent binds exact old and next preflight state after its eighth record without writing state or granting authority`.
-- [ ] Actions red: missing `windows-stopped-history-handoff-restart-state-intent.ps1`.
+- [x] Actions red: focused run `40796944914` passed baseline `123195594605` and successor `123195594822`; restart job `123195594862` reached the fifth explicit command and failed at `2026-10-29T02:15:36Z` in phase `restart-state-intent-before-proof` because `windows-stopped-history-handoff-restart-state-intent.ps1` did not exist. This is the intended missing-module red.
+
+### Shard budget
+
+That restart job took 82 of its 90 minutes (about 21 minutes of setup plus about 9 minutes per restart boundary). Without raising any limit, the stopped-history matrix gains a fourth `commitment` shard starting at `restart-committed-history`; `restart` now ends before it. The aggregate job requires all four shard receipt files.
 
 ### Task 2: Production module (green)
 

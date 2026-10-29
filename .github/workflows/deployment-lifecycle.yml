@@ -218,7 +218,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        history_shard: [baseline, successor, restart]
+        history_shard: [baseline, successor, restart, commitment]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -263,7 +263,7 @@ jobs:
       - name: Require every actual stopped-history receipt across all native shards
         shell: pwsh
         run: |
-          $historyOutput = foreach ($shard in @('baseline', 'successor', 'restart')) {
+          $historyOutput = foreach ($shard in @('baseline', 'successor', 'restart', 'commitment')) {
             $file = "history-receipts/history-$shard.json"
             if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing stopped-history shard: $shard" }
             Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
