@@ -19,19 +19,21 @@
 
 ### Task 1: Test contract (expected red)
 
-- [ ] **Release-intent proof frames.** `tests/deployment-windows-restart-publication-progress.{ps1,mjs}` adds the `release-intent` publication. It makes exactly two ancestor passes: one by the intent publisher and one by the held releaser.
-- [ ] **Release helper.** `tests/deployment-windows-history-handoff-restart-release.ps1` adds `-IntentOnly`, which does the following:
+- [x] **Release-intent proof frames.** `tests/deployment-windows-restart-publication-progress.{ps1,mjs}` adds the `release-intent` publication. It makes exactly two ancestor passes: one by the intent publisher and one by the held releaser.
+- [x] **Release helper.** `tests/deployment-windows-history-handoff-restart-release.ps1` adds `-IntentOnly`, which does the following:
   - Refuses both the intent and the removal without the role.
   - Returns `restart-release-prepared`.
   - Leaves the lock, owner bytes, records, and original state unchanged, with no `-lock-retired.json`.
-- [ ] **Bridge fixture.** `tests/deployment-windows-history-handoff-committed-observation.ps1` adds `-HoldRestartReleaseIntent`, which requires `-ReleaseRestart` and refuses `-PrepareRestartState` and `-HoldRestartReleased`.
-- [ ] **Node fixtures.** `tests/deployment-windows-restart-release-publication.mjs` adds `holdIntent`, and `tests/deployment-windows-restart-preparation.mjs` adds `holdReleaseIntent`. Together they emit `INACTIVE_HISTORY_RESTART_RELEASE_INTENT_HELD`.
-- [ ] **Session modes.** `tests/deployment-windows-lost-runtime-session.mjs` adds `crash-restart-release-intent-history` and `resume-restart-release-intent-dead-history`.
-- [ ] **Death harness.** `tests/deployment-windows-restart-directory-death.ps1` adds `-ReleaseIntent`. It kills the actual releaser and requires the exact tenth record, the owner-only lock, no `-lock-retired.json`, and the original state.
-- [ ] **Distinct observer.** In `tests/deployment-windows-successor-abandoned-observation.mjs`, `blockedReleaseIntent` reuses `assertDeadRestartRetirement({ release: true })` and the lock-settled reconciliation.
-- [ ] **Boundary and shard.** `tests/deployment-windows-inactive-task.ps1` adds the boundary `restart-release-intent-dead-history` as the single-boundary `takeover` shard. The workflow matrix and the acceptance shard list both gain `takeover`.
-- [ ] **Receipt.** Add the required receipt `PASS: actual restart releaser death after its exact release intent lets distinct fresh actors retire and settle only the dead owner lock without authority`, bringing the total to 64.
-- [ ] **Commit and expect red.** Commit, tag `gate59-contract`, and dispatch the focused and Contracts runs. Expected red: `Publish-AgentsChatStoppedHistoryHandoffRestartReleaseIntent` is not recognized.
+- [x] **Bridge fixture.** `tests/deployment-windows-history-handoff-committed-observation.ps1` adds `-HoldRestartReleaseIntent`, which requires `-ReleaseRestart` and refuses `-PrepareRestartState` and `-HoldRestartReleased`.
+- [x] **Node fixtures.** `tests/deployment-windows-restart-release-publication.mjs` adds `holdIntent`, and `tests/deployment-windows-restart-preparation.mjs` adds `holdReleaseIntent`. Together they emit `INACTIVE_HISTORY_RESTART_RELEASE_INTENT_HELD`.
+- [x] **Session modes.** `tests/deployment-windows-lost-runtime-session.mjs` adds `crash-restart-release-intent-history` and `resume-restart-release-intent-dead-history`.
+- [x] **Death harness.** `tests/deployment-windows-restart-directory-death.ps1` adds `-ReleaseIntent`. It kills the actual releaser and requires the exact tenth record, the owner-only lock, no `-lock-retired.json`, and the original state.
+- [x] **Distinct observer.** In `tests/deployment-windows-successor-abandoned-observation.mjs`, `blockedReleaseIntent` reuses `assertDeadRestartRetirement({ release: true })` and the lock-settled reconciliation.
+- [x] **Boundary and shard.** `tests/deployment-windows-inactive-task.ps1` adds the boundary `restart-release-intent-dead-history` as the single-boundary `takeover` shard. The workflow matrix and the acceptance shard list both gain `takeover`.
+- [x] **Receipt.** Add the required receipt `PASS: actual restart releaser death after its exact release intent lets distinct fresh actors retire and settle only the dead owner lock without authority`, bringing the total to 64.
+- [x] **Commit and expect red.** Commit, tag `gate59-contract`, and dispatch the focused and Contracts runs. Expected red: `Publish-AgentsChatStoppedHistoryHandoffRestartReleaseIntent` is not recognized.
+
+Red evidence: focused run `40905206163` on `gate59-contract` (`c95f8916`) failed only in the `postwrite`, `takeover`, and `release` shards, each with `Publish-AgentsChatStoppedHistoryHandoffRestartReleaseIntent` is not recognized (the expected red). Contracts run `40905213745` passed.
 
 ### Task 2: Production
 
