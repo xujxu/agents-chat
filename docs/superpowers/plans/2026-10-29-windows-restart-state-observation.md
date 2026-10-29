@@ -28,7 +28,7 @@ Every historical read of the original state goes through `Open-AgentsChatStopped
 
 - [x] Add the distinct state observation to the `restart-state-dead-history` resume.
 - [x] Require receipt `PASS: distinct restart state observer resolves original state only through its ninth record and proves the exact written state without lock or task authority`.
-- [ ] Actions red: missing `windows-stopped-history-handoff-restart-state-observation.ps1`.
+- [x] Actions red (deviation): run `40837753938` at `614e3c11` failed before the observer module was reached because the written/dead state boundaries returned early and skipped archive restoration (`inactive-rollback-history-intent.json` missing at `tests/deployment-windows-inactive-task.ps1:1078`). `bdd528b6` replaced the early return with a required generic archive refusal; the production module (`7e18dc4f`) was already committed, so the module-missing red was not separately observed.
 
 ### Task 2: Production
 
