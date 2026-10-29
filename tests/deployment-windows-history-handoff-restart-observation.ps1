@@ -29,6 +29,13 @@ try {
     $retireRestart = $observeCommitted -and -not $observeState -and $inputRecord.Contains('retireRestart')
     $observeRetirement = $observeCommitted -and -not $observeState -and $inputRecord.Contains('restartRetirement')
     if ($observeRetirement) { $fields += 'restartRetirement' }
+    $retireOwner = $observeRetirement -and -not $retireRestart -and $inputRecord.Contains('retireOwner')
+    if ($retireOwner) {
+        $fields += 'retireOwner'
+        if ($inputRecord.retireOwner -isnot [bool] -or $inputRecord.retireOwner -ne $true) {
+            throw 'Restart lock owner retirement request differs.'
+        }
+    }
     if ($Hold -and (-not $retireRestart -or $observeRetirement)) { throw 'Held restart observation requires a fresh retirement.' }
     if ($retireRestart) {
         $fields += 'retireRestart'
@@ -97,6 +104,24 @@ try {
             $scope.HistoryHandoffRestartRetirer = $true
             $null = Publish-AgentsChatStoppedHistoryHandoffRestartRetirement $scope $ControllerPid $ControllerIdentity
             throw 'Fresh restart lock retirer duplicated an observed intent.'
+        }
+        if ($retireOwner) {
+            . (Join-Path $Source 'windows-stopped-history-handoff-restart-retirement-owner.ps1')
+            $refused = $false
+            try { $null = Remove-AgentsChatStoppedHistoryHandoffRestartLockOwner $scope $ControllerPid $ControllerIdentity }
+            catch {
+                if ($_.Exception.Message -cne 'Restart lock owner retirement requires its independent native role.') { throw }
+                $refused = $true
+            }
+            if (-not $refused -or -not (Test-Path -LiteralPath (Join-Path $Control 'lock\owner.json'))) {
+                throw 'Restart lock retirement observer deleted its owner without role.'
+            }
+            $scope.HistoryHandoffRestartOwnerRetirer = $true
+            $observation = Remove-AgentsChatStoppedHistoryHandoffRestartLockOwner $scope $ControllerPid $ControllerIdentity
+            $repeat = Remove-AgentsChatStoppedHistoryHandoffRestartLockOwner $scope $ControllerPid $ControllerIdentity
+            if (($repeat | ConvertTo-Json -Depth 12 -Compress) -cne ($observation | ConvertTo-Json -Depth 12 -Compress)) {
+                throw 'Repeated restart lock owner retirement differs.'
+            }
         }
         [Console]::Out.WriteLine(($observation | ConvertTo-Json -Depth 12 -Compress))
         return

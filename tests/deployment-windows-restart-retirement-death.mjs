@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, lstat, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -134,4 +134,18 @@ export async function assertDeadRestartRetirement({
   }
   await assert.rejects(observe(restartArgs({ ...retirementRequest, retireRestart: true })),
     error => error.message.includes('Restart lock retirement failed; retain evidence.'));
+  const directory = path.join(control, 'lock');
+  const owner = path.join(directory, 'owner.json');
+  assert.deepEqual(await readdir(directory), ['owner.json']);
+  const retired = await observe(restartArgs({ ...retirementRequest, retireOwner: true }));
+  assert.equal(retired.stderr, '');
+  assert.deepEqual(JSON.parse(retired.stdout), { ...expected, status: 'restart-lock-retirement-owner-retired' });
+  await assert.rejects(lstat(owner), { code: 'ENOENT' });
+  const current = await lstat(directory, { bigint: true });
+  assert.ok(current.isDirectory());
+  assert.equal(current.dev.toString(), previous.restartDirectory.dev);
+  assert.equal(current.ino.toString(), previous.restartDirectory.ino);
+  assert.deepEqual(await readdir(directory), []);
+  const intentBytes = await readFile(path.join(control, descriptor.path));
+  assert.equal(createHash('sha256').update(intentBytes).digest('hex'), descriptor.sha256);
 }

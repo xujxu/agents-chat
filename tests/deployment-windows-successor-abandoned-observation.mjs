@@ -292,6 +292,8 @@ export async function assertSuccessorAbandonedAfterDeath({
         committedValue: JSON.parse(snapshots[7].bytes), snapshot: snapshots[8], observe, restartArgs,
         processIdentity, captureWorkerFields,
       });
+      // The distinct observer has retired only the dead owner file; its empty directory remains.
+      ownerSnapshot = undefined;
       retirementObserved = true;
     } else if (blockedCommitted && !blockedState) {
       const committedRequest = { ...request, restartCommitted: previous.restartCommitted };
@@ -535,7 +537,7 @@ export async function assertSuccessorAbandonedAfterDeath({
     const current = await lstat(directory, { bigint: true });
     assert.equal(current.dev.toString(), previous.restartDirectory.dev);
     assert.equal(current.ino.toString(), previous.restartDirectory.ino);
-    assert.deepEqual(await readdir(directory), blockedOwner ? ['owner.json'] : []);
+    assert.deepEqual(await readdir(directory), ownerSnapshot ? ['owner.json'] : []);
     if (ownerSnapshot) { await unlink(ownerSnapshot.file); }
     await rmdir(directory);
   } else { await assert.rejects(lstat(directory), { code: 'ENOENT' }); }
@@ -557,6 +559,7 @@ export async function assertSuccessorAbandonedAfterDeath({
     }
     if (retirementObserved) {
       console.log('PASS: distinct restart lock retirement observer proves the retirer and owner dead from the exact intent and refuses a duplicate without authority');
+      console.log('PASS: distinct restart lock owner retirer deletes only the dead owner file from the exact intent and preserves its empty directory without authority');
       console.log('PASS: ordinary reconciliation reports the dead restart attempt as lock-retiring while staying blocked without authority');
     }
     if (releasedObserved) {
