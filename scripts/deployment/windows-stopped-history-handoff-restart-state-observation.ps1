@@ -16,7 +16,8 @@ function Initialize-AgentsChatStoppedHistoryHandoffRestartStateObservation([hash
     if ($transition.AttemptId -cne $Context.HistoryHandoffRestartPrepared.Request.AttemptId) {
         throw 'Restart state observation attempt differs.'
     }
-    $record = Read-AgentsChatRetirementJson ($transition.Intent.ReadText())
+    # nextState legitimately carries null phase fields; the full record is re-verified by the intent assertion below.
+    $record = Read-AgentsChatRetirementJson ($transition.Intent.ReadText()) -AllowNull
     Assert-AgentsChatRetirementFields $record @(
         'version', 'phase', 'attemptId', 'control', 'project', 'controlIdentity', 'previousOperationId',
         'prepared', 'committed', 'newOwner', 'lockIdentity', 'lock', 'state', 'oldState', 'nextState',
