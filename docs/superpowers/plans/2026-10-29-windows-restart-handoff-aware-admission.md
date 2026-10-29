@@ -56,3 +56,43 @@ Earlier observers require every prior actor to be dead. Owner-admission mode acc
 
 - [ ] Ordinary admission without handoff evidence is unchanged.
 - [ ] Actions green, with all ten shard logs merged and all 68 receipts present.
+
+## Redesign: Handoff-Aware Inactive Inspection (contract run 40933139938)
+
+The first contract run's `commitment` shard printed:
+
+```
+INACTIVE_HANDOFF_BUNDLE {"bundle":"...-inactive-control\\inactive-rollback-runtime-evidence",
+  "entries":[..., "configuration.json", "runtime-3100-639288961101249953.json", ...]}
+Managed task observation refused: managed-task-open. Inactive task requires exactly one original readiness record and no guarded launch.
+```
+
+The proved prepared record's `observation.configuration` names the relocated physical bundle, which holds exactly
+one readiness record. The unchanged task action still names the original `inactive-rollback-runtime` bundle,
+whose readiness was relocated, so ordinary inspection refuses before any admission. Gate 61's ordinary-admission
+refusal is therefore unreachable after a released rollback, and gate 62 must inspect through the handoff proof.
+
+### Contract changes
+
+- `tests/deployment-windows-restart-preparation.mjs`: ordinary `inspectWindowsInactiveTask` must reject with
+  `DEPLOYMENT_WINDOWS_MANAGED_TASK_REFUSED`; `open()` uses
+  `inspectWindowsInactiveTaskHandoff({ taskName, project, pwsh, control, handoff })` and its observation must
+  deep-equal `original.observation`. Ordinary admission on that scope must refuse with
+  "requires its handoff-aware admission"; copied handoffs must refuse.
+
+### Production changes
+
+- `windows-managed-task.mjs`: export `inspectWindowsInactiveTaskHandoff`; it captures the handoff with a fixed
+  descriptor key order, resolves the control root and starts the controller with `-HandoffControl` and a base64
+  `-Handoff`. The retained scope remembers the handoff; handoff admission must present the identical handoff and
+  ordinary admission on a handoff scope refuses.
+- `windows-managed-task-controller.ps1`: with `-HandoffControl`/`-Handoff` (inactive only), open the owner proof via
+  `Get-AgentsChatStoppedHistoryHandoffProvedObservation`, then `Open-AgentsChatInactiveTask` with that observation.
+  The scope accepts only `check`, `close` and `capture-handoff-admission`, whose raw handoff and control must equal
+  the inspection's.
+- `windows-stopped-history-handoff-admission.ps1`: shared `Open-AgentsChatStoppedHistoryHandoffOwnerProof`;
+  `Get-AgentsChatStoppedHistoryHandoffProvedObservation` reads the proved prepared record's `observation` and
+  closes the proof.
+- `windows-inactive-task.ps1`: `Open-AgentsChatInactiveTask` accepts an optional proved observation. Its project,
+  task name, definition, security descriptor, principal SID and configuration SHA-256 must equal the live task; the
+  proved canonical `configuration.json` path then replaces the action path for readiness and repeated assertions.

@@ -335,7 +335,8 @@ export async function assertRestartPreparation({
     // The exact live owner holds its committed lock and written preflight, yet ordinary inactive admission
     // must not bypass the handoff verifier while handoff evidence remains.
     const {
-      inspectWindowsInactiveTask, captureWindowsInactiveTaskAdmission, captureWindowsInactiveTaskHandoffAdmission,
+      inspectWindowsInactiveTask, inspectWindowsInactiveTaskHandoff, captureWindowsInactiveTaskAdmission,
+      captureWindowsInactiveTaskHandoffAdmission,
       assertWindowsInactiveTaskAdmissionBinding,
     } = await load('windows-managed-task.mjs');
     const { createWindowsInactiveTaskAdmissionRecord } = await load('windows-inactive-task-admission.mjs');
@@ -346,11 +347,13 @@ export async function assertRestartPreparation({
       retirement: previous.retirement, terminal: previous.terminal, successor: previous.successor,
       abandoned: previous.successorAbandoned, ...restartHandoff,
     };
+    // The released rollback relocated readiness out of the task action bundle, so ordinary inspection refuses and
+    // only the proved handoff observation reaches the physical bundle.
+    await assert.rejects(inspectWindowsInactiveTask({ taskName: original.observation.taskName, project: original.project, pwsh }),
+      { code: 'DEPLOYMENT_WINDOWS_MANAGED_TASK_REFUSED' });
     const open = async () => {
-      const bundle = path.dirname(original.observation.configuration);
-      console.error(`INACTIVE_HANDOFF_BUNDLE ${JSON.stringify({ bundle, entries: (await readdir(bundle)).sort() })}`);
-      const scope = await inspectWindowsInactiveTask({
-        taskName: original.observation.taskName, project: original.project, pwsh,
+      const scope = await inspectWindowsInactiveTaskHandoff({
+        taskName: original.observation.taskName, project: original.project, pwsh, control, handoff,
       });
       assert.deepEqual(JSON.parse(JSON.stringify(scope.observation)), original.observation);
       return scope;
