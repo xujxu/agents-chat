@@ -69,7 +69,7 @@ function Get-AgentsChatStoppedHistoryHandoffProvedObservation(
         }
         $prepared = $proof.HistoryHandoffObservedCommit.Prepared
         $prepared.Check()
-        $record = Read-AgentsChatRetirementJson ($prepared.ReadText())
+        $record = Read-AgentsChatRetirementJson ($prepared.ReadText()) -AllowNull
         if ($record -isnot [Collections.IDictionary] -or $record.observation -isnot [Collections.IDictionary]) {
             throw 'Handoff-aware inspection observation differs.'
         }
