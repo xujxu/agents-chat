@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { fixtureArgs, descriptorArgs } from './deployment-windows-lock-retirement-observation.mjs';
 import { publishSuccessorAbandonment } from './deployment-windows-successor-abandonment.mjs';
+import { assertDeadRestartRetirement } from './deployment-windows-restart-retirement-death.mjs';
 
 const predecessor = previous => ({
   attemptId: previous.attemptId, prepared: previous.prepared, committed: previous.committed,
@@ -54,12 +55,14 @@ export async function holdSuccessorAbandoned({ source, control, pwsh, previous }
 export async function assertSuccessorAbandonedAfterDeath({
   source, control, pwsh, admission, previous, state, completionBytes, restart = false, blockedDirectory = false,
   blockedOwner = false, blockedCommitted = false, blockedState = false, blockedReleased = false,
+  blockedRetirement = false,
 }) {
   assert.ok(!blockedDirectory || restart);
   assert.ok(!blockedOwner || blockedDirectory);
   assert.ok(!blockedCommitted || blockedOwner);
   assert.ok(!blockedState || blockedCommitted);
   assert.ok(!blockedReleased || (blockedCommitted && !blockedState));
+  assert.ok(!blockedRetirement || (blockedCommitted && !blockedState && !blockedReleased));
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
   const identity = await processIdentity(process.pid);
@@ -81,7 +84,8 @@ export async function assertSuccessorAbandonedAfterDeath({
   for (const descriptor of [previous.prepared, previous.committed, previous.retirement,
     previous.terminal, previous.successor, previous.successorAbandoned, ...(restart ? [previous.restartPrepared] : []),
     ...(blockedCommitted ? [previous.restartCommitted] : []), ...(blockedState ? [previous.restartStateIntent] : []),
-    ...(blockedReleased ? [previous.restartRelease, previous.restartReleased] : [])]) {
+    ...(blockedReleased ? [previous.restartRelease, previous.restartReleased] : []),
+    ...(blockedRetirement ? [previous.restartRetirement] : [])]) {
     const file = path.join(control, descriptor.path);
     const bytes = await readFile(file);
     const current = await lstat(file, { bigint: true });
@@ -182,6 +186,7 @@ export async function assertSuccessorAbandonedAfterDeath({
   let ownerSnapshot;
   let releasedObserved = false;
   let retirementPublished = false;
+  let retirementObserved = false;
   if (blockedDirectory) {
     if (blockedReleased) {
       await assert.rejects(lstat(directory), { code: 'ENOENT' });
@@ -280,6 +285,14 @@ export async function assertSuccessorAbandonedAfterDeath({
       await assert.rejects(observe(restartArgs(committedRequest)),
         error => error.message.includes('Restart committed observation failed; retain evidence.'));
       releasedObserved = true;
+    } else if (blockedRetirement) {
+      const { captureWorkerFields } = await load('worker-identity.mjs');
+      await assertDeadRestartRetirement({
+        control, identity, previous, original, newOwner: JSON.parse(published.bytes).newOwner,
+        committedValue: JSON.parse(snapshots[7].bytes), snapshot: snapshots[8], observe, restartArgs,
+        processIdentity, captureWorkerFields,
+      });
+      retirementObserved = true;
     } else if (blockedCommitted && !blockedState) {
       const committedRequest = { ...request, restartCommitted: previous.restartCommitted };
       const committedExpected = {
@@ -467,7 +480,7 @@ export async function assertSuccessorAbandonedAfterDeath({
     assert.equal(snapshots.length, 9);
     reconciled = true;
   }
-  if (retirementPublished) {
+  if (retirementPublished || retirementObserved) {
     const report = await reconcileInterruptedOperation(control);
     assert.equal(report.status, 'blocked');
     assert.equal(report.operationId, JSON.parse(state).operationId);
@@ -542,10 +555,16 @@ export async function assertSuccessorAbandonedAfterDeath({
       console.log('PASS: distinct restart lock retirer proves the committed owner dead and publishes only its exact retirement intent while lock and original state remain without authority');
       console.log('PASS: ordinary reconciliation reports the dead restart attempt as lock-retiring while staying blocked without authority');
     }
+    if (retirementObserved) {
+      console.log('PASS: distinct restart lock retirement observer proves the retirer and owner dead from the exact intent and refuses a duplicate without authority');
+      console.log('PASS: ordinary reconciliation reports the dead restart attempt as lock-retiring while staying blocked without authority');
+    }
     if (releasedObserved) {
       console.log('PASS: ordinary reconciliation reports the released restart attempt as lock-settled while staying blocked without authority');
     }
-    console.log(blockedReleased
+    console.log(blockedRetirement
+      ? 'PASS: actual restart lock retirer death preserves its exact intent dead owner and directory for a distinct observer without deletion authority'
+      : blockedReleased
       ? 'PASS: actual restart releaser death after exact lock release preserves ten records and original state for a distinct observer without authority'
       : blockedState
       ? 'PASS: actual restart state writer death preserves its written state nine records owner and directory for a distinct observer without authority'

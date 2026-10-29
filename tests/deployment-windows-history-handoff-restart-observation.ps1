@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory)][string]$Control,
     [Parameter(Mandatory)][int]$ControllerPid,
     [Parameter(Mandatory)][string]$ControllerIdentity,
-    [Parameter(Mandatory)][string]$Request
+    [Parameter(Mandatory)][string]$Request,
+    [switch]$Hold
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -26,6 +27,9 @@ try {
     $observeState = $observeCommitted -and ($inputRecord.Contains('restartStateIntent') -or $inputRecord.Contains('restartState'))
     if ($observeState) { $fields += @('restartStateIntent', 'restartState') }
     $retireRestart = $observeCommitted -and -not $observeState -and $inputRecord.Contains('retireRestart')
+    $observeRetirement = $observeCommitted -and -not $observeState -and $inputRecord.Contains('restartRetirement')
+    if ($observeRetirement) { $fields += 'restartRetirement' }
+    if ($Hold -and (-not $retireRestart -or $observeRetirement)) { throw 'Held restart observation requires a fresh retirement.' }
     if ($retireRestart) {
         $fields += 'retireRestart'
         if ($inputRecord.retireRestart -isnot [bool] -or $inputRecord.retireRestart -ne $true) {
@@ -62,6 +66,37 @@ try {
                 $refused = $true
             }
             if (-not $refused) { throw 'Read-only restart state observer accepted mutation.' }
+        }
+        [Console]::Out.WriteLine(($observation | ConvertTo-Json -Depth 12 -Compress))
+        return
+    }
+    if ($observeRetirement) {
+        . (Join-Path $Source 'windows-stopped-history-handoff-restart-retirement.ps1')
+        $scope = Open-AgentsChatStoppedHistoryHandoffRestartRetirementObservation $Control $ControllerPid $ControllerIdentity `
+            $inputRecord.attemptId $inputRecord.prepared $inputRecord.committed $inputRecord.retirement `
+            $inputRecord.terminal $inputRecord.successor $inputRecord.successorAbandoned $inputRecord.restart `
+            $inputRecord.restartCommitted $inputRecord.restartRetirement
+        $observation = Get-AgentsChatStoppedHistoryHandoffRestartRetirementObservation $scope $ControllerPid $ControllerIdentity
+        if ($scope.HistoryHandoffRestartRetirementObserver -ne $true -or
+            $scope.HistoryHandoffRestartCommittedObserver -ne $true -or
+            $scope.ContainsKey('HistoryHandoffRestartRetirer') -or
+            $scope.ContainsKey('HistoryHandoffRestartCommitter') -or
+            $scope.ContainsKey('HistoryHandoffRestartStateIntender') -or
+            $scope.ContainsKey('HistoryHandoffRestartStateWriter')) {
+            throw 'Restart lock retirement observer gained a mutation role.'
+        }
+        $refused = $false
+        try { $null = Publish-AgentsChatStoppedHistoryHandoffRestartRetirement $scope $ControllerPid $ControllerIdentity }
+        catch {
+            if ($_.Exception.Message -cne 'Restart lock retirement requires its independent native role.') { throw }
+            $refused = $true
+        }
+        if (-not $refused) { throw 'Read-only restart lock retirement observer accepted mutation.' }
+        if ($retireRestart) {
+            # A fresh retirer must not replace or duplicate a dead retirer's exact intent.
+            $scope.HistoryHandoffRestartRetirer = $true
+            $null = Publish-AgentsChatStoppedHistoryHandoffRestartRetirement $scope $ControllerPid $ControllerIdentity
+            throw 'Fresh restart lock retirer duplicated an observed intent.'
         }
         [Console]::Out.WriteLine(($observation | ConvertTo-Json -Depth 12 -Compress))
         return
@@ -110,6 +145,15 @@ try {
             $observation = Publish-AgentsChatStoppedHistoryHandoffRestartRetirement $scope $ControllerPid $ControllerIdentity
             if (-not (Test-Path -LiteralPath (Join-Path $Control 'lock\owner.json') -PathType Leaf)) {
                 throw 'Restart lock retirement intent removed the dead owner.'
+            }
+            if ($Hold) {
+                [Console]::Out.WriteLine((@{
+                    type='ready'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+                    control=$Control; controllerIdentity=$ControllerIdentity; value=$observation
+                } | ConvertTo-Json -Depth 12 -Compress))
+                [Console]::Out.Flush()
+                $null = [Console]::In.ReadLine()
+                throw 'Held restart lock retirement fixture received unexpected controller input.'
             }
             $refused = $false
             try { $null = Publish-AgentsChatStoppedHistoryHandoffRestartRetirement $scope $ControllerPid $ControllerIdentity }

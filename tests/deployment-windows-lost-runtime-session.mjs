@@ -11,6 +11,7 @@ import { holdLockRetirementSettlement, assertLockRetirementSettlementAfterDeath 
 import { holdSuccessorPrepared, assertSuccessorAfterDeath } from './deployment-windows-successor-observation.mjs';
 import { holdSuccessorAbandoned, assertSuccessorAbandonedAfterDeath } from './deployment-windows-successor-abandoned-observation.mjs';
 import { assertRestartPreparation } from './deployment-windows-restart-preparation.mjs';
+import { holdRestartRetirement } from './deployment-windows-restart-retirement-death.mjs';
 
 const [source, control, pwsh, mode = 'complete', crashStep = 'task-restored', terminalCrashStep = ''] = process.argv.slice(2);
 const load = name => import(pathToFileURL(path.join(source, name)).href);
@@ -511,6 +512,8 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   const restartStateDeadResume = mode === 'resume-restart-state-dead-history';
   const restartReleasedCrash = mode === 'crash-restart-released-history';
   const restartReleasedDeadResume = mode === 'resume-restart-released-dead-history';
+  const restartRetirementCrash = mode === 'crash-restart-retirement-history';
+  const restartRetirementDeadResume = mode === 'resume-restart-retirement-dead-history';
   const restartCrash = mode === 'crash-restart-prepared-history';
   const restartResume = mode === 'resume-restart-prepared-history';
   const successorAbandonedCheck = mode === 'check-successor-abandoned-history';
@@ -537,14 +540,15 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     'crash-restart-committed-history': 'Committed', 'resume-restart-committed-dead-history': 'Committed',
     'crash-restart-state-history': 'Committed', 'resume-restart-state-dead-history': 'Committed',
     'crash-restart-released-history': 'Committed', 'resume-restart-released-dead-history': 'Committed',
+    'crash-restart-retirement-history': 'Committed', 'resume-restart-retirement-dead-history': 'Committed',
     'crash-restart-directory-history': 'Committed', 'resume-restart-directory-dead-history': 'Committed',
     'crash-restart-prepared-history': 'Committed', 'resume-restart-prepared-history': 'Committed',
   };
   const lockStage = lockStages[mode];
   const lockCrash = Boolean(lockStage && mode.startsWith('crash-') &&
-    !retirementCrash && !ownerRetirementCrash && !directoryRetirementCrash && !settlementCrash && !successorCrash && !successorAbandonedCrash && !restartCrash && !restartDirectoryCrash && !restartOwnerCrash && !restartCommittedCrash && !restartStateCrash && !restartReleasedCrash);
+    !retirementCrash && !ownerRetirementCrash && !directoryRetirementCrash && !settlementCrash && !successorCrash && !successorAbandonedCrash && !restartCrash && !restartDirectoryCrash && !restartOwnerCrash && !restartCommittedCrash && !restartStateCrash && !restartReleasedCrash && !restartRetirementCrash);
   const lockResume = Boolean(lockStage &&
-    (mode.startsWith('resume-') || retirementCrash || ownerRetirementCrash || directoryRetirementCrash || ownerRetirementCheck || settlementCrash || settlementCheck || successorCrash || successorCheck || successorAbandonedCrash || successorAbandonedCheck || restartCrash || restartDirectoryCrash || restartOwnerCrash || restartCommittedCrash || restartStateCrash || restartReleasedCrash));
+    (mode.startsWith('resume-') || retirementCrash || ownerRetirementCrash || directoryRetirementCrash || ownerRetirementCheck || settlementCrash || settlementCheck || successorCrash || successorCheck || successorAbandonedCrash || successorAbandonedCheck || restartCrash || restartDirectoryCrash || restartOwnerCrash || restartCommittedCrash || restartStateCrash || restartReleasedCrash || restartRetirementCrash));
   if (['crash-history', 'resume-history', 'crash-finalized-history', 'resume-finalized-history',
     'resume-history-saved', 'crash-completed-history', 'resume-completed-history',
     'crash-prepared-history', 'resume-prepared-history',
@@ -686,7 +690,15 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       try { await new Promise(() => {}); } finally { clearInterval(timer); }
     }
     const completionBytes = await readFile(completionFile);
-    if (restartReleasedCrash) {
+    if (restartRetirementCrash) {
+      await holdRestartRetirement({ source, control, pwsh, previous: JSON.parse(crashStep) });
+      throw new Error('Held restart lock retirer unexpectedly returned.');
+    } else if (restartRetirementDeadResume) {
+      await assertSuccessorAbandonedAfterDeath({
+        source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
+        restart: true, blockedDirectory: true, blockedOwner: true, blockedCommitted: true, blockedRetirement: true,
+      });
+    } else if (restartReleasedCrash) {
       await assertRestartPreparation({
         source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
         publish: true, createDirectory: true, publishOwner: true, commitRestart: true,

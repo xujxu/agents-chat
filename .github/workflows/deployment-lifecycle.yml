@@ -321,7 +321,9 @@ jobs:
             'PASS: actual restart releaser death after exact lock release preserves ten records and original state for a distinct observer without authority',
             'PASS: ordinary reconciliation reports the released restart attempt as lock-settled while staying blocked without authority',
             'PASS: distinct restart lock retirer proves the committed owner dead and publishes only its exact retirement intent while lock and original state remain without authority',
-            'PASS: ordinary reconciliation reports the dead restart attempt as lock-retiring while staying blocked without authority'
+            'PASS: ordinary reconciliation reports the dead restart attempt as lock-retiring while staying blocked without authority',
+            'PASS: actual restart lock retirer death preserves its exact intent dead owner and directory for a distinct observer without deletion authority',
+            'PASS: distinct restart lock retirement observer proves the retirer and owner dead from the exact intent and refuses a duplicate without authority'
           )) {
             if ($historyOutput -cnotcontains $receipt) { throw "Missing stopped-history acceptance receipt: $receipt" }
           }
