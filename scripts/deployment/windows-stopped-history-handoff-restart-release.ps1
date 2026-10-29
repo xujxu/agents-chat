@@ -1,4 +1,4 @@
-. (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-restart-commit.ps1')
+. (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-restart-state-write.ps1')
 
 function Get-AgentsChatStoppedHistoryHandoffRestartReleaseRecord(
     [hashtable]$Context, $Creator, [string]$Time, [switch]$Released
@@ -19,6 +19,20 @@ function Get-AgentsChatStoppedHistoryHandoffRestartReleaseRecord(
     if ($state.ReadText() -cne $record.oldState) { throw 'Restart release original state differs.' }
     $committed = $Context.HistoryHandoffRestartCommitted
     $lock = $Context.HistoryHandoffRestartLock
+    $written = $Context.ContainsKey('HistoryHandoffRestartState')
+    if ($written) {
+        Assert-AgentsChatStoppedHistoryHandoffRestartStateIntent $Context
+        $stateIntent = $Context.HistoryHandoffRestartStateIntent
+        $writtenState = $Context.HistoryHandoffRestartState
+        $text = Get-AgentsChatStoppedHistoryHandoffRestartStateText $Context
+        $writtenState.File.Check()
+        if ($writtenState.File.ReadText() -cne $text) { throw 'Restart release written state differs from its ninth record.' }
+        $descriptor = Get-AgentsChatStoppedHandoffDescriptor $writtenState.File 'state.json'
+        foreach ($field in @('path', 'dev', 'ino', 'bytes', 'sha256')) {
+            if ($descriptor[$field] -cne $writtenState.Descriptor[$field]) { throw 'Restart release written state differs.' }
+        }
+        if (-not $Released) { Assert-AgentsChatStoppedHistoryHandoffLockRetirementTime $Time $stateIntent.CreatedAt }
+    }
     $value = [ordered]@{
         version=1
         phase=$(if ($Released) { 'stopped-history-handoff-restart-released' } else { 'stopped-history-handoff-restart-release-prepared' })
@@ -27,8 +41,12 @@ function Get-AgentsChatStoppedHistoryHandoffRestartReleaseRecord(
         previousOperationId=$Context.OperationId
         prepared=$prepared.Descriptor; committed=$committed.Descriptor; newOwner=$record.newOwner
         lockIdentity=$lock.DirectoryIdentity; lock=$lock.OwnerDescriptor; state=$record.state
-        creator=$Creator
     }
+    if ($written) {
+        $value.stateIntent = $stateIntent.Descriptor
+        $value.writtenState = $writtenState.Descriptor
+    }
+    $value.creator = $Creator
     if ($Released) {
         $intent = $Context.HistoryHandoffRestartRelease
         Assert-AgentsChatStoppedHistoryHandoffLockRetirementTime $Time $intent.Time
@@ -122,9 +140,21 @@ function Remove-AgentsChatStoppedHistoryHandoffRestartLock(
         if ($Context.ContainsKey('HistoryHandoffRestartRelease') -or $Context.ContainsKey('HistoryHandoffRestartReleased')) {
             throw 'Restart release already retained.'
         }
-        foreach ($key in @('HistoryHandoffRestartStateIntent', 'HistoryHandoffRestartStateIntender',
-            'HistoryHandoffRestartStateWriter', 'HistoryHandoffRestartStateStage', 'HistoryHandoffRestartState')) {
-            if ($Context.ContainsKey($key)) { throw 'Restart release follows a state transition.' }
+        $written = $Context.ContainsKey('HistoryHandoffRestartState')
+        if ($written) {
+            # Only the live writer that acknowledged its exact ninth-record write may release after it.
+            if (-not $Context.ContainsKey('HistoryHandoffRestartStateWriter') -or
+                $Context.HistoryHandoffRestartStateWriter -ne $true -or
+                -not $Context.ContainsKey('HistoryHandoffRestartStateIntent') -or
+                $Context.ContainsKey('HistoryHandoffRestartStateStage') -or
+                $Context.ContainsKey('HistoryHandoffRestartStateObserver')) {
+                throw 'Restart release follows an unacknowledged state transition.'
+            }
+        } else {
+            foreach ($key in @('HistoryHandoffRestartStateIntent', 'HistoryHandoffRestartStateIntender',
+                'HistoryHandoffRestartStateWriter', 'HistoryHandoffRestartStateStage')) {
+                if ($Context.ContainsKey($key)) { throw 'Restart release follows a state transition.' }
+            }
         }
         if (-not $Context.ContainsKey('HistoryHandoffRestartCommitter') -or $Context.HistoryHandoffRestartCommitter -ne $true) {
             throw 'Restart release requires its exact committed owner.'
@@ -136,6 +166,15 @@ function Remove-AgentsChatStoppedHistoryHandoffRestartLock(
         }
         if ([IO.Directory]::GetFileSystemEntries($Context.Control, 'state.json.lock*').Length) {
             throw 'Restart release found a state stage.'
+        }
+        if ($written -and -not $Context.ContainsKey('HistoryStateTransition')) {
+            # The acknowledged write replaced the original state inode; original-state readers must resolve it through the ninth record.
+            Initialize-AgentsChatStoppedHistoryStateTransition $Context ([ordered]@{
+                restart=$Context.HistoryHandoffRestartPrepared.Descriptor
+                restartCommitted=$Context.HistoryHandoffRestartCommitted.Descriptor
+                restartStateIntent=$Context.HistoryHandoffRestartStateIntent.Descriptor
+                restartState=$Context.HistoryHandoffRestartState.Descriptor
+            })
         }
         Assert-AgentsChatStoppedHistoryHandoffRestartCommitted $Context
         $null = Get-AgentsChatStoppedHistoryHandoffSuccessorAbandonedObservation $Context $ControllerPid $ControllerIdentity
@@ -181,13 +220,20 @@ function Remove-AgentsChatStoppedHistoryHandoffRestartLock(
         Assert-AgentsChatStoppedHistoryHandoffRestartReleased $Context
         $request = $Context.HistoryHandoffRestartPrepared.Request
         $record = Get-AgentsChatStoppedHistoryHandoffRestartBinding -Context $Context @request
-        return [ordered]@{
+        $result = [ordered]@{
             status='restart-released'; attemptId=$request.AttemptId
             prepared=$Context.HistoryHandoffRestartPrepared.Descriptor
             committed=$Context.HistoryHandoffRestartCommitted.Descriptor
             retirement=$retirement; released=$released; state=$record.state
-            runtimeAuthority=$false; lockAuthority=$false; taskAuthority=$false
         }
+        if ($written) {
+            $result.stateIntent = $Context.HistoryHandoffRestartStateIntent.Descriptor
+            $result.writtenState = $Context.HistoryHandoffRestartState.Descriptor
+        }
+        $result.runtimeAuthority = $false
+        $result.lockAuthority = $false
+        $result.taskAuthority = $false
+        return $result
     } catch {
         $Context.Poisoned = $true
         throw [InvalidOperationException]::new('Restart release failed; retain evidence.', $_.Exception)
