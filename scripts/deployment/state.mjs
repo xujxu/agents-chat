@@ -4,6 +4,7 @@ import path from 'node:path';
 import { processIdentity } from './process-identity.mjs';
 import { captureWorkerFields } from './worker-identity.mjs';
 import { canonicalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
+import { describeWindowsStoppedHistoryHandoffEntries } from './windows-stopped-history-handoff-report.mjs';
 
 const transitions = {
   preflight: ['stopped', 'source-selected', 'preflight-refused', 'already-current'],
@@ -394,10 +395,13 @@ export async function requireNoServiceMaintenance(directory, { allowLiveRetireme
 export async function reconcileInterruptedOperation(root) {
   const directory = await ownedDirectory(root);
   const state = await loadState(directory);
-  if ((await readdir(directory)).some(name => serviceMaintenanceEntry(name) || workerRetirementEntry(name))) {
+  const entries = await readdir(directory);
+  if (entries.some(name => serviceMaintenanceEntry(name) || workerRetirementEntry(name))) {
+    const handoff = process.platform === 'win32' ? describeWindowsStoppedHistoryHandoffEntries(entries) : null;
     return {
       status: 'blocked', operationId: state?.operationId ?? null, phase: state?.phase ?? null,
       message: 'Service, task or worker retirement evidence exists. Retain it; inspect before restart or recovery.',
+      ...(handoff ? { handoff } : {}),
     };
   }
   let recoveryExists = true;

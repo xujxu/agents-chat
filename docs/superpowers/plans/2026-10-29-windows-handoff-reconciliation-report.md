@@ -35,20 +35,20 @@ Attempt status is the first rule that matches:
 - Modify: `tests/deployment-windows-successor-abandoned-observation.mjs` (native nine-record report in `restart-state-dead-history`)
 - Modify: `.github/workflows/deployment-lifecycle.yml` (receipt)
 
-- [ ] The pure contract covers these cases:
+- [x] The pure contract covers these cases:
   - three attempts with mixed case;
   - an incomplete attempt;
   - unrecognized names (`-snapshot.json`, `inactive-handoff-malformed.json`, zero GUID);
   - non-handoff names are ignored;
   - the result is frozen and deeply detached.
-- [ ] Windows reconcile returns `blocked`, the same message as before, and an exact `handoff` report. Owner bytes are unchanged.
-- [ ] Native: after the dead restart state writer, ordinary reconciliation returns `blocked` with `operationId` equal to the written state's operation. It reports three attempts:
+- [x] Windows reconcile returns `blocked`, the same message as before, and an exact `handoff` report. Owner bytes are unchanged.
+- [x] Native: after the dead restart state writer, ordinary reconciliation returns `blocked` with `operationId` equal to the written state's operation. It reports three attempts:
   - the original attempt as `lock-settled`;
   - the successor as `abandoned`;
   - the restart as `state-transition`.
   It reports no unrecognized names, and all evidence bytes and identities remain unchanged.
-- [ ] Required receipt: `PASS: ordinary reconciliation reports nine exact handoff records as three attempts while staying blocked without authority`.
-- [ ] Actions red: missing `windows-stopped-history-handoff-report.mjs` (Contracts) and the native receipt.
+- [x] Required receipt: `PASS: ordinary reconciliation reports nine exact handoff records as three attempts while staying blocked without authority`.
+- [x] Actions red: Contracts run `40852362408` at `ad0f7699` (job `123374745206`) failed with `ERR_MODULE_NOT_FOUND` for `windows-stopped-history-handoff-report.mjs`, and Windows reconciliation lacked the `handoff` field.
 
 ### Task 2: Production
 
