@@ -17,13 +17,14 @@
 - Modify: `tests/deployment-windows-successor-abandoned-observation.mjs` (committed-dead branch)
 - Modify: `.github/workflows/deployment-lifecycle.yml` (two receipts)
 
-- [ ] Without its role the fixture is refused with `Restart lock retirement requires its independent native role.` and retains nothing.
-- [ ] With the role the result is `{status:'restart-lock-retirement-prepared', attemptId, prepared, committed, retirement, lockIdentity, lock, state, runtimeAuthority:false, lockAuthority:false, taskAuthority:false}`; `lock\owner.json` remains; a duplicate in the same scope is refused with `Restart lock retirement failed; retain evidence.`.
-- [ ] Node verifies the record field-for-field: binding of the release record plus `owner` (exact dead committed creator), `creator` (this controller and a now-dead distinct bridge), `createdAt` between `committedAt` and now; identity-pinned descriptor, `nlink` 1.
-- [ ] A fresh committed observer and a fresh retirer are both refused once the ninth record exists.
-- [ ] Reconciliation stays blocked on the original operation and reports the restart attempt `['prepared','committed','lock-retirement']` as `lock-retiring`; nine snapshots stay exact.
-- [ ] Receipts `PASS: distinct restart lock retirer proves the committed owner dead and publishes only its exact retirement intent while lock and original state remain without authority` and `PASS: ordinary reconciliation reports the dead restart attempt as lock-retiring while staying blocked without authority`.
-- [ ] Actions red: commitment shard fails because `windows-stopped-history-handoff-restart-retirement.ps1` does not exist.
+- [x] Without its role the fixture is refused with `Restart lock retirement requires its independent native role.` and retains nothing.
+- [x] With the role the result is `{status:'restart-lock-retirement-prepared', attemptId, prepared, committed, retirement, lockIdentity, lock, state, runtimeAuthority:false, lockAuthority:false, taskAuthority:false}`; `lock\owner.json` remains; a duplicate in the same scope is refused with `Restart lock retirement failed; retain evidence.`.
+- [x] Node verifies the record field-for-field: binding of the release record plus `owner` (exact dead committed creator), `creator` (this controller and a now-dead distinct bridge), `createdAt` between `committedAt` and now; identity-pinned descriptor, `nlink` 1.
+- [x] A fresh committed observer and a fresh retirer are both refused once the ninth record exists.
+- [x] Reconciliation stays blocked on the original operation and reports the restart attempt `['prepared','committed','lock-retirement']` as `lock-retiring`; nine snapshots stay exact.
+- [x] Receipts `PASS: distinct restart lock retirer proves the committed owner dead and publishes only its exact retirement intent while lock and original state remain without authority` and `PASS: ordinary reconciliation reports the dead restart attempt as lock-retiring while staying blocked without authority`.
+- [x] Actions red: commitment shard fails because `windows-stopped-history-handoff-restart-retirement.ps1` does not exist.
+  Evidence: test contract `7a50fd83`, focused run `40895443707`, commitment shard job `123523166334` failed with "The term ...\windows-stopped-history-handoff-restart-retirement.ps1 is not recognized". The same run's release shard also failed on a `-ceq` multi-value comparison in the contract, fixed in `ae425d79`.
 
 ### Task 2: Production module (green)
 
