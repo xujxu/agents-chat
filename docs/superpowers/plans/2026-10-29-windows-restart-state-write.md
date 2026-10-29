@@ -35,6 +35,9 @@
 **Files:**
 - Create: `scripts/deployment/windows-stopped-history-handoff-restart-state-write.ps1`
 
-- [ ] Stage, ancestor observation, release, `PublishSourceFile`, reopen and inode check, mirroring `Publish-AgentsChatInactiveRollbackState`.
-- [ ] Any failure poisons and throws `Restart state write failed; retain evidence.`
+- [x] Stage, ancestor observation, release, `PublishSourceFile`, reopen and inode check, mirroring `Publish-AgentsChatInactiveRollbackState`.
+- [x] Any failure poisons and throws `Restart state write failed; retain evidence.`
+- [x] Stage admission fix `ea0c6a51`: the retained `state.json.lock` stage is admitted by inventory only after its own `.Check()` while the writer re-observes ancestors.
+- [x] Native write receipt: run `40831077522` commitment job `123305455678` printed the gate receipt at `2026-10-29T07:44:52Z`.
+- [x] Boundary flow fix `614e3c11`: written/dead state boundaries end at their transition proof, because generic identity-pinned archive readers correctly refuse once the original inode is replaced.
 - [ ] Actions green and all required receipts present across the four shards; Contracts green.
