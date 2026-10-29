@@ -1,19 +1,23 @@
 function Test-AgentsChatStoppedHistoryHandoffRestartRelease(
     [string]$Source, [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity, [switch]$Continue,
-    [switch]$StateWritten
+    [switch]$StateWritten, [switch]$IntentOnly
 ) {
+    if ($IntentOnly -and ($StateWritten -or -not $Continue)) { throw 'Held restart release intent requires a pre-write hold.' }
     . (Join-Path $Source 'windows-stopped-history-handoff-restart-release.ps1')
     $ownerPath = Join-Path $Context.Control 'lock\owner.json'
     $lock = $Context.HistoryHandoffRestartLock
     $ownerText = $lock.OwnerFile.ReadText()
-    $refused = $false
-    try { $null = Remove-AgentsChatStoppedHistoryHandoffRestartLock $Context $ControllerPid $ControllerIdentity }
-    catch {
-        if ($_.Exception.Message -cne 'Restart release requires its independent native role.') { throw }
-        $refused = $true
-    }
-    if (-not $refused -or $Context.Poisoned -or $lock.OwnerFile.ReadText() -cne $ownerText) {
-        throw 'Restart lock released without its independent role.'
+    foreach ($command in @('Remove-AgentsChatStoppedHistoryHandoffRestartLock',
+        'Publish-AgentsChatStoppedHistoryHandoffRestartReleaseIntent')) {
+        $refused = $false
+        try { $null = & $command $Context $ControllerPid $ControllerIdentity }
+        catch {
+            if ($_.Exception.Message -cne 'Restart release requires its independent native role.') { throw }
+            $refused = $true
+        }
+        if (-not $refused -or $Context.Poisoned -or $lock.OwnerFile.ReadText() -cne $ownerText) {
+            throw 'Restart lock released without its independent role.'
+        }
     }
     $attempt = $Context.HistoryHandoffRestartPrepared.Request.AttemptId
     foreach ($name in @("inactive-handoff-$attempt-lock-retirement.json", "inactive-handoff-$attempt-lock-retired.json")) {
@@ -36,6 +40,29 @@ function Test-AgentsChatStoppedHistoryHandoffRestartRelease(
     $owner = $lock.OwnerDescriptor
     $Context.HistoryHandoffRestartReleaser = $true
     . (Join-Path $PSScriptRoot 'deployment-windows-restart-publication-progress.ps1')
+    if ($IntentOnly) {
+        $result = Invoke-AgentsChatRestartPublicationProofFrames $Context $ControllerPid $ControllerIdentity release-intent
+        if ($result.status -cne 'restart-release-prepared' -or $result.attemptId -cne $attempt -or
+            $result.retirement.path -cne "inactive-handoff-$attempt-lock-retirement.json" -or
+            $result.Contains('released') -or $result.Contains('stateIntent') -or $result.Contains('writtenState') -or
+            $result.runtimeAuthority -ne $false -or $result.lockAuthority -ne $false -or $result.taskAuthority -ne $false) {
+            throw 'Restart release intent result differs.'
+        }
+        foreach ($field in @('path', 'dev', 'ino', 'bytes', 'sha256')) {
+            if ($result.committed[$field] -cne $committed.Descriptor[$field] -or
+                $result.lock[$field] -cne $owner[$field]) { throw 'Restart release intent binding differs.' }
+        }
+        # The live releaser holds its exact tenth record before deleting any part of the committed lock.
+        if (-not (Test-Path -LiteralPath $ownerPath -PathType Leaf) -or $lock.OwnerFile.ReadText() -cne $ownerText -or
+            (Test-Path -LiteralPath (Join-Path $Context.Control "inactive-handoff-$attempt-lock-retired.json")) -or
+            $lock.DirectoryIdentity -ne $directory -or $committed.File.ReadText() -cne $committedText -or
+            $Context.HistoryHandoffRestartPrepared.File.ReadText() -cne $preparedText -or
+            (Get-FileHash -LiteralPath (Join-Path $Context.Control 'state.json') -Algorithm SHA256).Hash -cne $stateHash -or
+            [IO.Directory]::GetFileSystemEntries($Context.Control, 'state.json.lock*').Length) {
+            throw 'Restart release intent changed its lock retained evidence or original state.'
+        }
+        return $result
+    }
     $result = Invoke-AgentsChatRestartPublicationProofFrames $Context $ControllerPid $ControllerIdentity release
     if ($result.status -cne 'restart-released' -or $result.attemptId -cne $attempt -or
         $result.retirement.path -cne "inactive-handoff-$attempt-lock-retirement.json" -or

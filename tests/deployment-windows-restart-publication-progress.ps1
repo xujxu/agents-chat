@@ -1,6 +1,6 @@
 function Invoke-AgentsChatRestartPublicationProofFrames(
     [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity,
-    [ValidateSet('directory', 'owner', 'committed', 'state-intent', 'state-write', 'release')][string]$Publication
+    [ValidateSet('directory', 'owner', 'committed', 'state-intent', 'state-write', 'release', 'release-intent')][string]$Publication
 ) {
     $progress = @{
         Observe=${function:Get-AgentsChatStoppedHistoryHandoffSuccessorAbandonedObservation}
@@ -27,6 +27,12 @@ function Invoke-AgentsChatRestartPublicationProofFrames(
         'state-intent' { Publish-AgentsChatStoppedHistoryHandoffRestartStateIntent $Context $ControllerPid $ControllerIdentity }
         'state-write' { Write-AgentsChatStoppedHistoryHandoffRestartState $Context $ControllerPid $ControllerIdentity }
         'release' { Remove-AgentsChatStoppedHistoryHandoffRestartLock $Context $ControllerPid $ControllerIdentity }
+        'release-intent' {
+            # The intent publisher proves its ancestors once; the held releaser re-proves them after its tenth record.
+            $intent = Publish-AgentsChatStoppedHistoryHandoffRestartReleaseIntent $Context $ControllerPid $ControllerIdentity
+            $null = Get-AgentsChatStoppedHistoryHandoffSuccessorAbandonedObservation $Context $ControllerPid $ControllerIdentity
+            $intent
+        }
     }
     if ($progress.Pass -ne 2) { throw 'Restart publication did not complete both ancestor observations.' }
     return $result

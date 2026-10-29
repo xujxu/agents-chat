@@ -218,7 +218,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        history_shard: [baseline, successor, restart, commitment, state, release, completion, postwrite]
+        history_shard: [baseline, successor, restart, commitment, state, release, takeover, completion, postwrite]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -263,7 +263,7 @@ jobs:
       - name: Require every actual stopped-history receipt across all native shards
         shell: pwsh
         run: |
-          $historyOutput = foreach ($shard in @('baseline', 'successor', 'restart', 'commitment', 'state', 'release', 'completion', 'postwrite')) {
+          $historyOutput = foreach ($shard in @('baseline', 'successor', 'restart', 'commitment', 'state', 'release', 'takeover', 'completion', 'postwrite')) {
             $file = "history-receipts/history-$shard.json"
             if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing stopped-history shard: $shard" }
             Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
@@ -326,6 +326,7 @@ jobs:
             'PASS: distinct restart lock retirer proves the committed owner dead and publishes only its exact retirement intent while lock and original state remain without authority',
             'PASS: ordinary reconciliation reports the dead restart attempt as lock-retiring while staying blocked without authority',
             'PASS: actual restart lock retirer death preserves its exact intent dead owner and directory for a distinct observer without deletion authority',
+            'PASS: actual restart releaser death after its exact release intent lets distinct fresh actors retire and settle only the dead owner lock without authority',
             'PASS: distinct restart lock retirement observer proves the retirer and owner dead from the exact intent and refuses a duplicate without authority',
             'PASS: distinct restart lock owner retirer deletes only the dead owner file from the exact intent and preserves its empty directory without authority',
             'PASS: fresh restart lock retirement observer takes over the owner-retired stage from the exact intent and retires only its empty directory without authority',

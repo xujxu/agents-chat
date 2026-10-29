@@ -517,6 +517,8 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   const restartReleasedCrash = mode === 'crash-restart-released-history';
   const restartReleasedDeadResume = mode === 'resume-restart-released-dead-history';
   const restartRetirementCrash = mode === 'crash-restart-retirement-history';
+  const restartReleaseIntentCrash = mode === 'crash-restart-release-intent-history';
+  const restartReleaseIntentDeadResume = mode === 'resume-restart-release-intent-dead-history';
   const restartRetirementDeadResume = mode === 'resume-restart-retirement-dead-history';
   const restartCrash = mode === 'crash-restart-prepared-history';
   const restartResume = mode === 'resume-restart-prepared-history';
@@ -547,14 +549,15 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     'crash-restart-released-history': 'Committed', 'resume-restart-released-dead-history': 'Committed',
     'crash-restart-state-released-history': 'Committed', 'resume-restart-state-released-dead-history': 'Committed',
     'crash-restart-retirement-history': 'Committed', 'resume-restart-retirement-dead-history': 'Committed',
+    'crash-restart-release-intent-history': 'Committed', 'resume-restart-release-intent-dead-history': 'Committed',
     'crash-restart-directory-history': 'Committed', 'resume-restart-directory-dead-history': 'Committed',
     'crash-restart-prepared-history': 'Committed', 'resume-restart-prepared-history': 'Committed',
   };
   const lockStage = lockStages[mode];
   const lockCrash = Boolean(lockStage && mode.startsWith('crash-') &&
-    !retirementCrash && !ownerRetirementCrash && !directoryRetirementCrash && !settlementCrash && !successorCrash && !successorAbandonedCrash && !restartCrash && !restartDirectoryCrash && !restartOwnerCrash && !restartCommittedCrash && !restartStateCrash && !restartReleasedCrash && !restartRetirementCrash);
+    !retirementCrash && !ownerRetirementCrash && !directoryRetirementCrash && !settlementCrash && !successorCrash && !successorAbandonedCrash && !restartCrash && !restartDirectoryCrash && !restartOwnerCrash && !restartCommittedCrash && !restartStateCrash && !restartReleasedCrash && !restartRetirementCrash && !restartReleaseIntentCrash);
   const lockResume = Boolean(lockStage &&
-    (mode.startsWith('resume-') || retirementCrash || ownerRetirementCrash || directoryRetirementCrash || ownerRetirementCheck || settlementCrash || settlementCheck || successorCrash || successorCheck || successorAbandonedCrash || successorAbandonedCheck || restartCrash || restartDirectoryCrash || restartOwnerCrash || restartCommittedCrash || restartStateCrash || restartReleasedCrash || restartRetirementCrash));
+    (mode.startsWith('resume-') || retirementCrash || ownerRetirementCrash || directoryRetirementCrash || ownerRetirementCheck || settlementCrash || settlementCheck || successorCrash || successorCheck || successorAbandonedCrash || successorAbandonedCheck || restartCrash || restartDirectoryCrash || restartOwnerCrash || restartCommittedCrash || restartStateCrash || restartReleasedCrash || restartRetirementCrash || restartReleaseIntentCrash));
   if (['crash-history', 'resume-history', 'crash-finalized-history', 'resume-finalized-history',
     'resume-history-saved', 'crash-completed-history', 'resume-completed-history',
     'crash-prepared-history', 'resume-prepared-history',
@@ -696,7 +699,19 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       try { await new Promise(() => {}); } finally { clearInterval(timer); }
     }
     const completionBytes = await readFile(completionFile);
-    if (restartRetirementCrash) {
+    if (restartReleaseIntentCrash) {
+      await assertRestartPreparation({
+        source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
+        publish: true, createDirectory: true, publishOwner: true, commitRestart: true,
+        releaseRestart: true, holdReleaseIntent: true,
+      });
+      throw new Error('Held restart release intent publisher unexpectedly returned.');
+    } else if (restartReleaseIntentDeadResume) {
+      await assertSuccessorAbandonedAfterDeath({
+        source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
+        restart: true, blockedDirectory: true, blockedOwner: true, blockedCommitted: true, blockedReleaseIntent: true,
+      });
+    } else if (restartRetirementCrash) {
       await holdRestartRetirement({ source, control, pwsh, previous: JSON.parse(crashStep) });
       throw new Error('Held restart lock retirer unexpectedly returned.');
     } else if (restartRetirementDeadResume) {

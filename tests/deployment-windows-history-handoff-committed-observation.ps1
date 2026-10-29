@@ -38,6 +38,7 @@ param(
     [switch]$HoldRestartState,
     [switch]$ReleaseRestart,
     [switch]$HoldRestartReleased,
+    [switch]$HoldRestartReleaseIntent,
     [string]$AbandonedDev,
     [string]$AbandonedIno,
     [int]$AbandonedBytes,
@@ -76,6 +77,7 @@ try {
         ($ReleaseRestart -and (-not $CommitRestart -or $HoldRestartCommitted -or
             ($PrepareRestartState -and (-not $WriteRestartState -or $HoldRestartState)))) -or
         ($HoldRestartReleased -and -not $ReleaseRestart) -or
+        ($HoldRestartReleaseIntent -and (-not $ReleaseRestart -or $PrepareRestartState -or $HoldRestartReleased)) -or
         ($PhasedPublication -and -not $PublishSuccessor) -or
         ($SealSuccessor -and -not $ObserveSuccessor) -or
         ($PublishSuccessor -and -not $PrepareSuccessor) -or
@@ -373,7 +375,7 @@ try {
         }
         . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart-release.ps1')
         $observation = Test-AgentsChatStoppedHistoryHandoffRestartRelease $Source $scope $ControllerPid $ControllerIdentity `
-            -Continue:$HoldRestartReleased
+            -Continue:($HoldRestartReleased -or $HoldRestartReleaseIntent) -IntentOnly:$HoldRestartReleaseIntent
     }
     if ($PrepareRestartState) {
         [Console]::Out.WriteLine((@{
@@ -414,7 +416,8 @@ try {
         $observation = Test-AgentsChatStoppedHistoryHandoffRestartRelease $Source $scope $ControllerPid $ControllerIdentity `
             -Continue:$HoldRestartReleased -StateWritten
     }
-    if ($HoldRestartDirectory -or $HoldRestartOwner -or $HoldRestartCommitted -or $HoldRestartState -or $HoldRestartReleased) {
+    if ($HoldRestartDirectory -or $HoldRestartOwner -or $HoldRestartCommitted -or $HoldRestartState -or $HoldRestartReleased -or
+        $HoldRestartReleaseIntent) {
         [Console]::Out.WriteLine((@{
             type='ready'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
             control=$Control; controllerIdentity=$ControllerIdentity; value=$observation

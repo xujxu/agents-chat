@@ -1,9 +1,10 @@
 function Stop-AgentsChatRestartDirectoryPublisher(
     [string]$Node, [string]$Source, [string]$Control, [string]$Pwsh,
     $Environment, [string]$HistoryActor, [string]$StateHash, [switch]$Owner, [switch]$Committed, [switch]$State,
-    [switch]$Released
+    [switch]$Released, [switch]$ReleaseIntent
 ) {
-    if ($State -or $Released) { $Committed = $true }
+    if ($ReleaseIntent -and ($State -or $Released)) { throw 'Restart release intent death requires pre-write commitment.' }
+    if ($State -or $Released -or $ReleaseIntent) { $Committed = $true }
     if ($Committed) { $Owner = $true }
     function Read-RestartDirectoryCheckpoint($Process, $Diagnostic, [string]$Prefix) {
         $clock = [Diagnostics.Stopwatch]::StartNew()
@@ -25,7 +26,7 @@ function Stop-AgentsChatRestartDirectoryPublisher(
     $publisher = [Deployment.WindowsControllerProcess]::Start($Node,
         @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
             $Source, $Control, $Pwsh,
-            $(if ($Released -and $State) { 'crash-restart-state-released-history' } elseif ($Released) { 'crash-restart-released-history' } elseif ($State) { 'crash-restart-state-history' } elseif ($Committed) { 'crash-restart-committed-history' } elseif ($Owner) { 'crash-restart-owner-history' } else { 'crash-restart-directory-history' }),
+            $(if ($ReleaseIntent) { 'crash-restart-release-intent-history' } elseif ($Released -and $State) { 'crash-restart-state-released-history' } elseif ($Released) { 'crash-restart-released-history' } elseif ($State) { 'crash-restart-state-history' } elseif ($Committed) { 'crash-restart-committed-history' } elseif ($Owner) { 'crash-restart-owner-history' } else { 'crash-restart-directory-history' }),
             $HistoryActor), $Control, $Environment)
     try {
         $diagnostic = $publisher.StandardError.ReadToEndAsync()
@@ -54,11 +55,11 @@ function Stop-AgentsChatRestartDirectoryPublisher(
             . (Join-Path $PSScriptRoot 'deployment-windows-restart-state-write-controller.ps1')
             Send-AgentsChatRestartStateWriteCommand $publisher $diagnostic $live $Control
         }
-        if ($Released) {
+        if ($Released -or $ReleaseIntent) {
             . (Join-Path $PSScriptRoot 'deployment-windows-restart-release-controller.ps1')
             Send-AgentsChatRestartReleaseCommand $publisher $diagnostic $live $Control -StateWritten:$State
         }
-        $prefix = if ($Released) { 'INACTIVE_HISTORY_RESTART_RELEASED_HELD ' } elseif ($State) { 'INACTIVE_HISTORY_RESTART_STATE_HELD ' } elseif ($Committed) { 'INACTIVE_HISTORY_RESTART_COMMITTED_HELD ' } elseif ($Owner) { 'INACTIVE_HISTORY_RESTART_OWNER_HELD ' } else { 'INACTIVE_HISTORY_RESTART_DIRECTORY_HELD ' }
+        $prefix = if ($ReleaseIntent) { 'INACTIVE_HISTORY_RESTART_RELEASE_INTENT_HELD ' } elseif ($Released) { 'INACTIVE_HISTORY_RESTART_RELEASED_HELD ' } elseif ($State) { 'INACTIVE_HISTORY_RESTART_STATE_HELD ' } elseif ($Committed) { 'INACTIVE_HISTORY_RESTART_COMMITTED_HELD ' } elseif ($Owner) { 'INACTIVE_HISTORY_RESTART_OWNER_HELD ' } else { 'INACTIVE_HISTORY_RESTART_DIRECTORY_HELD ' }
         $metadata = Read-RestartDirectoryCheckpoint $publisher $diagnostic $prefix
         $held = $metadata | ConvertFrom-Json
         Assert ($held.actorPid -eq $publisher.Id -and $held.actorIdentity -ceq $live.actorIdentity -and
@@ -77,7 +78,8 @@ function Stop-AgentsChatRestartDirectoryPublisher(
         foreach ($descriptor in @($held.prepared, $held.committed, $held.retirement,
             $held.terminal, $held.successor, $held.successorAbandoned, $held.restartPrepared) +
             @($(if ($Committed) { $held.restartCommitted })) + @($(if ($State) { $held.restartStateIntent })) +
-            @($(if ($Released) { $held.restartRelease; $held.restartReleased }))) {
+            @($(if ($Released) { $held.restartRelease; $held.restartReleased })) +
+            @($(if ($ReleaseIntent) { $held.restartRelease }))) {
             Assert ((Get-FileHash -LiteralPath (Join-Path $Control $descriptor.path) -Algorithm SHA256).Hash.ToLowerInvariant() -ceq
                 $descriptor.sha256) 'Restart directory publisher death changed immutable evidence'
         }
@@ -108,6 +110,14 @@ function Stop-AgentsChatRestartDirectoryPublisher(
             Assert ($held.restartOwner.path -ceq 'lock\owner.json' -and
                 (Get-FileHash -LiteralPath (Join-Path $Control $held.restartOwner.path) -Algorithm SHA256).Hash.ToLowerInvariant() -ceq
                 $held.restartOwner.sha256) 'Restart owner publisher death changed owner bytes'
+            if ($ReleaseIntent) {
+                # The releaser died after its exact tenth record but before deleting any lock child.
+                $releaseName = $held.restartPrepared.path -creplace '-prepared\.json$', '-lock-retirement.json'
+                Assert ($held.restartRelease.path -ceq $releaseName -and $releaseName -cne $held.restartPrepared.path -and
+                    -not (Test-Path -LiteralPath (Join-Path $Control ($held.restartPrepared.path -creplace '-prepared\.json$', '-lock-retired.json'))) -and
+                    -not (Test-Path -LiteralPath (Join-Path $Control 'state.json.lock'))) `
+                    'Restart releaser intent death changed its exact release records'
+            }
             if ($Committed) {
                 Assert ($held.restartCommitted.path -ceq ($held.restartPrepared.path -creplace '-prepared\.json$', '-committed.json') -and
                     $held.restartCommitted.path -cne $held.restartPrepared.path) 'Restart committed publisher death changed its record name'

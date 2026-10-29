@@ -55,7 +55,7 @@ export async function holdSuccessorAbandoned({ source, control, pwsh, previous }
 export async function assertSuccessorAbandonedAfterDeath({
   source, control, pwsh, admission, previous, state, completionBytes, restart = false, blockedDirectory = false,
   blockedOwner = false, blockedCommitted = false, blockedState = false, blockedReleased = false,
-  blockedRetirement = false,
+  blockedRetirement = false, blockedReleaseIntent = false,
 }) {
   assert.ok(!blockedDirectory || restart);
   assert.ok(!blockedOwner || blockedDirectory);
@@ -63,6 +63,7 @@ export async function assertSuccessorAbandonedAfterDeath({
   assert.ok(!blockedState || blockedCommitted);
   assert.ok(!blockedReleased || blockedCommitted);
   assert.ok(!blockedRetirement || (blockedCommitted && !blockedState && !blockedReleased));
+  assert.ok(!blockedReleaseIntent || (blockedCommitted && !blockedState && !blockedReleased && !blockedRetirement));
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
   const identity = await processIdentity(process.pid);
@@ -85,7 +86,8 @@ export async function assertSuccessorAbandonedAfterDeath({
     previous.terminal, previous.successor, previous.successorAbandoned, ...(restart ? [previous.restartPrepared] : []),
     ...(blockedCommitted ? [previous.restartCommitted] : []), ...(blockedState ? [previous.restartStateIntent] : []),
     ...(blockedReleased ? [previous.restartRelease, previous.restartReleased] : []),
-    ...(blockedRetirement ? [previous.restartRetirement] : [])]) {
+    ...(blockedRetirement ? [previous.restartRetirement] : []),
+    ...(blockedReleaseIntent ? [previous.restartRelease] : [])]) {
     const file = path.join(control, descriptor.path);
     const bytes = await readFile(file);
     const current = await lstat(file, { bigint: true });
@@ -288,12 +290,13 @@ export async function assertSuccessorAbandonedAfterDeath({
       await assert.rejects(observe(restartArgs(committedRequest)),
         error => error.message.includes('Restart committed observation failed; retain evidence.'));
       releasedObserved = true;
-    } else if (blockedRetirement) {
+    } else if (blockedRetirement || blockedReleaseIntent) {
+      // A dead releaser's exact release intent is the same dead-owner retirement authority as a distinct retirer's.
       const { captureWorkerFields } = await load('worker-identity.mjs');
       snapshots.push(await assertDeadRestartRetirement({
         control, identity, previous, original, newOwner: JSON.parse(published.bytes).newOwner,
         committedValue: JSON.parse(snapshots[7].bytes), snapshot: snapshots[8], observe, restartArgs,
-        processIdentity, captureWorkerFields,
+        processIdentity, captureWorkerFields, release: blockedReleaseIntent,
       }));
       // The distinct observer has retired only the dead owner file; its empty directory remains.
       ownerSnapshot = undefined;
@@ -543,7 +546,7 @@ export async function assertSuccessorAbandonedAfterDeath({
     assert.equal(current.dev, originalIdentity.dev);
     assert.equal(current.ino, originalIdentity.ino);
   }
-  if (blockedDirectory && !blockedReleased && !blockedRetirement) {
+  if (blockedDirectory && !blockedReleased && !blockedRetirement && !blockedReleaseIntent) {
     const current = await lstat(directory, { bigint: true });
     assert.equal(current.dev.toString(), previous.restartDirectory.dev);
     assert.equal(current.ino.toString(), previous.restartDirectory.ino);
@@ -580,7 +583,9 @@ export async function assertSuccessorAbandonedAfterDeath({
         ? 'PASS: ordinary reconciliation reports the post-write released restart attempt as a state transition while staying blocked without authority'
         : 'PASS: ordinary reconciliation reports the released restart attempt as lock-settled while staying blocked without authority');
     }
-    console.log(blockedRetirement
+    console.log(blockedReleaseIntent
+      ? 'PASS: actual restart releaser death after its exact release intent lets distinct fresh actors retire and settle only the dead owner lock without authority'
+      : blockedRetirement
       ? 'PASS: actual restart lock retirer death preserves its exact intent dead owner and directory for a distinct observer without deletion authority'
       : blockedReleased && blockedState
       ? 'PASS: actual post-write restart releaser death preserves eleven records and written state for a distinct observer without authority'

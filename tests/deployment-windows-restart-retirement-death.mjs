@@ -80,16 +80,22 @@ export async function holdRestartRetirement({ source, control, pwsh, previous })
 // A distinct observer proves the retirer and owner dead from the intent alone and cannot duplicate it.
 export async function assertDeadRestartRetirement({
   control, identity, previous, original, newOwner, committedValue, snapshot, observe, restartArgs,
-  processIdentity, captureWorkerFields,
+  processIdentity, captureWorkerFields, release = false,
 }) {
-  const retirer = captureWorkerFields(previous.restartRetirerActor,
-    ['actorPid', 'actorIdentity', 'pid', 'processIdentity'], 'dead restart lock retirer');
+  // A dead live releaser's exact intent names itself, the committed owner, as its creator.
+  const retirer = release
+    ? { actorPid: previous.actorPid, actorIdentity: previous.actorIdentity, pid: previous.pid, processIdentity: previous.processIdentity }
+    : captureWorkerFields(previous.restartRetirerActor,
+      ['actorPid', 'actorIdentity', 'pid', 'processIdentity'], 'dead restart lock retirer');
   assert.notEqual(identity, retirer.actorIdentity);
-  assert.notEqual(retirer.actorIdentity, previous.actorIdentity);
-  assert.notEqual(retirer.pid, previous.pid);
+  if (!release) {
+    assert.notEqual(retirer.actorIdentity, previous.actorIdentity);
+    assert.notEqual(retirer.pid, previous.pid);
+  }
   assert.notEqual(await processIdentity(retirer.actorPid), retirer.actorIdentity);
   assert.notEqual(await processIdentity(retirer.pid), retirer.processIdentity);
-  const descriptor = captureWorkerFields(previous.restartRetirement, descriptorFields, 'dead restart lock retirement');
+  const descriptor = captureWorkerFields(release ? previous.restartRelease : previous.restartRetirement,
+    descriptorFields, release ? 'dead restart release intent' : 'dead restart lock retirement');
   assert.equal(descriptor.path, `inactive-handoff-${previous.restartAttemptId}-lock-retirement.json`);
   assert.equal(snapshot.identity.nlink, 1n);
   assert.ok(snapshot.bytes.length <= 65536);
@@ -100,13 +106,15 @@ export async function assertDeadRestartRetirement({
     pid: retirer.actorPid, processIdentity: retirer.actorIdentity,
     bridgePid: retirer.pid, bridgeIdentity: retirer.processIdentity,
   };
+  if (release) { assert.deepEqual(creator, committedValue.creator); }
   assert.deepEqual(intent, {
-    version: 1, phase: 'stopped-history-handoff-restart-lock-retirement-prepared',
+    version: 1,
+    phase: release ? 'stopped-history-handoff-restart-release-prepared' : 'stopped-history-handoff-restart-lock-retirement-prepared',
     attemptId: previous.restartAttemptId, control, project: original.project,
     controlIdentity: original.controlIdentity, previousOperationId: original.previousOperationId,
     prepared: previous.restartPrepared, committed: previous.restartCommitted, newOwner,
     lockIdentity: previous.restartDirectory, lock: previous.restartOwner, state: original.state,
-    owner: committedValue.creator, creator, createdAt: intent.createdAt,
+    ...(release ? {} : { owner: committedValue.creator }), creator, createdAt: intent.createdAt,
   });
   const committedRequest = restartCommittedRequest(previous);
   await assert.rejects(observe(restartArgs(committedRequest)),
