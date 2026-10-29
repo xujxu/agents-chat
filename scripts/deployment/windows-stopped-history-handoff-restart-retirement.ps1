@@ -36,7 +36,8 @@ function Get-AgentsChatStoppedHistoryHandoffRestartRetirementRecord([hashtable]$
     $prepared = $Context.HistoryHandoffRestartPrepared
     $request = $prepared.Request
     $committed = $Context.HistoryHandoffRestartCommitted
-    $release = $Context.HistoryHandoffRestartRetirement -is [hashtable] -and
+    $release = $Context.ContainsKey('HistoryHandoffRestartRetirement') -and
+        $Context.HistoryHandoffRestartRetirement -is [hashtable] -and
         $Context.HistoryHandoffRestartRetirement.ContainsKey('Release') -and $Context.HistoryHandoffRestartRetirement.Release -eq $true
     if ($release) {
         # A dead live releaser's exact tenth record names the committed owner itself as its creator.

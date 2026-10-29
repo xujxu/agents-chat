@@ -6,7 +6,7 @@
 
 **Architecture:** Continues `docs/superpowers/specs/2026-10-26-windows-stopped-history-handoff-design.md` ("Lock and command integration": ordinary paths stay conservative; handoff-aware internal paths share one verifier). The spec requires each increment to preserve refusal of the not-yet-supported next increment. The next increment is handoff-aware inactive admission for the live committed owner, so this gate pins the ordinary path's refusal first. The existing `restart-state-written-history` boundary (crash step `crash-lock-committed-history`, mode `resume-restart-state-written-history`) gains the check. After the state-write fixture exits, the Node actor (the lock owner, `record.newOwner.pid === process.pid`) opens an inactive task scope. That scope's observation must equal the prepared record's `observation`. The actor then requests ordinary admission and expects `... requires its handoff-aware admission.`
 
-**Tech Stack:** Node fixtures under `tests/`, `scripts/deployment/windows-managed-task.mjs`, `scripts/deployment/windows-task-admission.ps1`, GitHub Actions (`deployment-lifecycle.yml`, stopped-history `state` shard). All validation runs only in GitHub Actions.
+**Tech Stack:** Node fixtures under `tests/`, `scripts/deployment/windows-managed-task.mjs`, `scripts/deployment/windows-task-admission.ps1`, GitHub Actions (`deployment-lifecycle.yml`, stopped-history `commitment` shard, whose last boundary is `restart-state-written-history`). All validation runs only in GitHub Actions.
 
 ---
 
@@ -18,7 +18,7 @@
 - Modify: `.github/workflows/deployment-lifecycle.yml` (one receipt, 67 total)
 
 - [x] Receipt `PASS: ordinary inactive task admission refuses the exact live restart owner written preflight while handoff evidence remains without publishing maintenance`.
-- [ ] Actions red: `state` shard fails because ordinary admission is not refused (or publishes `task-maintenance/admission.json`).
+- [ ] Actions red: `commitment` shard fails because ordinary admission is not refused (or publishes `task-maintenance/admission.json`).
 
 ### Task 2: Production refusal
 
