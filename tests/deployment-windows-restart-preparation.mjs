@@ -108,6 +108,7 @@ export async function assertRestartPreparation({
   let controllerWire;
   let ownerSnapshot;
   let writtenState;
+  let restartHandoff;
   transport.child.stderr.on('data', bytes => { diagnostic = `${diagnostic}${bytes.toString('utf8')}`.slice(-4096); });
   try {
     const ready = captureWorkerFields(await transport.wire.receive({ timeoutMs: 45000 }),
@@ -280,6 +281,10 @@ export async function assertRestartPreparation({
                   control, identity, ready, record, intent: intentSnapshot, transport, controllerWire,
                   captureWorkerFields, enterPhase, holdState, releaseRestart, processIdentity,
                 });
+                restartHandoff = {
+                  restart: descriptor, restartCommitted: committedSnapshot.descriptor,
+                  restartStateIntent: intentSnapshot.descriptor, restartState: writtenState.descriptor,
+                };
                 if (releaseRestart) {
                   const releaseSnapshots = await assertRestartReleasePublication({
                     control, identity, ready, original, record, prepared: descriptor, committed: committedSnapshot.descriptor,
@@ -329,16 +334,67 @@ export async function assertRestartPreparation({
   if (refuseAdmission) {
     // The exact live owner holds its committed lock and written preflight, yet ordinary inactive admission
     // must not bypass the handoff verifier while handoff evidence remains.
-    const { inspectWindowsInactiveTask, captureWindowsInactiveTaskAdmission } = await load('windows-managed-task.mjs');
-    const scope = await inspectWindowsInactiveTask({
-      taskName: original.observation.taskName, project: original.project, pwsh,
-    });
-    try {
+    const {
+      inspectWindowsInactiveTask, captureWindowsInactiveTaskAdmission, captureWindowsInactiveTaskHandoffAdmission,
+      assertWindowsInactiveTaskAdmissionBinding,
+    } = await load('windows-managed-task.mjs');
+    const { createWindowsInactiveTaskAdmissionRecord } = await load('windows-inactive-task-admission.mjs');
+    const ordinaryRefusal = error => /requires its handoff-aware admission/.test(`${error.message} ${error.cause?.message ?? ''}`);
+    const maintenance = path.join(control, 'task-maintenance');
+    const handoff = {
+      attemptId: previous.attemptId, prepared: previous.prepared, committed: previous.committed,
+      retirement: previous.retirement, terminal: previous.terminal, successor: previous.successor,
+      abandoned: previous.successorAbandoned, ...restartHandoff,
+    };
+    const open = async () => {
+      const bundle = path.dirname(original.observation.configuration);
+      console.error(`INACTIVE_HANDOFF_BUNDLE ${JSON.stringify({ bundle, entries: (await readdir(bundle)).sort() })}`);
+      const scope = await inspectWindowsInactiveTask({
+        taskName: original.observation.taskName, project: original.project, pwsh,
+      });
       assert.deepEqual(JSON.parse(JSON.stringify(scope.observation)), original.observation);
-      await assert.rejects(captureWindowsInactiveTaskAdmission({ scope, control, lock: owner, admission }),
-        error => /requires its handoff-aware admission/.test(`${error.message} ${error.cause?.message ?? ''}`));
+      return scope;
+    };
+    for (const copied of [
+      { ...handoff, restartState: { ...handoff.restartState, sha256: '0'.repeat(64) } },
+      { ...handoff, restartCommitted: handoff.committed },
+      { ...handoff, restartStateIntent: undefined },
+    ]) {
+      const scope = await open();
+      try {
+        await assert.rejects(captureWindowsInactiveTaskAdmission({ scope, control, lock: owner, admission }), ordinaryRefusal);
+        await assert.rejects(captureWindowsInactiveTaskHandoffAdmission({ scope, control, lock: owner, admission, handoff: copied }),
+          { code: 'DEPLOYMENT_WINDOWS_MANAGED_TASK_REFUSED' });
+      } finally { await scope.close(); }
+      await assert.rejects(lstat(maintenance), { code: 'ENOENT' });
+    }
+    const scope = await open();
+    try {
+      await assert.rejects(captureWindowsInactiveTaskHandoffAdmission({
+        scope, control, lock: { ...owner, token: randomUUID() }, admission, handoff,
+      }));
+      await assert.rejects(lstat(maintenance), { code: 'ENOENT' });
+      const result = await captureWindowsInactiveTaskHandoffAdmission({ scope, control, lock: owner, admission, handoff });
+      assert.deepEqual(Object.keys(result).sort(), ['admission', 'sha256']);
+      assert.equal(result.admission, path.join(maintenance, 'admission.json'));
+      assert.deepEqual(await readdir(maintenance), ['admission.json']);
+      const bytes = await readFile(result.admission);
+      assert.equal(createHash('sha256').update(bytes).digest('hex'), result.sha256);
+      assert.deepEqual(JSON.parse(bytes), createWindowsInactiveTaskAdmissionRecord({
+        observation: original.observation, lock: owner, state: JSON.parse(writtenState.bytes),
+      }));
+      const binding = await assertWindowsInactiveTaskAdmissionBinding({
+        scope, control, lock: owner, admission: result.admission, sha256: result.sha256,
+      });
+      const { validateState } = await load('state.mjs');
+      assert.deepEqual(binding.state, { ...validateState(JSON.parse(writtenState.bytes)) });
+      await assert.rejects(captureWindowsInactiveTaskAdmission({ scope, control, lock: owner, admission }), ordinaryRefusal);
+      await assert.rejects(captureWindowsInactiveTaskHandoffAdmission({ scope, control, lock: owner, admission, handoff }));
+      assert.deepEqual(await readFile(result.admission), bytes);
+      assert.deepEqual(await readdir(maintenance), ['admission.json']);
+      await unlink(result.admission);
+      await rmdir(maintenance);
     } finally { await scope.close(); }
-    await assert.rejects(lstat(path.join(control, 'task-maintenance')), { code: 'ENOENT' });
   }
   if (publish && !held) {
     await assert.rejects(promisify(execFile)(pwsh,
@@ -400,6 +456,7 @@ export async function assertRestartPreparation({
   if (writtenState) { await writeFile(stateFile, state); }
   if (refuseAdmission) {
     console.log('PASS: ordinary inactive task admission refuses the exact live restart owner written preflight while handoff evidence remains without publishing maintenance');
+    console.log('PASS: handoff-aware inactive admission publishes only the exact live restart owner written preflight binding through the shared native verifier while copied foreign ordinary and duplicate admission remain refused');
   }
   console.log(releaseRestart && writeState
     ? 'PASS: native live restart owner releases only its exact committed lock after its acknowledged state write while nine records and written state remain exact without authority'
