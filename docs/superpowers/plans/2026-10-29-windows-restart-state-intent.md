@@ -39,4 +39,8 @@ That restart job took 82 of its 90 minutes (about 21 minutes of setup plus about
 
 ### Task 2: Production module (green)
 
-- [ ] Implement the module and namespace allowance; all 43 receipts in Actions; same-SHA Contracts.
+- [x] Implement the module and namespace allowance; all 43 receipts in Actions; same-SHA Contracts.
+
+Evidence: production commit `92a18554` published the ninth record in run `40805496808`, but the commitment fixture failed at `restart-state-intent-result` because it read `oldState`, `state`, `operation` and `observation` from the five-field captured restart record. Fixture-only commit `eefc6534` reads them from the original prepared template; production refusals are unchanged.
+
+Accepted at `eefc6534`: focused run `40810119310` passed baseline `123238184637`, successor `123238184679`, restart `123238184688`, commitment `123238184532` (new receipt at `2026-10-29T03:50:27Z`) and aggregate `123253712945`; the merged four native logs contain 43/43 required receipts. Contracts run `40810122588` job `123238195771` passed on the same SHA. Shard durations: 34, 42, 51 and 45 minutes, all under the unchanged 90-minute limit.
