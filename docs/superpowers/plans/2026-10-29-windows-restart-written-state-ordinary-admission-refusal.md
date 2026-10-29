@@ -33,3 +33,13 @@
 ### Task 3: Acceptance
 
 - [ ] Focused and Contracts runs green; all ten shard logs merged and all 67 receipts present.
+
+## Actions finding (run 40922845882, `commitment` shard)
+
+The contract never reached ordinary admission: `inspectWindowsInactiveTask` already refused with
+"Inactive task requires exactly one original readiness record and no guarded launch." after the
+stopped-history restart wrote its state. Ordinary inspection therefore already refuses this state, and
+the ordinary-admission refusal inside `captureTaskAdmission` is reachable only from a handoff-aware
+inspection scope. That refusal and its production change move into gate 62
+(`2026-10-29-windows-restart-handoff-aware-admission.md`), whose contract (`566c684c`) records the
+bundle inventory seen by the inspection before redesigning handoff-aware inspection.
