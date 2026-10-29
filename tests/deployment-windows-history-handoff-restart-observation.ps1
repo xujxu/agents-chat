@@ -29,6 +29,12 @@ try {
     $retireRestart = $observeCommitted -and -not $observeState -and $inputRecord.Contains('retireRestart')
     $observeRetirement = $observeCommitted -and -not $observeState -and $inputRecord.Contains('restartRetirement')
     if ($observeRetirement) { $fields += 'restartRetirement' }
+    $observeSettlement = $observeRetirement -and $inputRecord.Contains('restartSettlement')
+    $restartSettlement = $null
+    if ($observeSettlement) {
+        $fields += 'restartSettlement'
+        $restartSettlement = $inputRecord.restartSettlement
+    }
     $retireOwner = $observeRetirement -and -not $retireRestart -and $inputRecord.Contains('retireOwner')
     if ($retireOwner) {
         $fields += 'retireOwner'
@@ -95,14 +101,18 @@ try {
     }
     if ($observeRetirement) {
         . (Join-Path $Source 'windows-stopped-history-handoff-restart-retirement.ps1')
+        if ($observeSettlement) {
+            . (Join-Path $Source 'windows-stopped-history-handoff-restart-retirement-settlement.ps1')
+        }
         $scope = Open-AgentsChatStoppedHistoryHandoffRestartRetirementObservation $Control $ControllerPid $ControllerIdentity `
             $inputRecord.attemptId $inputRecord.prepared $inputRecord.committed $inputRecord.retirement `
             $inputRecord.terminal $inputRecord.successor $inputRecord.successorAbandoned $inputRecord.restart `
-            $inputRecord.restartCommitted $inputRecord.restartRetirement
+            $inputRecord.restartCommitted $inputRecord.restartRetirement $restartSettlement
         $observation = Get-AgentsChatStoppedHistoryHandoffRestartRetirementObservation $scope $ControllerPid $ControllerIdentity
         if ($scope.HistoryHandoffRestartRetirementObserver -ne $true -or
             $scope.HistoryHandoffRestartCommittedObserver -ne $true -or
             $scope.ContainsKey('HistoryHandoffRestartRetirer') -or
+            $scope.ContainsKey('HistoryHandoffRestartSettler') -or
             $scope.ContainsKey('HistoryHandoffRestartCommitter') -or
             $scope.ContainsKey('HistoryHandoffRestartStateIntender') -or
             $scope.ContainsKey('HistoryHandoffRestartStateWriter')) {
@@ -165,7 +175,7 @@ try {
                 if ($_.Exception.Message -cne 'Restart lock settlement requires its independent native role.') { throw }
                 $refused = $true
             }
-            if (-not $refused -or $scope.ContainsKey('HistoryHandoffRestartSettlement')) {
+            if (-not $refused -or (-not $observeSettlement -and $scope.ContainsKey('HistoryHandoffRestartSettlement'))) {
                 throw 'Restart lock retirement observer settled without role.'
             }
             $scope.HistoryHandoffRestartSettler = $true

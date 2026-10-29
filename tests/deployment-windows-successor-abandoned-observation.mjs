@@ -563,6 +563,7 @@ export async function assertSuccessorAbandonedAfterDeath({
       console.log('PASS: distinct restart lock owner retirer deletes only the dead owner file from the exact intent and preserves its empty directory without authority');
       console.log('PASS: fresh restart lock retirement observer takes over the owner-retired stage from the exact intent and retires only its empty directory without authority');
       console.log('PASS: fresh restart lock retirement observer takes over the absent directory from the exact intent and publishes only its exact settlement without authority');
+      console.log('PASS: fresh restart lock retirement observer takes over the settled stage from its exact record and refuses a duplicate settlement without authority');
       console.log('PASS: ordinary reconciliation reports the settled dead restart retirement as lock-settled while staying blocked without authority');
     }
     if (releasedObserved) {

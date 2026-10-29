@@ -198,5 +198,28 @@ export async function assertDeadRestartRetirement({
     owner: committedValue.creator, retirer: creator, creator: settler, settledAt: record.settledAt,
   });
   assert.deepEqual(await readFile(path.join(control, descriptor.path)), intentBytes);
+  // The settler bridge has exited; a fresh distinct observer takes over the settled stage from its exact record.
+  const settledRequest = { ...retirementRequest, restartSettlement: settlement };
+  for (let pass = 0; pass < 2; pass++) {
+    const result = await observe(restartArgs(settledRequest));
+    assert.equal(result.stderr, '');
+    assert.deepEqual(JSON.parse(result.stdout), { ...expected, status: 'restart-lock-settled', settlement });
+  }
+  await assert.rejects(observe(restartArgs(retirementRequest)), retirementRefused);
+  for (const wrong of [
+    { ...settlement, ino: settlement.ino === '1' ? '2' : '1' },
+    { ...settlement, sha256: '0'.repeat(64) },
+  ]) {
+    await assert.rejects(observe(restartArgs({ ...settledRequest, restartSettlement: wrong })), retirementRefused);
+  }
+  // A fresh settler must not replace or duplicate the dead settler's exact record.
+  await assert.rejects(observe(restartArgs({ ...settledRequest, settleRestart: true })),
+    error => error.message.includes('Restart lock settlement failed; retain evidence.'));
+  assert.deepEqual(await readFile(file), bytes);
+  const unchanged = await lstat(file, { bigint: true });
+  assert.equal(unchanged.ino, identityAfter.ino);
+  assert.equal(unchanged.nlink, 1n);
+  assert.deepEqual(await readFile(path.join(control, descriptor.path)), intentBytes);
+  await assert.rejects(lstat(directory), { code: 'ENOENT' });
   return { file, bytes, identity: identityAfter };
 }
