@@ -74,14 +74,14 @@ function Get-AgentsChatStoppedHistoryHandoffRestartPreparedObservation(
 function Open-AgentsChatStoppedHistoryHandoffRestartObservation(
     [string]$Control, [int]$ControllerPid, [string]$ControllerIdentity,
     [string]$AttemptId, $Prepared, $Committed, $Retirement, $Terminal, $Successor, $Abandoned, $Restart,
-    $RestartCommitted, $RestartStateIntent, $RestartState
+    $RestartCommitted, $RestartStateIntent, $RestartState, $RestartRetirement
 ) {
     $scope = $null
     try {
         if ($null -eq $Restart) { throw 'Restart prepared descriptor is required.' }
         $scope = Open-AgentsChatStoppedHistoryHandoffCommittedObservation $Control $ControllerPid $ControllerIdentity `
             $AttemptId $Prepared $Committed $Retirement $Terminal $Successor $Abandoned $Restart $RestartCommitted `
-            $RestartStateIntent $RestartState
+            $RestartStateIntent $RestartState $RestartRetirement
         Assert-AgentsChatStoppedHistoryHandoffRestartPrepared $scope
         return $scope
     } catch {

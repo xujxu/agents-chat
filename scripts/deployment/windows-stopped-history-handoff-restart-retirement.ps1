@@ -25,8 +25,12 @@ function Assert-AgentsChatStoppedHistoryHandoffRestartOwnerAbsent([hashtable]$Co
 function Get-AgentsChatStoppedHistoryHandoffRestartRetirementRecord([hashtable]$Context, $Creator, [string]$CreatedAt) {
     Assert-AgentsChatStoppedHistoryHandoffRestartCommitted $Context
     $observed = $Context.HistoryHandoffObservedCommit
+    # A creator other than this controller and bridge must be absent; only the live retirer may record itself.
     Assert-AgentsChatRetirementCreator $Creator $observed.ControllerPid $observed.ControllerIdentity
-    if ($Creator.pid -ne $observed.ControllerPid -or $Creator.processIdentity -cne $observed.ControllerIdentity) {
+    $self = $Creator.pid -eq $observed.ControllerPid -and $Creator.processIdentity -ceq $observed.ControllerIdentity
+    if ($Context.ContainsKey('HistoryHandoffRestartRetirementObserver')) {
+        if ($self -or $Creator.bridgePid -eq $PID) { throw 'Restart lock retirement observer is its recorded retirer.' }
+    } elseif (-not $self) {
         throw 'Restart lock retirement creator differs from its observer.'
     }
     $prepared = $Context.HistoryHandoffRestartPrepared
@@ -56,8 +60,10 @@ function Get-AgentsChatStoppedHistoryHandoffRestartRetirementRecord([hashtable]$
 }
 
 function Assert-AgentsChatStoppedHistoryHandoffRestartRetirement([hashtable]$Context) {
-    if (-not $Context.ContainsKey('HistoryHandoffRestartRetirer') -or
-        $Context.HistoryHandoffRestartRetirer -ne $true -or
+    $retirer = $Context.ContainsKey('HistoryHandoffRestartRetirer') -and $Context.HistoryHandoffRestartRetirer -eq $true
+    $observer = $Context.ContainsKey('HistoryHandoffRestartRetirementObserver') -and
+        $Context.HistoryHandoffRestartRetirementObserver -eq $true
+    if ($retirer -eq $observer -or
         -not $Context.ContainsKey('HistoryHandoffRestartCommittedObserver') -or
         -not $Context.ContainsKey('HistoryHandoffRestartRetirement')) {
         throw 'Restart lock retirement lacks retained independent native proof.'
@@ -101,7 +107,7 @@ function Publish-AgentsChatStoppedHistoryHandoffRestartRetirement(
     }
     try {
         if ($Context.Poisoned) { throw 'Restart lock retirement scope is poisoned.' }
-        foreach ($key in @('HistoryHandoffRestartRetirement', 'HistoryHandoffRestartRelease', 'HistoryHandoffRestartReleased',
+        foreach ($key in @('HistoryHandoffRestartRetirement', 'HistoryHandoffRestartRetirementObserver', 'HistoryHandoffRestartRelease', 'HistoryHandoffRestartReleased',
             'HistoryHandoffRestartReleaser', 'HistoryHandoffRestartCommitter', 'HistoryHandoffRestartStateIntent',
             'HistoryHandoffRestartStateIntender', 'HistoryHandoffRestartStateWriter', 'HistoryHandoffRestartStateStage',
             'HistoryHandoffRestartState')) {
@@ -142,5 +148,83 @@ function Publish-AgentsChatStoppedHistoryHandoffRestartRetirement(
     } catch {
         $Context.Poisoned = $true
         throw [InvalidOperationException]::new('Restart lock retirement failed; retain evidence.', $_.Exception)
+    }
+}
+
+function Initialize-AgentsChatStoppedHistoryHandoffRestartRetirementObservation([hashtable]$Context, $Descriptor) {
+    if (-not $Context.ContainsKey('HistoryHandoffRestartCommittedObserver') -or
+        $Context.HistoryHandoffRestartCommittedObserver -ne $true -or
+        $Context.ContainsKey('HistoryHandoffRestartRetirement') -or
+        $Context.ContainsKey('HistoryHandoffRestartRetirer') -or
+        $Context.ContainsKey('HistoryHandoffRestartRetirementObserver')) {
+        throw 'Restart lock retirement observation bootstrap differs.'
+    }
+    $name = "inactive-handoff-$($Context.HistoryHandoffRestartPrepared.Request.AttemptId)-lock-retirement.json"
+    $file = Open-AgentsChatRetirementFile $Context $Descriptor $name
+    $record = Read-AgentsChatRetirementJson ($file.ReadText())
+    Assert-AgentsChatRetirementFields $record @(
+        'version', 'phase', 'attemptId', 'control', 'project', 'controlIdentity', 'previousOperationId',
+        'prepared', 'committed', 'newOwner', 'lockIdentity', 'lock', 'state', 'owner', 'creator', 'createdAt'
+    )
+    if ($record.phase -cne 'stopped-history-handoff-restart-lock-retirement-prepared' -or
+        $record.createdAt -isnot [string]) {
+        throw 'Restart lock retirement observation phase differs.'
+    }
+    $Context.HistoryHandoffRestartRetirement = @{
+        File=$file; Descriptor=(Get-AgentsChatStoppedHandoffDescriptor $file $name)
+        Creator=$record.creator; Time=$record.createdAt
+    }
+    $Context.HistoryHandoffRestartRetirementObserver = $true
+    Assert-AgentsChatStoppedHistoryHandoffRestartRetirement $Context
+}
+
+function Get-AgentsChatStoppedHistoryHandoffRestartRetirementObservation(
+    [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity
+) {
+    try {
+        if (-not $Context.ContainsKey('HistoryHandoffRestartRetirementObserver') -or
+            $Context.HistoryHandoffRestartRetirementObserver -ne $true -or
+            $Context.ContainsKey('HistoryHandoffRestartRetirer')) {
+            throw 'Restart lock retirement observation requires its independent native role.'
+        }
+        if ($Context.Poisoned) { throw 'Restart lock retirement observation scope is poisoned.' }
+        foreach ($pass in @(1, 2)) {
+            if ([IO.Directory]::GetFileSystemEntries($Context.Control, 'state.json.lock*').Length) {
+                throw 'Restart lock retirement observation found a state stage.'
+            }
+            $null = Get-AgentsChatStoppedHistoryHandoffRestartCommittedObservation $Context $ControllerPid $ControllerIdentity
+            Assert-AgentsChatStoppedHistoryHandoffRestartRetirement $Context
+            Assert-AgentsChatStoppedHistoryHandoffRestartLock $Context
+        }
+        $retained = $Context.HistoryHandoffRestartRetirement
+        $record = Get-AgentsChatStoppedHistoryHandoffRestartRetirementRecord $Context $retained.Creator $retained.Time
+        $lock = $Context.HistoryHandoffRestartLock
+        return [ordered]@{
+            status='restart-lock-retirement-observed'; attemptId=$record.attemptId
+            prepared=$record.prepared; committed=$record.committed; retirement=$retained.Descriptor
+            lockIdentity=$lock.DirectoryIdentity; lock=$lock.OwnerDescriptor; state=$record.state
+            owner=$record.owner; retirer=$record.creator
+            runtimeAuthority=$false; lockAuthority=$false; taskAuthority=$false
+        }
+    } catch {
+        $Context.Poisoned = $true
+        throw [InvalidOperationException]::new('Restart lock retirement observation failed; retain evidence.', $_.Exception)
+    }
+}
+
+function Open-AgentsChatStoppedHistoryHandoffRestartRetirementObservation(
+    [string]$Control, [int]$ControllerPid, [string]$ControllerIdentity,
+    [string]$AttemptId, $Prepared, $Committed, $Retirement, $Terminal, $Successor, $Abandoned, $Restart,
+    $RestartCommitted, $RestartRetirement
+) {
+    try {
+        if ($null -eq $RestartCommitted -or $null -eq $RestartRetirement) {
+            throw 'Restart lock retirement observation descriptors are required.'
+        }
+        return Open-AgentsChatStoppedHistoryHandoffRestartObservation $Control $ControllerPid $ControllerIdentity `
+            $AttemptId $Prepared $Committed $Retirement $Terminal $Successor $Abandoned $Restart $RestartCommitted `
+            $null $null $RestartRetirement
+    } catch {
+        throw [InvalidOperationException]::new('Restart lock retirement observation failed; retain evidence.', $_.Exception)
     }
 }
