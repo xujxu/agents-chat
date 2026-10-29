@@ -317,7 +317,9 @@ jobs:
             'PASS: distinct restart committed observer proves eight records dead owner and directory without state lock or task authority',
             'PASS: distinct restart state observer resolves original state only through its ninth record and proves the exact written state without lock or task authority',
             'PASS: ordinary reconciliation reports nine exact handoff records as three attempts while staying blocked without authority',
-            'PASS: native live restart owner releases only its exact committed lock before any state write while original state and eight records remain exact without authority'
+            'PASS: native live restart owner releases only its exact committed lock before any state write while original state and eight records remain exact without authority',
+            'PASS: actual restart releaser death after exact lock release preserves ten records and original state for a distinct observer without authority',
+            'PASS: ordinary reconciliation reports the released restart attempt as lock-settled while staying blocked without authority'
           )) {
             if ($historyOutput -cnotcontains $receipt) { throw "Missing stopped-history acceptance receipt: $receipt" }
           }

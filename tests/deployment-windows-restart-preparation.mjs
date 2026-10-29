@@ -17,7 +17,7 @@ export async function assertRestartPreparation({
   source, control, pwsh, admission, previous, state, completionBytes, publish = false, hold = false,
   createDirectory = false, holdDirectory = false, publishOwner = false, holdOwner = false, commitRestart = false,
   holdCommitted = false, prepareState = false, writeState = false, holdState = false,
-  releaseRestart = false,
+  releaseRestart = false, holdReleased = false,
 }) {
   assert.ok(!hold || publish);
   assert.ok(!createDirectory || (publish && !hold));
@@ -30,7 +30,8 @@ export async function assertRestartPreparation({
   assert.ok(!writeState || prepareState);
   assert.ok(!holdState || writeState);
   assert.ok(!releaseRestart || (commitRestart && !holdCommitted && !prepareState));
-  const held = hold || holdDirectory || holdOwner || holdCommitted || holdState;
+  assert.ok(!holdReleased || releaseRestart);
+  const held = hold || holdDirectory || holdOwner || holdCommitted || holdState || holdReleased;
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
   const { windowsControllerTransport } = await load('windows-controller-transport.mjs');
@@ -83,7 +84,7 @@ export async function assertRestartPreparation({
     ...(publishOwner ? ['-PublishRestartOwner'] : []), ...(holdOwner ? ['-HoldRestartOwner'] : []),
     ...(commitRestart ? ['-CommitRestart'] : []), ...(holdCommitted ? ['-HoldRestartCommitted'] : []),
     ...(prepareState ? ['-PrepareRestartState'] : []), ...(writeState ? ['-WriteRestartState'] : []), ...(holdState ? ['-HoldRestartState'] : []),
-    ...(releaseRestart ? ['-ReleaseRestart'] : [])];
+    ...(releaseRestart ? ['-ReleaseRestart'] : []), ...(holdReleased ? ['-HoldRestartReleased'] : [])];
   let phase;
   const phases = [];
   const enterPhase = value => {
@@ -250,13 +251,18 @@ export async function assertRestartPreparation({
             });
             snapshots.push(committedSnapshot);
             if (releaseRestart) {
-              snapshots.push(...await assertRestartReleasePublication({
+              const releaseSnapshots = await assertRestartReleasePublication({
                 control, identity, ready, original, record, prepared: descriptor, committed: committedSnapshot.descriptor,
                 directory: directoryIdentity, owner: ownerSnapshot.descriptor, transport, controllerWire,
-                captureWorkerFields, enterPhase,
-              }));
+                captureWorkerFields, enterPhase, holdReleased, processIdentity,
+              });
+              snapshots.push(...releaseSnapshots);
+              if (holdReleased) {
+                [heldPublication.restartRelease, heldPublication.restartReleased] =
+                  releaseSnapshots.map(snapshot => snapshot.descriptor);
+              }
             }
-            if (holdCommitted || holdState) { heldPublication.restartCommitted = committedSnapshot.descriptor; }
+            if (holdCommitted || holdState || holdReleased) { heldPublication.restartCommitted = committedSnapshot.descriptor; }
             if (prepareState) {
               const { validateState } = await load('state.mjs');
               const intentSnapshot = await assertRestartStateIntentPublication({
@@ -278,9 +284,9 @@ export async function assertRestartPreparation({
             }
           } finally { controllerWire.close(); }
         }
-        if (holdDirectory || holdOwner || holdCommitted || holdState) {
+        if (holdDirectory || holdOwner || holdCommitted || holdState || holdReleased) {
           heldPublication.restartDirectory = directoryIdentity;
-          if (holdOwner || holdCommitted || holdState) { heldPublication.restartOwner = ownerSnapshot.descriptor; }
+          if (holdOwner || holdCommitted || holdState || holdReleased) { heldPublication.restartOwner = ownerSnapshot.descriptor; }
         } else {
           enterPhase(releaseRestart ? 'release-exit' : writeState ? 'state-write-exit' : prepareState ? 'state-intent-exit' : commitRestart ? 'committed-exit' : 'directory-exit');
           assert.deepEqual(await transport.waitForExit(), { code: 0, signal: null });
@@ -341,7 +347,8 @@ export async function assertRestartPreparation({
     if (!held) { await rmdir(directory); }
   } else { await assert.rejects(lstat(directory), { code: 'ENOENT' }); }
   if (held) {
-    const marker = holdState ? 'INACTIVE_HISTORY_RESTART_STATE_HELD'
+    const marker = holdReleased ? 'INACTIVE_HISTORY_RESTART_RELEASED_HELD'
+      : holdState ? 'INACTIVE_HISTORY_RESTART_STATE_HELD'
       : holdCommitted ? 'INACTIVE_HISTORY_RESTART_COMMITTED_HELD'
       : holdOwner ? 'INACTIVE_HISTORY_RESTART_OWNER_HELD'
       : holdDirectory ? 'INACTIVE_HISTORY_RESTART_DIRECTORY_HELD' : 'INACTIVE_HISTORY_RESTART_PREPARED_HELD';

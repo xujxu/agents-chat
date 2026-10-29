@@ -21,7 +21,7 @@ async function readRecord(control, descriptor, name) {
 
 export async function assertRestartReleasePublication({
   control, identity, ready, original, record, prepared, committed, directory, owner, transport, controllerWire,
-  captureWorkerFields, enterPhase,
+  captureWorkerFields, enterPhase, holdReleased = false, processIdentity,
 }) {
   enterPhase('host-release-command');
   console.log(`INACTIVE_HISTORY_RESTART_COMMITTED_LIVE ${JSON.stringify({
@@ -36,7 +36,19 @@ export async function assertRestartReleasePublication({
   await assertRestartPublicationProofs({
     publication: 'release', transport, ready, control, identity, captureWorkerFields, enterPhase,
   });
-  const result = captureWorkerFields(await transport.wire.receive({ timeoutMs: 45000 }),
+  let response = await transport.wire.receive({ timeoutMs: 45000 });
+  if (holdReleased) {
+    const frame = captureWorkerFields(response,
+      ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'], 'held restart release');
+    assert.equal(frame.type, 'ready');
+    assert.equal(frame.pid, ready.pid);
+    assert.equal(frame.processIdentity, ready.processIdentity);
+    assert.equal(frame.processIdentity, await processIdentity(frame.pid));
+    assert.equal(frame.control, control);
+    assert.equal(frame.controllerIdentity, identity);
+    response = frame.value;
+  }
+  const result = captureWorkerFields(response,
     ['status', 'attemptId', 'prepared', 'committed', 'retirement', 'released', 'state',
       'runtimeAuthority', 'lockAuthority', 'taskAuthority'],
     'restart release');

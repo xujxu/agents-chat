@@ -53,12 +53,13 @@ export async function holdSuccessorAbandoned({ source, control, pwsh, previous }
 
 export async function assertSuccessorAbandonedAfterDeath({
   source, control, pwsh, admission, previous, state, completionBytes, restart = false, blockedDirectory = false,
-  blockedOwner = false, blockedCommitted = false, blockedState = false,
+  blockedOwner = false, blockedCommitted = false, blockedState = false, blockedReleased = false,
 }) {
   assert.ok(!blockedDirectory || restart);
   assert.ok(!blockedOwner || blockedDirectory);
   assert.ok(!blockedCommitted || blockedOwner);
   assert.ok(!blockedState || blockedCommitted);
+  assert.ok(!blockedReleased || (blockedCommitted && !blockedState));
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
   const identity = await processIdentity(process.pid);
@@ -79,7 +80,8 @@ export async function assertSuccessorAbandonedAfterDeath({
   const snapshots = [];
   for (const descriptor of [previous.prepared, previous.committed, previous.retirement,
     previous.terminal, previous.successor, previous.successorAbandoned, ...(restart ? [previous.restartPrepared] : []),
-    ...(blockedCommitted ? [previous.restartCommitted] : []), ...(blockedState ? [previous.restartStateIntent] : [])]) {
+    ...(blockedCommitted ? [previous.restartCommitted] : []), ...(blockedState ? [previous.restartStateIntent] : []),
+    ...(blockedReleased ? [previous.restartRelease, previous.restartReleased] : [])]) {
     const file = path.join(control, descriptor.path);
     const bytes = await readFile(file);
     const current = await lstat(file, { bigint: true });
@@ -178,13 +180,18 @@ export async function assertSuccessorAbandonedAfterDeath({
   const published = snapshots[restart ? 6 : 5];
   const directory = path.join(control, 'lock');
   let ownerSnapshot;
+  let releasedObserved = false;
   if (blockedDirectory) {
-    const current = await lstat(directory, { bigint: true });
-    assert.ok(current.isDirectory());
-    assert.equal(current.dev.toString(), previous.restartDirectory.dev);
-    assert.equal(current.ino.toString(), previous.restartDirectory.ino);
-    assert.deepEqual(await readdir(directory), blockedOwner ? ['owner.json'] : []);
-    if (blockedOwner) {
+    if (blockedReleased) {
+      await assert.rejects(lstat(directory), { code: 'ENOENT' });
+    } else {
+      const current = await lstat(directory, { bigint: true });
+      assert.ok(current.isDirectory());
+      assert.equal(current.dev.toString(), previous.restartDirectory.dev);
+      assert.equal(current.ino.toString(), previous.restartDirectory.ino);
+      assert.deepEqual(await readdir(directory), blockedOwner ? ['owner.json'] : []);
+    }
+    if (blockedOwner && !blockedReleased) {
       const { captureWorkerFields } = await load('worker-identity.mjs');
       const descriptor = captureWorkerFields(previous.restartOwner,
         ['path', 'dev', 'ino', 'bytes', 'sha256'], 'dead restart owner descriptor');
@@ -229,13 +236,50 @@ export async function assertSuccessorAbandonedAfterDeath({
         },
         committedAt: record.committedAt,
       });
+      if (blockedReleased) {
+        const [retirement, released] = [snapshots[8], snapshots[9]];
+        assert.equal(previous.restartRelease.path, `inactive-handoff-${previous.restartAttemptId}-lock-retirement.json`);
+        assert.equal(previous.restartReleased.path, `inactive-handoff-${previous.restartAttemptId}-lock-retired.json`);
+        const binding = {
+          attemptId: previous.restartAttemptId, control, project: original.project,
+          controlIdentity: original.controlIdentity, previousOperationId: original.previousOperationId,
+          prepared: previous.restartPrepared, committed: previous.restartCommitted,
+          newOwner: JSON.parse(published.bytes).newOwner, lockIdentity: previous.restartDirectory,
+          lock: previous.restartOwner, state: original.state,
+          creator: {
+            pid: previous.actorPid, processIdentity: previous.actorIdentity,
+            bridgePid: previous.pid, bridgeIdentity: previous.processIdentity,
+          },
+        };
+        for (const snapshot of [retirement, released]) {
+          assert.equal(snapshot.identity.nlink, 1n);
+          assert.ok(snapshot.bytes.length <= 65536);
+        }
+        const intent = JSON.parse(retirement.bytes);
+        assert.ok(intent.createdAt >= record.committedAt);
+        assert.deepEqual(intent, {
+          version: 1, phase: 'stopped-history-handoff-restart-release-prepared', ...binding, createdAt: intent.createdAt,
+        });
+        const settled = JSON.parse(released.bytes);
+        assert.ok(settled.releasedAt >= intent.createdAt);
+        assert.deepEqual(settled, {
+          version: 1, phase: 'stopped-history-handoff-restart-released', ...binding,
+          retirement: previous.restartRelease, releasedAt: settled.releasedAt,
+        });
+      }
     }
     // Without the ninth-record transition, the generic reader follows the written state to an archive that
     // never existed; it must not substitute the original state.
     await assert.rejects(observe(args), error => refused(error) && error.message.includes(blockedState
       ? `retired-${JSON.parse(writtenState).operationId}-inactive-rollback-history-intent.json`
       : blockedCommitted ? 'Retired prepared handoff namespace differs.' : 'Committed lock directory identity differs.'));
-    if (blockedCommitted && !blockedState) {
+    if (blockedReleased) {
+      // The released lock and its two release records are outside every observer this gate exposes.
+      const committedRequest = { ...request, restartCommitted: previous.restartCommitted };
+      await assert.rejects(observe(restartArgs(committedRequest)),
+        error => error.message.includes('Restart committed observation failed; retain evidence.'));
+      releasedObserved = true;
+    } else if (blockedCommitted && !blockedState) {
       const committedRequest = { ...request, restartCommitted: previous.restartCommitted };
       const committedExpected = {
         status: 'restart-committed-observed', attemptId: previous.restartAttemptId,
@@ -371,6 +415,23 @@ export async function assertSuccessorAbandonedAfterDeath({
     assert.equal(snapshots.length, 9);
     reconciled = true;
   }
+  if (blockedReleased) {
+    const report = await reconcileInterruptedOperation(control);
+    assert.equal(report.status, 'blocked');
+    assert.equal(report.operationId, JSON.parse(state).operationId);
+    assert.deepEqual(report.handoff, {
+      authority: false,
+      attempts: [
+        { attemptId: previous.attemptId, records: ['prepared', 'committed', 'lock-retirement', 'lock-retired'],
+          status: 'lock-settled' },
+        { attemptId: previous.successorAttemptId, records: ['prepared', 'abandoned'], status: 'abandoned' },
+        { attemptId: previous.restartAttemptId, records: ['prepared', 'committed', 'lock-retirement', 'lock-retired'],
+          status: 'lock-settled' },
+      ].sort((left, right) => left.attemptId < right.attemptId ? -1 : 1),
+      unrecognized: [],
+    });
+    assert.equal(snapshots.length, 10);
+  }
   for (const snapshot of [...snapshots, ...(ownerSnapshot ? [ownerSnapshot] : [])]) {
     assert.deepEqual(await readFile(snapshot.file), snapshot.bytes);
     const current = await lstat(snapshot.file, { bigint: true });
@@ -388,7 +449,7 @@ export async function assertSuccessorAbandonedAfterDeath({
     assert.equal(current.dev, originalIdentity.dev);
     assert.equal(current.ino, originalIdentity.ino);
   }
-  if (blockedDirectory) {
+  if (blockedDirectory && !blockedReleased) {
     const current = await lstat(directory, { bigint: true });
     assert.equal(current.dev.toString(), previous.restartDirectory.dev);
     assert.equal(current.ino.toString(), previous.restartDirectory.ino);
@@ -408,7 +469,12 @@ export async function assertSuccessorAbandonedAfterDeath({
     if (stateObserved) {
       console.log('PASS: distinct restart state observer resolves original state only through its ninth record and proves the exact written state without lock or task authority');
     }
-    console.log(blockedState
+    if (releasedObserved) {
+      console.log('PASS: ordinary reconciliation reports the released restart attempt as lock-settled while staying blocked without authority');
+    }
+    console.log(blockedReleased
+      ? 'PASS: actual restart releaser death after exact lock release preserves ten records and original state for a distinct observer without authority'
+      : blockedState
       ? 'PASS: actual restart state writer death preserves its written state nine records owner and directory for a distinct observer without authority'
       : blockedCommitted
       ? 'PASS: actual fresh restart committed publisher death preserves its exact eighth record owner directory and seven records without state authority'

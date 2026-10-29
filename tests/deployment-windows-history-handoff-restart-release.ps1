@@ -1,5 +1,5 @@
 function Test-AgentsChatStoppedHistoryHandoffRestartRelease(
-    [string]$Source, [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity
+    [string]$Source, [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity, [switch]$Continue
 ) {
     . (Join-Path $Source 'windows-stopped-history-handoff-restart-release.ps1')
     $ownerPath = Join-Path $Context.Control 'lock\owner.json'
@@ -46,6 +46,7 @@ function Test-AgentsChatStoppedHistoryHandoffRestartRelease(
         [IO.Directory]::GetFileSystemEntries($Context.Control, 'state.json.lock*').Length) {
         throw 'Restart release changed its retained evidence or original state.'
     }
+    if ($Continue) { return $result }
     $retirementText = [IO.File]::ReadAllText((Join-Path $Context.Control $result.retirement.path))
     $releasedText = [IO.File]::ReadAllText((Join-Path $Context.Control $result.released.path))
     $refused = $false
