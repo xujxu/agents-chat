@@ -63,7 +63,11 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                 $remaining = [int][Math]::Max(1, ($deadline - [DateTime]::UtcNow).TotalMilliseconds)
                 Assert ($line.Wait($remaining)) 'Inactive completion boundary timed out'
                 $text = $line.GetAwaiter().GetResult()
-                Assert ($null -ne $text) 'Inactive completion actor exited before boundary'
+                if ($null -eq $text) {
+                    $null = $controller.WaitForExit(30000)
+                    [Console]::Error.WriteLine($(if ($diagnostic.Wait(5000)) { $diagnostic.Result } else { '<stderr pending>' }))
+                    throw 'Inactive completion actor exited before boundary'
+                }
                 Write-Output $text
                 if ($text.StartsWith('INACTIVE_COMPLETION_HELD ')) {
                     $held = $text.Substring('INACTIVE_COMPLETION_HELD '.Length) | ConvertFrom-Json

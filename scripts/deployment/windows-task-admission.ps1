@@ -26,9 +26,7 @@ function New-AgentsChatManagedTaskAdmission {
         $evidence = $false
         foreach ($entry in [IO.Directory]::EnumerateFileSystemEntries($Control)) {
             $name = [IO.Path]::GetFileName($entry).ToLowerInvariant()
-            if (($name.StartsWith('inactive-handoff-') -and $name.EndsWith('.json')) -or
-                ($name.StartsWith('retired-') -and ($name.EndsWith('-inactive-rollback-history-intent.json') -or
-                    $name.EndsWith('-inactive-rollback-history-complete.json')))) {
+            if ($name.StartsWith('inactive-handoff-') -and $name.EndsWith('.json')) {
                 $evidence = $true
             }
         }

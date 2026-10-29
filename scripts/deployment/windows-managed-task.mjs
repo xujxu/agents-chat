@@ -21,12 +21,11 @@ const inactiveScopes = new WeakMap();
 const canonical = value => typeof value === 'string' && value.length <= 4096
   && path.isAbsolute(value) && path.resolve(value) === value && !/[\0\r\n]/.test(value);
 const task = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,180}$/.test(value);
-// Stopped-history handoff evidence may admit only its exact committed owner through the handoff verifier.
+// Live stopped-history handoff records may admit only their exact committed owner through the handoff verifier.
+// Retired history archives remain after ordinary archival and do not imply a handoff.
 const handoffEvidence = name => {
   const entry = name.toLowerCase();
-  return (entry.startsWith('inactive-handoff-') && entry.endsWith('.json'))
-    || (entry.startsWith('retired-') && (entry.endsWith('-inactive-rollback-history-intent.json')
-      || entry.endsWith('-inactive-rollback-history-complete.json')));
+  return entry.startsWith('inactive-handoff-') && entry.endsWith('.json');
 };
 function refused(cause) {
   return Object.assign(new Error('Managed Windows task discovery refused; retain the existing deployment.', { cause }), {
