@@ -181,6 +181,7 @@ export async function assertSuccessorAbandonedAfterDeath({
   const directory = path.join(control, 'lock');
   let ownerSnapshot;
   let releasedObserved = false;
+  let retirementPublished = false;
   if (blockedDirectory) {
     if (blockedReleased) {
       await assert.rejects(lstat(directory), { code: 'ENOENT' });
@@ -303,6 +304,57 @@ export async function assertSuccessorAbandonedAfterDeath({
         restartCommitted: { ...committedRequest.restartCommitted, path: previous.restartPrepared.path },
       })), committedRefused);
       committedObserved = true;
+      // A distinct retirer proves the committed owner dead before it publishes only its retirement intent.
+      const { captureWorkerFields } = await load('worker-identity.mjs');
+      const retiredRun = await observe(restartArgs({ ...committedRequest, retireRestart: true }));
+      assert.equal(retiredRun.stderr, '');
+      const retired = JSON.parse(retiredRun.stdout);
+      const retirementDescriptor = captureWorkerFields(retired.retirement,
+        ['path', 'dev', 'ino', 'bytes', 'sha256'], 'restart lock retirement descriptor');
+      assert.deepEqual(retired, {
+        status: 'restart-lock-retirement-prepared', attemptId: previous.restartAttemptId,
+        prepared: previous.restartPrepared, committed: previous.restartCommitted, retirement: retirementDescriptor,
+        lockIdentity: previous.restartDirectory, lock: previous.restartOwner, state: original.state,
+        runtimeAuthority: false, lockAuthority: false, taskAuthority: false,
+      });
+      assert.equal(retirementDescriptor.path, `inactive-handoff-${previous.restartAttemptId}-lock-retirement.json`);
+      const retirementFile = path.join(control, retirementDescriptor.path);
+      const retirementBytes = await readFile(retirementFile);
+      const retirementIdentity = await lstat(retirementFile, { bigint: true });
+      assert.ok(retirementIdentity.isFile());
+      assert.equal(retirementIdentity.nlink, 1n);
+      assert.equal(retirementIdentity.dev.toString(), retirementDescriptor.dev);
+      assert.equal(retirementIdentity.ino.toString(), retirementDescriptor.ino);
+      assert.equal(retirementBytes.length, retirementDescriptor.bytes);
+      assert.ok(retirementBytes.length <= 65536);
+      assert.equal(createHash('sha256').update(retirementBytes).digest('hex'), retirementDescriptor.sha256);
+      const intent = JSON.parse(retirementBytes);
+      const committedValue = JSON.parse(snapshots[7].bytes);
+      assert.equal(new Date(intent.createdAt).toISOString(), intent.createdAt);
+      assert.ok(intent.createdAt >= committedValue.committedAt);
+      assert.ok(intent.createdAt <= new Date().toISOString());
+      const retirer = captureWorkerFields(intent.creator,
+        ['pid', 'processIdentity', 'bridgePid', 'bridgeIdentity'], 'restart lock retirer');
+      assert.equal(retirer.pid, process.pid);
+      assert.equal(retirer.processIdentity, identity);
+      assert.ok(Number.isInteger(retirer.bridgePid) && retirer.bridgePid > 0);
+      assert.notEqual(retirer.bridgePid, previous.pid);
+      assert.equal(typeof retirer.bridgeIdentity, 'string');
+      assert.notEqual(await processIdentity(retirer.bridgePid), retirer.bridgeIdentity);
+      assert.deepEqual(intent, {
+        version: 1, phase: 'stopped-history-handoff-restart-lock-retirement-prepared',
+        attemptId: previous.restartAttemptId, control, project: original.project,
+        controlIdentity: original.controlIdentity, previousOperationId: original.previousOperationId,
+        prepared: previous.restartPrepared, committed: previous.restartCommitted,
+        newOwner: JSON.parse(published.bytes).newOwner, lockIdentity: previous.restartDirectory,
+        lock: previous.restartOwner, state: original.state,
+        owner: committedValue.creator, creator: retirer, createdAt: intent.createdAt,
+      });
+      snapshots.push({ file: retirementFile, bytes: retirementBytes, identity: retirementIdentity });
+      // The ninth record is outside every observer this gate exposes; a fresh retirer must not duplicate it.
+      await assert.rejects(observe(restartArgs(committedRequest)), committedRefused);
+      await assert.rejects(observe(restartArgs({ ...committedRequest, retireRestart: true })), committedRefused);
+      retirementPublished = true;
     }
     if (blockedState) {
       const committedRequest = { ...request, restartCommitted: previous.restartCommitted };
@@ -415,6 +467,23 @@ export async function assertSuccessorAbandonedAfterDeath({
     assert.equal(snapshots.length, 9);
     reconciled = true;
   }
+  if (retirementPublished) {
+    const report = await reconcileInterruptedOperation(control);
+    assert.equal(report.status, 'blocked');
+    assert.equal(report.operationId, JSON.parse(state).operationId);
+    assert.deepEqual(report.handoff, {
+      authority: false,
+      attempts: [
+        { attemptId: previous.attemptId, records: ['prepared', 'committed', 'lock-retirement', 'lock-retired'],
+          status: 'lock-settled' },
+        { attemptId: previous.successorAttemptId, records: ['prepared', 'abandoned'], status: 'abandoned' },
+        { attemptId: previous.restartAttemptId, records: ['prepared', 'committed', 'lock-retirement'],
+          status: 'lock-retiring' },
+      ].sort((left, right) => left.attemptId < right.attemptId ? -1 : 1),
+      unrecognized: [],
+    });
+    assert.equal(snapshots.length, 9);
+  }
   if (blockedReleased) {
     const report = await reconcileInterruptedOperation(control);
     assert.equal(report.status, 'blocked');
@@ -468,6 +537,10 @@ export async function assertSuccessorAbandonedAfterDeath({
     }
     if (stateObserved) {
       console.log('PASS: distinct restart state observer resolves original state only through its ninth record and proves the exact written state without lock or task authority');
+    }
+    if (retirementPublished) {
+      console.log('PASS: distinct restart lock retirer proves the committed owner dead and publishes only its exact retirement intent while lock and original state remain without authority');
+      console.log('PASS: ordinary reconciliation reports the dead restart attempt as lock-retiring while staying blocked without authority');
     }
     if (releasedObserved) {
       console.log('PASS: ordinary reconciliation reports the released restart attempt as lock-settled while staying blocked without authority');

@@ -25,6 +25,13 @@ try {
     if ($observeCommitted) { $fields += 'restartCommitted' }
     $observeState = $observeCommitted -and ($inputRecord.Contains('restartStateIntent') -or $inputRecord.Contains('restartState'))
     if ($observeState) { $fields += @('restartStateIntent', 'restartState') }
+    $retireRestart = $observeCommitted -and -not $observeState -and $inputRecord.Contains('retireRestart')
+    if ($retireRestart) {
+        $fields += 'retireRestart'
+        if ($inputRecord.retireRestart -isnot [bool] -or $inputRecord.retireRestart -ne $true) {
+            throw 'Restart lock retirement request differs.'
+        }
+    }
     Assert-AgentsChatRetirementFields $inputRecord $fields
     . (Join-Path $Source 'windows-stopped-history-handoff-restart-observation.ps1')
     if ($observeState) {
@@ -87,6 +94,30 @@ try {
                 $refused = $true
             }
             if (-not $refused) { throw 'Read-only restart committed observer accepted mutation.' }
+        }
+        if ($retireRestart) {
+            . (Join-Path $Source 'windows-stopped-history-handoff-restart-retirement.ps1')
+            $refused = $false
+            try { $null = Publish-AgentsChatStoppedHistoryHandoffRestartRetirement $scope $ControllerPid $ControllerIdentity }
+            catch {
+                if ($_.Exception.Message -cne 'Restart lock retirement requires its independent native role.') { throw }
+                $refused = $true
+            }
+            if (-not $refused -or $scope.ContainsKey('HistoryHandoffRestartRetirement')) {
+                throw 'Restart committed observer retired the lock without its role.'
+            }
+            $scope.HistoryHandoffRestartRetirer = $true
+            $observation = Publish-AgentsChatStoppedHistoryHandoffRestartRetirement $scope $ControllerPid $ControllerIdentity
+            if (-not (Test-Path -LiteralPath (Join-Path $Control 'lock\owner.json') -PathType Leaf)) {
+                throw 'Restart lock retirement intent removed the dead owner.'
+            }
+            $refused = $false
+            try { $null = Publish-AgentsChatStoppedHistoryHandoffRestartRetirement $scope $ControllerPid $ControllerIdentity }
+            catch {
+                if ($_.Exception.Message -cne 'Restart lock retirement failed; retain evidence.') { throw }
+                $refused = $true
+            }
+            if (-not $refused) { throw 'Restart lock retirement accepted a duplicate intent.' }
         }
         [Console]::Out.WriteLine(($observation | ConvertTo-Json -Depth 12 -Compress))
         return

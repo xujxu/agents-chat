@@ -319,7 +319,9 @@ jobs:
             'PASS: ordinary reconciliation reports nine exact handoff records as three attempts while staying blocked without authority',
             'PASS: native live restart owner releases only its exact committed lock before any state write while original state and eight records remain exact without authority',
             'PASS: actual restart releaser death after exact lock release preserves ten records and original state for a distinct observer without authority',
-            'PASS: ordinary reconciliation reports the released restart attempt as lock-settled while staying blocked without authority'
+            'PASS: ordinary reconciliation reports the released restart attempt as lock-settled while staying blocked without authority',
+            'PASS: distinct restart lock retirer proves the committed owner dead and publishes only its exact retirement intent while lock and original state remain without authority',
+            'PASS: ordinary reconciliation reports the dead restart attempt as lock-retiring while staying blocked without authority'
           )) {
             if ($historyOutput -cnotcontains $receipt) { throw "Missing stopped-history acceptance receipt: $receipt" }
           }
