@@ -230,8 +230,11 @@ export async function assertSuccessorAbandonedAfterDeath({
         committedAt: record.committedAt,
       });
     }
-    await assert.rejects(observe(args), error => refused(error) && error.message.includes(blockedCommitted
-      ? 'Retired prepared handoff namespace differs.' : 'Committed lock directory identity differs.'));
+    // Without the ninth-record transition, the generic reader follows the written state to an archive that
+    // never existed; it must not substitute the original state.
+    await assert.rejects(observe(args), error => refused(error) && error.message.includes(blockedState
+      ? `retired-${JSON.parse(writtenState).operationId}-inactive-rollback-history-intent.json`
+      : blockedCommitted ? 'Retired prepared handoff namespace differs.' : 'Committed lock directory identity differs.'));
     if (blockedCommitted && !blockedState) {
       const committedRequest = { ...request, restartCommitted: previous.restartCommitted };
       const committedExpected = {
