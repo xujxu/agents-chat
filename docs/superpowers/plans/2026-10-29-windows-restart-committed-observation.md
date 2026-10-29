@@ -19,7 +19,7 @@
 
 - [x] Add the distinct committed observation to the `restart-committed-dead-history` resume.
 - [x] Require receipt `PASS: distinct restart committed observer proves eight records dead owner and directory without state lock or task authority`.
-- [ ] Actions red: missing `windows-stopped-history-handoff-restart-committed-observation.ps1`.
+- [x] Actions red: missing `windows-stopped-history-handoff-restart-committed-observation.ps1` (run `40824048342` at `ea0c6a51`, commitment shard `restart-committed-dead-history`: "Native restart observation fixture failed: The term '...restart-committed-observation.ps1' is not recognized").
 
 ### Task 2: Production
 
