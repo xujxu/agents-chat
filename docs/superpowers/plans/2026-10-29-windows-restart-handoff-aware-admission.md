@@ -117,3 +117,7 @@ refusal is therefore unreachable after a released rollback, and gate 62 must ins
   into the `[string]$Handoff` parameter, so the parsed record is `$handoffRecord` (run 40964292491).
 - Ordinary capture on a handoff-aware scope reports the scope-mode refusal before the duplicate-publication refusal
   (run 40964292491, commitment test line 394).
+- Restart owner verifiers distinguish the earlier controller and the observing bridge by process identity, not by
+  bare PID: Windows reused a dead publisher's PID and refused a valid restart commitment (run 40968336566, release).
+- The inactive scope retains its published admission handle until it closes, so the contract removes the admission
+  only after `scope.close()` (run 40968336566, commitment EBUSY).
