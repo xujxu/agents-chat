@@ -1,19 +1,25 @@
 . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-restart-commit.ps1')
 
 function Get-AgentsChatStoppedHistoryHandoffRestartStateIntentRecord(
-    [hashtable]$Context, $Creator, [string]$CreatedAt
+    [hashtable]$Context, $Creator, [string]$CreatedAt, [switch]$ObservedOwner
 ) {
     Assert-AgentsChatStoppedHistoryHandoffRestartCommitted $Context
     $observed = $Context.HistoryHandoffObservedCommit
+    $prepared = $Context.HistoryHandoffRestartPrepared
+    $request = $prepared.Request
     Assert-AgentsChatRetirementCreator $Creator $observed.ControllerPid $observed.ControllerIdentity
-    if ($Creator.pid -ne $observed.ControllerPid -or
+    if ($ObservedOwner) {
+        if ($Creator.pid -ne $request.ControllerPid -or
+            $Creator.processIdentity -cne $request.ControllerIdentity -or
+            $Creator.pid -eq $observed.ControllerPid -or $Creator.bridgePid -eq $PID) {
+            throw 'Restart state intent creator differs from its restart owner.'
+        }
+    } elseif ($Creator.pid -ne $observed.ControllerPid -or
         $Creator.processIdentity -cne $observed.ControllerIdentity -or
         $Creator.bridgePid -ne $PID -or
         $Creator.bridgeIdentity -cne [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)) {
         throw 'Restart state intent creator differs from its actual publisher.'
     }
-    $prepared = $Context.HistoryHandoffRestartPrepared
-    $request = $prepared.Request
     $record = Get-AgentsChatStoppedHistoryHandoffRestartBinding -Context $Context @request
     $committed = $Context.HistoryHandoffRestartCommitted
     $lock = $Context.HistoryHandoffRestartLock
@@ -21,7 +27,7 @@ function Get-AgentsChatStoppedHistoryHandoffRestartStateIntentRecord(
     $time = [DateTimeOffset]::ParseExact($CreatedAt, 'yyyy-MM-ddTHH:mm:ss.fffZ',
         [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal)
     if ($time -gt [DateTimeOffset]::UtcNow) { throw 'Restart state intent is in the future.' }
-    $state = Open-AgentsChatRetirementFile $Context $record.state 'state.json'
+    $state = Open-AgentsChatStoppedHistoryState $Context $record.state
     if ($state.ReadText() -cne $record.oldState) { throw 'Restart state intent original state differs.' }
     $old = [Text.Json.JsonDocument]::Parse($record.oldState)
     try {
@@ -54,10 +60,16 @@ function Get-AgentsChatStoppedHistoryHandoffRestartStateIntentRecord(
 }
 
 function Assert-AgentsChatStoppedHistoryHandoffRestartStateIntent([hashtable]$Context) {
-    if (-not $Context.ContainsKey('HistoryHandoffRestartStateIntender') -or
-        $Context.HistoryHandoffRestartStateIntender -ne $true -or
-        $Context.ContainsKey('HistoryHandoffRestartObserver') -or
-        -not $Context.ContainsKey('HistoryHandoffRestartStateIntent')) {
+    $intender = $Context.ContainsKey('HistoryHandoffRestartStateIntender') -and
+        $Context.HistoryHandoffRestartStateIntender -eq $true -and
+        -not $Context.ContainsKey('HistoryHandoffRestartObserver') -and
+        -not $Context.ContainsKey('HistoryHandoffRestartStateObserver')
+    $observer = $Context.ContainsKey('HistoryHandoffRestartStateObserver') -and
+        $Context.HistoryHandoffRestartStateObserver -eq $true -and
+        $Context.ContainsKey('HistoryHandoffRestartCommittedObserver') -and
+        $Context.HistoryHandoffRestartCommittedObserver -eq $true -and
+        -not $Context.ContainsKey('HistoryHandoffRestartStateIntender')
+    if ($intender -eq $observer -or -not $Context.ContainsKey('HistoryHandoffRestartStateIntent')) {
         throw 'Restart state intent lacks retained independent native proof.'
     }
     $retained = $Context.HistoryHandoffRestartStateIntent
@@ -77,7 +89,8 @@ function Assert-AgentsChatStoppedHistoryHandoffRestartStateIntent([hashtable]$Co
             throw 'Restart state intent descriptor differs.'
         }
     }
-    $record = Get-AgentsChatStoppedHistoryHandoffRestartStateIntentRecord $Context $retained.Creator $retained.CreatedAt
+    $record = Get-AgentsChatStoppedHistoryHandoffRestartStateIntentRecord $Context $retained.Creator $retained.CreatedAt `
+        -ObservedOwner:$observer
     $actual = $expected = $null
     try {
         $actual = [Text.Json.JsonDocument]::Parse($retained.File.ReadText())

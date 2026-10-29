@@ -170,6 +170,10 @@ function Open-AgentsChatStoppedWorkerCleanup(
             throw 'Stopped worker cleanup requires canonical Windows control.'
         }
         $context.Files.Add([Deployment.WindowsPrivateFile]::OpenDirectory($Control))
+        if ($null -ne $HistoryHandoffObservation -and
+            ($HistoryHandoffObservation.Contains('restartStateIntent') -or $HistoryHandoffObservation.Contains('restartState'))) {
+            Initialize-AgentsChatStoppedHistoryStateTransition $context $HistoryHandoffObservation
+        }
         if ($HistoryArchive) { Initialize-AgentsChatStoppedHistoryRecovery $context }
         $markerPath = Resolve-AgentsChatCompletionPath $context (Join-Path $Control 'inactive-rollback-workers.json')
         $original = Open-AgentsChatCompletionFile $context (Join-Path $Control 'inactive-rollback-workers.json') ''

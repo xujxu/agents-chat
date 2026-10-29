@@ -5,7 +5,7 @@ function Initialize-AgentsChatStoppedHistoryRecovery([hashtable]$Context) {
         if ($Context.ContainsKey('HistoryWriter') -and $Context.HistoryWriter) {
             throw 'Archived history intent requires independent read-only verification.'
         }
-        $state = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Control 'state.json') ''
+        $state = Open-AgentsChatStoppedHistoryState $Context $null
         $document = [Text.Json.JsonDocument]::Parse($state.ReadText())
         try {
             $fields = @($document.RootElement.EnumerateObject() | Where-Object { $_.Name -ieq 'operationId' })

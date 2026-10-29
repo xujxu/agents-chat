@@ -21,7 +21,7 @@ function Get-AgentsChatStoppedHistoryHandoffBinding(
         $Context.HistoryIntentPath -cne (Join-Path $Context.Control $intentName)) {
         throw 'Native handoff preparation requires completed original archival.'
     }
-    $state = Open-AgentsChatRetirementFile $Context $Context.TaskRecord.checkpoint.state 'state.json'
+    $state = Open-AgentsChatStoppedHistoryState $Context $Context.TaskRecord.checkpoint.state
     $oldState = $state.ReadText()
     $task = $Context.Folder.GetTask($Context.TaskName)
     $user = [string]$task.Definition.Principal.UserId
@@ -56,7 +56,7 @@ function Get-AgentsChatStoppedHistoryHandoffBinding(
 }
 
 function Get-AgentsChatStoppedHistoryHandoffStateUpdatedAt([hashtable]$Context) {
-    $state = Open-AgentsChatRetirementFile $Context $Context.TaskRecord.checkpoint.state 'state.json'
+    $state = Open-AgentsChatStoppedHistoryState $Context $Context.TaskRecord.checkpoint.state
     $document = [Text.Json.JsonDocument]::Parse($state.ReadText())
     try { return $document.RootElement.GetProperty('updatedAt').GetString() }
     finally { $document.Dispose() }

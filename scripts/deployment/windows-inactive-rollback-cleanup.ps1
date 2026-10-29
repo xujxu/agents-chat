@@ -1,5 +1,6 @@
 . (Join-Path $PSScriptRoot 'windows-task-completion-proof.ps1')
 . (Join-Path $PSScriptRoot 'windows-task-retirement-records.ps1')
+. (Join-Path $PSScriptRoot 'windows-stopped-history-state-transition.ps1')
 . (Join-Path $PSScriptRoot 'windows-task-replacement.ps1')
 . (Join-Path $PSScriptRoot 'windows-inactive-rollback-state.ps1')
 . (Join-Path $PSScriptRoot 'windows-retirement-entries.ps1')
@@ -163,7 +164,7 @@ function Initialize-AgentsChatInactiveRollbackCleanup([hashtable]$Context) {
     }
     $Context.Admission = $admission
     $Context.SecurityDescriptor = $admission.securityDescriptor.GetString()
-    $state = Open-AgentsChatRetirementFile $Context $checkpoint.state 'state.json'
+    $state = Open-AgentsChatStoppedHistoryState $Context $checkpoint.state
     $completion = Open-AgentsChatRetirementFile $Context $checkpoint.completion 'inactive-rollback-complete.json'
     $taskReceipt = Open-AgentsChatRetirementFile $Context $checkpoint.taskReceipt 'inactive-rollback-task-restored.json'
     $lockText = if ($workerMode) {
