@@ -25,7 +25,7 @@ function New-AgentsChatStoppedHistoryHandoffLock(
         $committedName = "inactive-handoff-$AttemptId-committed.json"
         Assert-AgentsChatRetirementDescriptor $Descriptor $preparedName 1048576
         $prepared = Open-AgentsChatRetirementFile $Context $Descriptor $preparedName
-        foreach ($pass in @(1, 2)) {
+        foreach ($pass in (Get-AgentsChatVerificationPasses)) {
             Assert-AgentsChatStoppedHistoryHandoffNamespace $Context @($preparedName)
             Assert-AgentsChatStoppedHistoryHandoffLivePreparedBinding $Context $AttemptId $request $prepared
             Assert-AgentsChatStoppedHistoryHandoffNamespace $Context @($preparedName)
@@ -68,7 +68,7 @@ function Publish-AgentsChatStoppedHistoryHandoffLockOwner([hashtable]$Context) {
         $commit = $Context.HistoryHandoffCommit
         $lock = $Context.HistoryHandoffLock
         if ($null -ne $lock.OwnerFile -or $null -ne $commit.Committed) { throw 'Handoff lock owner already published.' }
-        foreach ($pass in @(1, 2)) {
+        foreach ($pass in (Get-AgentsChatVerificationPasses)) {
             Assert-AgentsChatStoppedHistoryHandoffNamespace $Context @($commit.PreparedName)
             Assert-AgentsChatStoppedHistoryHandoffLivePreparedBinding $Context $commit.AttemptId $commit.Request $commit.Prepared
             Assert-AgentsChatStoppedHistoryHandoffLock $Context
@@ -100,7 +100,7 @@ function Complete-AgentsChatStoppedHistoryHandoffCommit([hashtable]$Context) {
         if ($null -eq $lock.OwnerFile -or $null -ne $commit.Committed) { throw 'Handoff commit requires its unpublished owner stage.' }
         $preparedName = $commit.PreparedName
         $committedName = $commit.CommittedName
-        foreach ($pass in @(1, 2)) {
+        foreach ($pass in (Get-AgentsChatVerificationPasses)) {
             Assert-AgentsChatStoppedHistoryHandoffNamespace $Context @($preparedName)
             Assert-AgentsChatStoppedHistoryHandoffLivePreparedBinding $Context $commit.AttemptId $commit.Request $commit.Prepared
             Assert-AgentsChatStoppedHistoryHandoffLock $Context
@@ -125,7 +125,7 @@ function Complete-AgentsChatStoppedHistoryHandoffCommit([hashtable]$Context) {
         $Context.Files.Add($held)
         $committed = Get-AgentsChatStoppedHandoffDescriptor $held $committedName
         $commit.Committed = $committed
-        foreach ($pass in @(1, 2)) {
+        foreach ($pass in (Get-AgentsChatVerificationPasses)) {
             Assert-AgentsChatStoppedHistoryHandoffNamespace $Context @($preparedName, $committedName)
             $held.Check()
             if ($held.ReadText() -cne $text) { throw 'Published committed handoff bytes differ.' }

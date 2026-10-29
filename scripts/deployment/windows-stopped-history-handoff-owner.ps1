@@ -32,7 +32,7 @@ function New-AgentsChatStoppedHistoryHandoffOwner(
     [string]$PreviousUpdatedAt, [int]$ControllerPid, [string]$ControllerIdentity
 ) {
     $owner = Get-AgentsChatStoppedHistoryHandoffOwnerRecord @PSBoundParameters
-    foreach ($pass in @(1, 2)) {
+    foreach ($pass in (Get-AgentsChatVerificationPasses)) {
         try { $actual = [Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) }
         catch {
             throw [InvalidOperationException]::new('Handoff prospective owner is unavailable.', $_.Exception)
@@ -48,7 +48,7 @@ function Get-AgentsChatStoppedHistoryHandoffRetiredOwner(
     [string]$PreviousUpdatedAt, [int]$ControllerPid, [string]$ControllerIdentity
 ) {
     $owner = Get-AgentsChatStoppedHistoryHandoffOwnerRecord @PSBoundParameters
-    foreach ($pass in @(1, 2)) {
+    foreach ($pass in (Get-AgentsChatVerificationPasses)) {
         try { Assert-AgentsChatCompletionProcessAbsent $ControllerPid $ControllerIdentity }
         catch {
             throw [InvalidOperationException]::new('Handoff retired owner remains live or unverifiable.', $_.Exception)

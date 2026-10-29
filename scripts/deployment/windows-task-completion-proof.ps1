@@ -1,5 +1,33 @@
 . (Join-Path $PSScriptRoot 'windows-task-completion-records.ps1')
 
+# Inner verifiers re-run inside every pass of an enclosing verifier loop, so they
+# use one pass there instead of compounding two passes per nesting level.
+function Get-AgentsChatVerificationPasses {
+    if (-not (Test-Path -LiteralPath variable:global:AgentsChatVerificationLoops)) {
+        $global:AgentsChatVerificationLoops = @{}
+    }
+    $loops = $global:AgentsChatVerificationLoops
+    $frames = @(Get-PSCallStack)
+    for ($index = 2; $index -lt $frames.Count; $index++) {
+        $file = $frames[$index].ScriptName
+        if (-not $file) { continue }
+        if (-not $loops.ContainsKey($file)) {
+            $tokens = $errors = $null
+            $ast = [Management.Automation.Language.Parser]::ParseFile($file, [ref]$tokens, [ref]$errors)
+            $loops[$file] = @($ast.FindAll({
+                param($node)
+                $node -is [Management.Automation.Language.ForEachStatementAst] -and
+                    $node.Condition.Extent.Text.Trim('(', ')', ' ') -ceq 'Get-AgentsChatVerificationPasses'
+            }, $true) | ForEach-Object { , @($_.Extent.StartLineNumber, $_.Extent.EndLineNumber) })
+        }
+        $line = $frames[$index].ScriptLineNumber
+        foreach ($range in $loops[$file]) {
+            if ($line -ge $range[0] -and $line -le $range[1]) { return , @(1) }
+        }
+    }
+    return , @(1, 2)
+}
+
 function Assert-AgentsChatCompletionProcessAbsent([int]$ProcessId, [string]$Identity) {
     Assert-AgentsChatCompletionProcessIdentity $ProcessId $Identity
     $process = $null

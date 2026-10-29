@@ -126,7 +126,7 @@ function Assert-AgentsChatStoppedWorkerCleanup([hashtable]$Context) {
     if ($Context.Closed -or $Context.Poisoned -or $Context.Busy) { throw 'Stopped worker cleanup is unavailable.' }
     $Context.Busy = $true
     try {
-        foreach ($pass in @(1, 2)) {
+        foreach ($pass in (Get-AgentsChatVerificationPasses)) {
             foreach ($file in $Context.Files) { $file.Check() }
             if ($Context.Target) { $Context.Target.Handle.Check() }
             Assert-AgentsChatStoppedWorkerInventory $Context

@@ -86,7 +86,7 @@ function Publish-AgentsChatStoppedHistoryHandoffLockSettlement(
             File=$held; Descriptor=(Get-AgentsChatStoppedHandoffDescriptor $held $name)
             Creator=$creator; SettledAt=$settledAt
         }
-        foreach ($pass in @(1, 2)) {
+        foreach ($pass in (Get-AgentsChatVerificationPasses)) {
             $null = Get-AgentsChatStoppedHistoryHandoffLockRetirementObservation $Context $ControllerPid $ControllerIdentity
             Assert-AgentsChatStoppedHistoryHandoffLockSettlement $Context
         }

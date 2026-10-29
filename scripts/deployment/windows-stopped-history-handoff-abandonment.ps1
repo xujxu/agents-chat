@@ -37,7 +37,7 @@ function Publish-AgentsChatStoppedHistoryHandoffAbandoned(
         $text = $record | ConvertTo-Json -Depth 8 -Compress
         $held = [Deployment.WindowsPrivateFile]::Publish((Join-Path $Context.Control $terminalName), $text)
         $Context.Files.Add($held)
-        foreach ($pass in @(1, 2)) {
+        foreach ($pass in (Get-AgentsChatVerificationPasses)) {
             Assert-AgentsChatStoppedHistoryHandoffNamespace $Context @($preparedName, $terminalName)
             $held.Check()
             if ($held.ReadText() -cne $text) { throw 'Published abandoned handoff differs.' }

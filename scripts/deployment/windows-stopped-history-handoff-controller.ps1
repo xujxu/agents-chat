@@ -21,7 +21,7 @@ function Get-AgentsChatHandoffPreparationObservation(
     if ($null -eq $Descriptor) {
         $null = Get-AgentsChatStoppedHistoryHandoffPreparedRecord @Preparation
     } else {
-        foreach ($pass in @(1, 2)) {
+        foreach ($pass in (Get-AgentsChatVerificationPasses)) {
             Assert-AgentsChatStoppedHistoryHandoffNamespace $Context @($Descriptor.path)
             Assert-AgentsChatStoppedHistoryHandoffLivePreparedBinding $Context $Preparation.AttemptId $OwnerRequest $File
             Assert-AgentsChatStoppedHistoryHandoffNamespace $Context @($Descriptor.path)

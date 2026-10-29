@@ -57,7 +57,7 @@ function Publish-AgentsChatStoppedHistoryHandoffSuccessorPrepared(
                 AttemptId=$AttemptId; OperationId=$OperationId; Token=$Token; CreatedAt=$CreatedAt
             }
         }
-        foreach ($pass in @(1, 2)) {
+        foreach ($pass in (Get-AgentsChatVerificationPasses)) {
             $null = Get-AgentsChatStoppedHistoryHandoffLockSettlementObservation $Context $ControllerPid $ControllerIdentity
             Assert-AgentsChatStoppedHistoryHandoffSuccessorPrepared $Context
         }
@@ -73,7 +73,7 @@ function Get-AgentsChatStoppedHistoryHandoffSuccessorPreparedObservation(
 ) {
     try {
         Assert-AgentsChatStoppedHistoryHandoffSuccessorPrepared $Context
-        foreach ($pass in @(1, 2)) {
+        foreach ($pass in (Get-AgentsChatVerificationPasses)) {
             $null = Get-AgentsChatStoppedHistoryHandoffLockSettlementObservation $Context $ControllerPid $ControllerIdentity
             Assert-AgentsChatStoppedHistoryHandoffSuccessorPrepared $Context
         }

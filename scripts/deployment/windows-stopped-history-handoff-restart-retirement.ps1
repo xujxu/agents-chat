@@ -8,7 +8,7 @@ function Assert-AgentsChatStoppedHistoryHandoffRestartOwnerAbsent([hashtable]$Co
         $owner.pid -ne $request.ControllerPid -or $owner.processIdentity -cne $request.ControllerIdentity) {
         throw 'Restart lock retirement owner differs from its committed creator.'
     }
-    foreach ($pass in @(1, 2)) {
+    foreach ($pass in (Get-AgentsChatVerificationPasses)) {
         try {
             Assert-AgentsChatCompletionProcessAbsent $owner.pid $owner.processIdentity
             Assert-AgentsChatCompletionProcessAbsent $owner.bridgePid $owner.bridgeIdentity
@@ -147,7 +147,7 @@ function Publish-AgentsChatStoppedHistoryHandoffRestartRetirement(
         $Context.HistoryHandoffRestartRetirement = @{
             File=$file; Descriptor=(Get-AgentsChatStoppedHandoffDescriptor $file $name); Creator=$creator; Time=$time
         }
-        foreach ($pass in @(1, 2)) {
+        foreach ($pass in (Get-AgentsChatVerificationPasses)) {
             $null = Get-AgentsChatStoppedHistoryHandoffRestartCommittedObservation $Context $ControllerPid $ControllerIdentity
             Assert-AgentsChatStoppedHistoryHandoffRestartRetirement $Context
             Assert-AgentsChatStoppedHistoryHandoffRestartLock $Context
@@ -210,7 +210,7 @@ function Get-AgentsChatStoppedHistoryHandoffRestartRetirementObservation(
             throw 'Restart lock retirement observation requires its independent native role.'
         }
         if ($Context.Poisoned) { throw 'Restart lock retirement observation scope is poisoned.' }
-        foreach ($pass in @(1, 2)) {
+        foreach ($pass in (Get-AgentsChatVerificationPasses)) {
             if ([IO.Directory]::GetFileSystemEntries($Context.Control, 'state.json.lock*').Length) {
                 throw 'Restart lock retirement observation found a state stage.'
             }

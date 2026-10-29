@@ -32,7 +32,7 @@ function Remove-AgentsChatStoppedHistoryHandoffLockDirectory(
         $null = $Context.Files.Remove($target)
         $lock.DirectoryRetirement = $null
         $lock.DirectoryRetired = $true
-        foreach ($pass in @(1, 2)) {
+        foreach ($pass in (Get-AgentsChatVerificationPasses)) {
             $observed = Get-AgentsChatStoppedHistoryHandoffLockRetirementObservation $Context $ControllerPid $ControllerIdentity
             if ($observed.status -cne 'lock-retirement-directory-retired') {
                 throw 'Handoff directory retirement did not preserve its exact absent stage.'

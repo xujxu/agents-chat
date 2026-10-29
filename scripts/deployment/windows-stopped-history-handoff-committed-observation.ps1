@@ -282,7 +282,7 @@ function Get-AgentsChatStoppedHistoryHandoffCommittedObservation(
         if ($retained.ControllerPid -ne $ControllerPid -or $retained.ControllerIdentity -cne $ControllerIdentity) {
             throw 'Committed observer controller differs.'
         }
-        foreach ($pass in @(1, 2)) {
+        foreach ($pass in (Get-AgentsChatVerificationPasses)) {
             if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity) {
                 throw 'Committed observer identity differs.'
             }

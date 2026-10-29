@@ -92,7 +92,7 @@ function Publish-AgentsChatStoppedHistoryHandoffLockRetirementIntent(
             File=$held; Descriptor=(Get-AgentsChatStoppedHandoffDescriptor $held $name)
             Creator=$creator; CreatedAt=$createdAt
         }
-        foreach ($pass in @(1, 2)) {
+        foreach ($pass in (Get-AgentsChatVerificationPasses)) {
             $null = Get-AgentsChatStoppedHistoryHandoffCommittedObservation $Context $ControllerPid $ControllerIdentity
             Assert-AgentsChatStoppedHistoryHandoffLockRetirementIntent $Context
         }

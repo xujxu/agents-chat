@@ -32,7 +32,7 @@ function Get-AgentsChatStoppedHistoryHandoffAbandoned(
             if ($settled -lt $createdTime) { throw 'Abandoned handoff settlement predates preparation.' }
         } finally { $preparedDocument.Dispose() }
         $document = [Text.Json.JsonDocument]::Parse($text)
-        foreach ($pass in @(1, 2)) {
+        foreach ($pass in (Get-AgentsChatVerificationPasses)) {
             Assert-AgentsChatStoppedHistoryHandoffNamespace $Context @($preparedName, $terminalName)
             Assert-AgentsChatRetirementCreator $record.creator $ControllerPid $ControllerIdentity
             Assert-AgentsChatStoppedHistoryHandoffRetiredPreparedBinding $Context $prepared $AttemptId `

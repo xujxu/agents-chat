@@ -39,7 +39,7 @@ function Get-AgentsChatStoppedHistoryHandoffLockSettlementObservation(
 ) {
     try {
         Assert-AgentsChatStoppedHistoryHandoffLockSettlement $Context
-        foreach ($pass in @(1, 2)) {
+        foreach ($pass in (Get-AgentsChatVerificationPasses)) {
             $observed = Get-AgentsChatStoppedHistoryHandoffLockRetirementObservation $Context $ControllerPid $ControllerIdentity
             if ($observed.status -cne 'lock-retirement-directory-retired') {
                 throw 'Lock settlement observation requires its exact absent directory.'

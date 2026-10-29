@@ -126,7 +126,7 @@ function Publish-AgentsChatStoppedHistoryHandoffRestartLockSettlement(
         $Context.HistoryHandoffRestartSettlement = @{
             File=$file; Descriptor=(Get-AgentsChatStoppedHandoffDescriptor $file $name); Creator=$creator; Time=$time
         }
-        foreach ($pass in @(1, 2)) {
+        foreach ($pass in (Get-AgentsChatVerificationPasses)) {
             $value = Get-AgentsChatStoppedHistoryHandoffRestartLockSettlementValue $Context $ControllerPid $ControllerIdentity
         }
         return $value

@@ -31,7 +31,7 @@ function Assert-AgentsChatStoppedHistoryHandoffRetiredPreparedBinding(
             ControllerIdentity=$ownerFields.processIdentity.GetString()
         }
         $document = [Text.Json.JsonDocument]::Parse($text)
-        foreach ($pass in @(1, 2)) {
+        foreach ($pass in (Get-AgentsChatVerificationPasses)) {
             if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity) {
                 throw 'Retired prepared observer identity differs.'
             }

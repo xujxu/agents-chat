@@ -41,7 +41,7 @@ function Get-AgentsChatStoppedHistoryHandoffLockRetirementObservation(
             $Context.HistoryHandoffLockRetirementObserver -ne $true) {
             throw 'Lock retirement observation requires its independent native role.'
         }
-        foreach ($pass in @(1, 2)) {
+        foreach ($pass in (Get-AgentsChatVerificationPasses)) {
             $observed = Get-AgentsChatStoppedHistoryHandoffCommittedObservation $Context $ControllerPid $ControllerIdentity
             Assert-AgentsChatStoppedHistoryHandoffLockRetirementIntent $Context
             $creator = $Context.HistoryHandoffLockRetirementIntent.Creator

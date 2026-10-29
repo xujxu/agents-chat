@@ -31,7 +31,7 @@ function Remove-AgentsChatStoppedHistoryHandoffRestartLockOwner(
         $target.Delete()
         $null = $Context.Files.Remove($target)
         $lock.OwnerRetired = $true
-        foreach ($pass in @(1, 2)) {
+        foreach ($pass in (Get-AgentsChatVerificationPasses)) {
             $observed = Get-AgentsChatStoppedHistoryHandoffRestartRetirementObservation $Context $ControllerPid $ControllerIdentity
             if ($observed.status -cne 'restart-lock-retirement-owner-retired') {
                 throw 'Restart lock owner retirement did not preserve its exact empty directory.'
