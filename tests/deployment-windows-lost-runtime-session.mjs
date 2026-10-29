@@ -689,6 +689,9 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
         restart: true, blockedDirectory: true, blockedOwner: true, blockedCommitted: true, blockedState: true,
       });
+      // The original state inode was replaced by the actual write; only bytes are restored, so generic
+      // archive readers must keep refusing and this boundary ends at its transition proof.
+      return;
     } else if (restartCommittedCrash) {
       await assertRestartPreparation({
         source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
@@ -749,6 +752,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         commitRestart: restartCommittedResume || restartStateIntentResume, prepareState: restartStateIntentResume,
         writeState: restartStateWrittenResume,
       });
+      if (restartStateWrittenResume) return;
     } else if (successorCrash) {
       await holdSuccessorPrepared({ source, control, pwsh, previous: JSON.parse(crashStep) });
       throw new Error('Held successor preparation publisher unexpectedly returned.');
