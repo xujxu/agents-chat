@@ -13,6 +13,40 @@ function Write-ObservationTrace([string]$Stage) {
     # Optional stage timing for CI diagnosis of slow native observations; stderr must stay clean.
     if ($env:AGENTS_CHAT_OBSERVATION_TRACE) { Add-Content -LiteralPath $env:AGENTS_CHAT_OBSERVATION_TRACE -Value "$Stage $($traceClock.ElapsedMilliseconds)" }
 }
+$traceProfile = [ordered]@{}
+# Wraps loaded native verifier functions with inclusive timing so CI traces show where slow observations spend time.
+function Enable-ObservationProfile {
+    if (-not $env:AGENTS_CHAT_OBSERVATION_TRACE) { return }
+    foreach ($name in @(
+        'Assert-AgentsChatStoppedWorkerCleanup', 'Assert-AgentsChatStoppedWorkerInventory',
+        'Assert-AgentsChatStoppedRollbackRuntime', 'Assert-AgentsChatStoppedHistoryRecovery',
+        'Assert-AgentsChatCompletionProcessAbsent', 'Assert-AgentsChatRuntimeHandoffInventory',
+        'Open-AgentsChatStoppedHistoryHandoffRestartRetirementObservation',
+        'Get-AgentsChatStoppedHistoryHandoffRestartCommittedObservation',
+        'Assert-AgentsChatStoppedHistoryHandoffRetiredPreparedBinding', 'Assert-AgentsChatStoppedHistoryHandoffNamespace',
+        'Get-AgentsChatStoppedHistoryHandoffRetiredOwner', 'Get-AgentsChatStoppedHistoryHandoffBinding',
+        'Assert-AgentsChatStoppedHistoryHandoffRestartRetirement', 'Assert-AgentsChatStoppedHistoryHandoffRestartLock',
+        'Get-AgentsChatStoppedHistoryHandoffRestartRetirementObservation',
+        'Remove-AgentsChatStoppedHistoryHandoffRestartLockOwner'
+    )) {
+        if ($traceProfile.Contains($name)) { continue }
+        $original = Get-Item -LiteralPath "function:$name" -ErrorAction SilentlyContinue
+        if (-not $original) { continue }
+        $traceProfile[$name] = @{ Count=0; Ms=[long]0 }
+        Set-Item -LiteralPath "function:script:__traced_$name" -Value $original.ScriptBlock
+        Set-Item -LiteralPath "function:script:$name" -Value ([scriptblock]::Create(
+            "`$clock = [Diagnostics.Stopwatch]::StartNew(); try { & __traced_$name @args } finally { " +
+            "`$entry = `$traceProfile['$name']; `$entry.Count++; `$entry.Ms += `$clock.ElapsedMilliseconds }"))
+    }
+}
+function Write-ObservationProfile {
+    if (-not $env:AGENTS_CHAT_OBSERVATION_TRACE -or $traceProfile.Count -eq 0) { return }
+    $parts = foreach ($name in $traceProfile.Keys) {
+        $entry = $traceProfile[$name]
+        if ($entry.Count) { "$($name -replace '^[A-Za-z]+-AgentsChat(StoppedHistoryHandoff|Stopped|Completion)?', '')=$($entry.Count)x$($entry.Ms)" }
+    }
+    Add-Content -LiteralPath $env:AGENTS_CHAT_OBSERVATION_TRACE -Value "profile $($parts -join ' ')"
+}
 $scope = $watch = $failure = $null
 try {
     Add-Type -Path @(
@@ -112,6 +146,7 @@ try {
         if ($observeSettlement) {
             . (Join-Path $Source 'windows-stopped-history-handoff-restart-retirement-settlement.ps1')
         }
+        Enable-ObservationProfile
         $scope = Open-AgentsChatStoppedHistoryHandoffRestartRetirementObservation $Control $ControllerPid $ControllerIdentity `
             $inputRecord.attemptId $inputRecord.prepared $inputRecord.committed $inputRecord.retirement `
             $inputRecord.terminal $inputRecord.successor $inputRecord.successorAbandoned $inputRecord.restart `
@@ -143,6 +178,7 @@ try {
         }
         if ($retireOwner) {
             . (Join-Path $Source 'windows-stopped-history-handoff-restart-retirement-owner.ps1')
+            Enable-ObservationProfile
             $refused = $false
             try { $null = Remove-AgentsChatStoppedHistoryHandoffRestartLockOwner $scope $ControllerPid $ControllerIdentity }
             catch {
@@ -295,6 +331,7 @@ try {
     $failure = $_.Exception
     [Console]::Error.WriteLine("Native restart observation fixture failed: $($failure.Message) $($failure.GetBaseException().Message)")
 } finally {
+    try { Write-ObservationProfile } catch { }
     foreach ($resource in @($scope, $watch)) {
         if ($null -eq $resource) { continue }
         try {
