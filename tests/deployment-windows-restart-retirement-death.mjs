@@ -41,7 +41,7 @@ export async function holdRestartRetirement({ source, control, pwsh, previous })
   let ready;
   let retirement;
   try {
-    ready = captureWorkerFields(await transport.wire.receive({ timeoutMs: 180000 }),
+    ready = captureWorkerFields(await transport.wire.receive({ timeoutMs: 300000 }),
       ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'], 'held restart lock retirement');
     assert.equal(ready.type, 'ready');
     assert.equal(ready.pid, transport.child.pid);

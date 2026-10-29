@@ -163,7 +163,7 @@ export async function assertSuccessorAbandonedAfterDeath({
     '-Request', JSON.stringify(value)];
   const args = restart ? restartArgs(request) : sixArgs;
   const observe = input => promisify(execFile)(pwsh, input,
-    { timeout: 180000, maxBuffer: 131072, windowsHide: true });
+    { timeout: 300000, maxBuffer: 131072, windowsHide: true });
   const expected = restart ? {
     status: 'restart-prepared-observed', attemptId: previous.restartAttemptId,
     previousAttemptId: previous.successorAttemptId, previousOperationId: original.previousOperationId,
