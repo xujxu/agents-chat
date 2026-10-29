@@ -135,5 +135,13 @@ red, not a phase timeout or an aggregate job-budget cancellation.
 The native implementation now retains the eighth file, descriptor, native
 creator and canonical commitment time. Namespace admission invokes only the
 nonrecursive retained-file assertion. Ordinary bootstrap request shapes and
-the original retired lock cache remain unchanged. Green validation remains
-pending; no state/task/runtime authority or dead-owner adoption is added.
+the original retired lock cache remain unchanged. No state/task/runtime
+authority or dead-owner adoption is added.
+
+Accepted at `02ce98a5f6fdbc02fe1b53eafdc4088dd23b1ac5`. Focused run
+`40684649023` passed baseline job `122803788347`, successor job
+`122803788399`, restart job `122803788157` and aggregate job `122831080975`.
+The combined three raw native logs contain all 41 workflow-required
+timestamped receipts. The new receipt appeared at
+`2026-10-28T13:00:52.3408632Z`. Same-SHA Contracts run `40684653615`
+passed Windows job `122803801090`.
