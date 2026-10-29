@@ -17,7 +17,7 @@ export async function assertRestartPreparation({
   source, control, pwsh, admission, previous, state, completionBytes, publish = false, hold = false,
   createDirectory = false, holdDirectory = false, publishOwner = false, holdOwner = false, commitRestart = false,
   holdCommitted = false, prepareState = false, writeState = false, holdState = false,
-  releaseRestart = false, holdReleased = false, holdReleaseIntent = false,
+  releaseRestart = false, holdReleased = false, holdReleaseIntent = false, refuseAdmission = false,
 }) {
   assert.ok(!hold || publish);
   assert.ok(!createDirectory || (publish && !hold));
@@ -32,6 +32,7 @@ export async function assertRestartPreparation({
   assert.ok(!releaseRestart || (commitRestart && !holdCommitted && (!prepareState || (writeState && !holdState))));
   assert.ok(!holdReleased || releaseRestart);
   assert.ok(!holdReleaseIntent || (releaseRestart && !holdReleased));
+  assert.ok(!refuseAdmission || (writeState && !holdState && !releaseRestart));
   const held = hold || holdDirectory || holdOwner || holdCommitted || holdState || holdReleased || holdReleaseIntent;
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
@@ -325,6 +326,20 @@ export async function assertRestartPreparation({
     throw error;
   }
   const { acquireLock, releaseLock } = await load('state.mjs');
+  if (refuseAdmission) {
+    // The exact live owner holds its committed lock and written preflight, yet ordinary inactive admission
+    // must not bypass the handoff verifier while handoff evidence remains.
+    const { inspectWindowsInactiveTask, captureWindowsInactiveTaskAdmission } = await load('windows-managed-task.mjs');
+    const scope = await inspectWindowsInactiveTask({
+      taskName: original.observation.taskName, project: original.project, pwsh,
+    });
+    try {
+      assert.deepEqual(JSON.parse(JSON.stringify(scope.observation)), original.observation);
+      await assert.rejects(captureWindowsInactiveTaskAdmission({ scope, control, lock: owner, admission }),
+        error => /requires its handoff-aware admission/.test(`${error.message} ${error.cause?.message ?? ''}`));
+    } finally { await scope.close(); }
+    await assert.rejects(lstat(path.join(control, 'task-maintenance')), { code: 'ENOENT' });
+  }
   if (publish && !held) {
     await assert.rejects(promisify(execFile)(pwsh,
       nativeArgs.filter(arg => !['-PrepareRestart', '-PublishRestart', '-CreateRestartDirectory', '-PublishRestartOwner', '-CommitRestart', '-PrepareRestartState', '-WriteRestartState', '-ReleaseRestart'].includes(arg)),
@@ -383,6 +398,9 @@ export async function assertRestartPreparation({
   }
   for (const snapshot of snapshots.reverse()) await unlink(snapshot.file);
   if (writtenState) { await writeFile(stateFile, state); }
+  if (refuseAdmission) {
+    console.log('PASS: ordinary inactive task admission refuses the exact live restart owner written preflight while handoff evidence remains without publishing maintenance');
+  }
   console.log(releaseRestart && writeState
     ? 'PASS: native live restart owner releases only its exact committed lock after its acknowledged state write while nine records and written state remain exact without authority'
     : releaseRestart

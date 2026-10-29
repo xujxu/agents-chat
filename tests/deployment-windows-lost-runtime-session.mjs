@@ -833,6 +833,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         publishOwner: restartOwnerResume || restartCommittedResume || restartStateIntentResume,
         commitRestart: restartCommittedResume || restartStateIntentResume, prepareState: restartStateIntentResume,
         writeState: restartStateWrittenResume, releaseRestart: restartReleasedResume,
+        refuseAdmission: mode === 'resume-restart-state-written-history',
       });
     } else if (successorCrash) {
       await holdSuccessorPrepared({ source, control, pwsh, previous: JSON.parse(crashStep) });

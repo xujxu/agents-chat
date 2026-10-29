@@ -313,6 +313,7 @@ jobs:
             'PASS: actual fresh restart committed publisher death preserves its exact eighth record owner directory and seven records without state authority',
             'PASS: native restart state intent binds exact old and next preflight state after its eighth record without writing state or granting authority',
             'PASS: native restart state write publishes exactly its ninth-record next state through one acknowledged stage without runtime lock or task authority',
+            'PASS: ordinary inactive task admission refuses the exact live restart owner written preflight while handoff evidence remains without publishing maintenance',
             'PASS: actual restart state writer death preserves its written state nine records owner and directory for a distinct observer without authority',
             'PASS: distinct restart committed observer proves eight records dead owner and directory without state lock or task authority',
             'PASS: distinct restart state observer resolves original state only through its ninth record and proves the exact written state without lock or task authority',
