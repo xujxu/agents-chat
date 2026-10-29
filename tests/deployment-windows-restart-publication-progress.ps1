@@ -1,6 +1,6 @@
 function Invoke-AgentsChatRestartPublicationProofFrames(
     [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity,
-    [ValidateSet('directory', 'owner', 'committed', 'state-intent', 'state-write')][string]$Publication
+    [ValidateSet('directory', 'owner', 'committed', 'state-intent', 'state-write', 'release')][string]$Publication
 ) {
     $progress = @{
         Observe=${function:Get-AgentsChatStoppedHistoryHandoffSuccessorAbandonedObservation}
@@ -26,6 +26,7 @@ function Invoke-AgentsChatRestartPublicationProofFrames(
         'committed' { Complete-AgentsChatStoppedHistoryHandoffRestartCommit $Context $ControllerPid $ControllerIdentity }
         'state-intent' { Publish-AgentsChatStoppedHistoryHandoffRestartStateIntent $Context $ControllerPid $ControllerIdentity }
         'state-write' { Write-AgentsChatStoppedHistoryHandoffRestartState $Context $ControllerPid $ControllerIdentity }
+        'release' { Remove-AgentsChatStoppedHistoryHandoffRestartLock $Context $ControllerPid $ControllerIdentity }
     }
     if ($progress.Pass -ne 2) { throw 'Restart publication did not complete both ancestor observations.' }
     return $result

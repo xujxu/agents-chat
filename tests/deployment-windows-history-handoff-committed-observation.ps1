@@ -36,6 +36,7 @@ param(
     [switch]$PrepareRestartState,
     [switch]$WriteRestartState,
     [switch]$HoldRestartState,
+    [switch]$ReleaseRestart,
     [string]$AbandonedDev,
     [string]$AbandonedIno,
     [int]$AbandonedBytes,
@@ -71,6 +72,7 @@ try {
         ($PrepareRestartState -and (-not $CommitRestart -or $HoldRestartCommitted)) -or
         ($WriteRestartState -and -not $PrepareRestartState) -or
         ($HoldRestartState -and -not $WriteRestartState) -or
+        ($ReleaseRestart -and (-not $CommitRestart -or $HoldRestartCommitted -or $PrepareRestartState)) -or
         ($PhasedPublication -and -not $PublishSuccessor) -or
         ($SealSuccessor -and -not $ObserveSuccessor) -or
         ($PublishSuccessor -and -not $PrepareSuccessor) -or
@@ -355,7 +357,19 @@ try {
         }
         . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart-commit.ps1')
         $observation = Test-AgentsChatStoppedHistoryHandoffRestartCommit $Source $scope $ControllerPid $ControllerIdentity `
-            -Continue:$PrepareRestartState
+            -Continue:($PrepareRestartState -or $ReleaseRestart)
+    }
+    if ($ReleaseRestart) {
+        [Console]::Out.WriteLine((@{
+            type='restart-committed-published'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
+            control=$Control; controllerIdentity=$ControllerIdentity; value=$observation
+        } | ConvertTo-Json -Depth 8 -Compress))
+        [Console]::Out.Flush()
+        if ([Console]::In.ReadLine() -cne '{"type":"release-restart"}') {
+            throw 'Restart release requires its exact command.'
+        }
+        . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart-release.ps1')
+        $observation = Test-AgentsChatStoppedHistoryHandoffRestartRelease $Source $scope $ControllerPid $ControllerIdentity
     }
     if ($PrepareRestartState) {
         [Console]::Out.WriteLine((@{
