@@ -39,9 +39,10 @@
 - Modify: `scripts/deployment/windows-stopped-history-handoff-committed-observation.ps1` (namespace adds release records)
 - No saved-closure change: restart handoff modules are not part of the saved worker engine closure (same as state-write).
 
-- [ ] Release intent, owner deletion, directory deletion, settlement, second observation; any failure poisons and throws `Restart release failed; retain evidence.`
-- [ ] Release refused when a state intent, writer, stage or written state is retained.
+- [x] Release intent, owner deletion, directory deletion, settlement, second observation; any failure poisons and throws `Restart release failed; retain evidence.`
+- [x] Release refused when a state intent, writer, stage or written state is retained.
 
 ### Task 3: Acceptance
 
-- [ ] Focused and Contracts runs green; all six shard logs merged and every required receipt present.
+- [x] Focused and Contracts runs green; all six shard logs merged and every required receipt present.
+  Evidence: production `6c7c6f1d`; focused run `40878611222` (shards successor `123486773510`, restart `123486773577`, state `123486773640`, commitment `123486773670`, baseline `123486773693`, release `123486774384`, acceptance `123518357289`) all success; Contracts run `40878629127` success; merged shard logs contain all 49 required receipts.
