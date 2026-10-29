@@ -9,11 +9,12 @@ import { fixtureArgs, descriptorArgs } from './deployment-windows-lock-retiremen
 import { assertRestartOwnerPublication } from './deployment-windows-restart-owner-publication.mjs';
 import { assertRestartPublicationProofs } from './deployment-windows-restart-publication-progress.mjs';
 import { assertRestartCommitPublication } from './deployment-windows-restart-commit-publication.mjs';
+import { assertRestartStateIntentPublication } from './deployment-windows-restart-state-intent-publication.mjs';
 
 export async function assertRestartPreparation({
   source, control, pwsh, admission, previous, state, completionBytes, publish = false, hold = false,
   createDirectory = false, holdDirectory = false, publishOwner = false, holdOwner = false, commitRestart = false,
-  holdCommitted = false,
+  holdCommitted = false, prepareState = false,
 }) {
   assert.ok(!hold || publish);
   assert.ok(!createDirectory || (publish && !hold));
@@ -22,6 +23,7 @@ export async function assertRestartPreparation({
   assert.ok(!holdOwner || publishOwner);
   assert.ok(!commitRestart || (publishOwner && !holdOwner));
   assert.ok(!holdCommitted || commitRestart);
+  assert.ok(!prepareState || (commitRestart && !holdCommitted));
   const held = hold || holdDirectory || holdOwner || holdCommitted;
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
@@ -73,7 +75,8 @@ export async function assertRestartPreparation({
     ...(publish ? ['-PublishRestart'] : []), ...(hold ? ['-Hold'] : []),
     ...(createDirectory ? ['-CreateRestartDirectory'] : []), ...(holdDirectory ? ['-HoldRestartDirectory'] : []),
     ...(publishOwner ? ['-PublishRestartOwner'] : []), ...(holdOwner ? ['-HoldRestartOwner'] : []),
-    ...(commitRestart ? ['-CommitRestart'] : []), ...(holdCommitted ? ['-HoldRestartCommitted'] : [])];
+    ...(commitRestart ? ['-CommitRestart'] : []), ...(holdCommitted ? ['-HoldRestartCommitted'] : []),
+    ...(prepareState ? ['-PrepareRestartState'] : [])];
   let phase;
   const phases = [];
   const enterPhase = value => {
@@ -235,17 +238,25 @@ export async function assertRestartPreparation({
             const committedSnapshot = await assertRestartCommitPublication({
               control, identity, ready, original, record, prepared: descriptor, directory: directoryIdentity,
               owner: ownerSnapshot.descriptor, transport, controllerWire, captureWorkerFields, enterPhase,
-              holdCommitted, processIdentity,
+              holdCommitted, processIdentity, prepareState,
             });
             snapshots.push(committedSnapshot);
             if (holdCommitted) { heldPublication.restartCommitted = committedSnapshot.descriptor; }
+            if (prepareState) {
+              const { validateState } = await load('state.mjs');
+              snapshots.push(await assertRestartStateIntentPublication({
+                control, identity, ready, original, record, prepared: descriptor, committed: committedSnapshot.descriptor,
+                directory: directoryIdentity, owner: ownerSnapshot.descriptor, transport, controllerWire,
+                captureWorkerFields, enterPhase, validateState,
+              }));
+            }
           } finally { controllerWire.close(); }
         }
         if (holdDirectory || holdOwner || holdCommitted) {
           heldPublication.restartDirectory = directoryIdentity;
           if (holdOwner || holdCommitted) { heldPublication.restartOwner = ownerSnapshot.descriptor; }
         } else {
-          enterPhase(commitRestart ? 'committed-exit' : 'directory-exit');
+          enterPhase(prepareState ? 'state-intent-exit' : commitRestart ? 'committed-exit' : 'directory-exit');
           assert.deepEqual(await transport.waitForExit(), { code: 0, signal: null });
           assert.equal(diagnostic, '');
           transport.wire.close();
@@ -261,7 +272,7 @@ export async function assertRestartPreparation({
   const { acquireLock, releaseLock } = await load('state.mjs');
   if (publish && !held) {
     await assert.rejects(promisify(execFile)(pwsh,
-      nativeArgs.filter(arg => !['-PrepareRestart', '-PublishRestart', '-CreateRestartDirectory', '-PublishRestartOwner', '-CommitRestart'].includes(arg)),
+      nativeArgs.filter(arg => !['-PrepareRestart', '-PublishRestart', '-CreateRestartDirectory', '-PublishRestartOwner', '-CommitRestart', '-PrepareRestartState'].includes(arg)),
       { timeout: 45000, maxBuffer: 131072, windowsHide: true }),
     error => error.message.includes('Successor abandoned observation failed; retain evidence.'));
   }
@@ -304,7 +315,9 @@ export async function assertRestartPreparation({
     try { await new Promise(() => {}); } finally { clearInterval(timer); }
   }
   for (const snapshot of snapshots.reverse()) await unlink(snapshot.file);
-  console.log(commitRestart
+  console.log(prepareState
+    ? 'PASS: native restart state intent binds exact old and next preflight state after its eighth record without writing state or granting authority'
+    : commitRestart
     ? 'PASS: native restart commitment pins its exact live owner and eighth record while copied evidence ordinary authority and duplicate publication remain refused'
     : publishOwner
     ? 'PASS: native restart owner publication pins only its exact fresh live owner while ordinary authority and duplicate publication remain refused'

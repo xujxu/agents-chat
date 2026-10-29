@@ -6,7 +6,7 @@ import { assertRestartPublicationProofs } from './deployment-windows-restart-pub
 
 export async function assertRestartCommitPublication({
   control, identity, ready, original, record, prepared, directory, owner, transport, controllerWire,
-  captureWorkerFields, enterPhase, holdCommitted = false, processIdentity,
+  captureWorkerFields, enterPhase, holdCommitted = false, processIdentity, prepareState = false,
 }) {
   enterPhase('host-commit-command');
   console.log(`INACTIVE_HISTORY_RESTART_OWNER_LIVE ${JSON.stringify({
@@ -22,10 +22,10 @@ export async function assertRestartCommitPublication({
     publication: 'committed', transport, ready, control, identity, captureWorkerFields, enterPhase,
   });
   let response = await transport.wire.receive({ timeoutMs: 45000 });
-  if (holdCommitted) {
+  if (holdCommitted || prepareState) {
     const frame = captureWorkerFields(response,
       ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'], 'held restart commitment');
-    assert.equal(frame.type, 'ready');
+    assert.equal(frame.type, holdCommitted ? 'ready' : 'restart-committed-published');
     assert.equal(frame.pid, ready.pid);
     assert.equal(frame.processIdentity, ready.processIdentity);
     assert.equal(frame.processIdentity, await processIdentity(frame.pid));

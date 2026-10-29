@@ -1,5 +1,5 @@
 function Test-AgentsChatStoppedHistoryHandoffRestartCommit(
-    [string]$Source, [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity
+    [string]$Source, [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity, [switch]$Continue
 ) {
     . (Join-Path $Source 'windows-stopped-history-handoff-restart-commit.ps1')
     $refused = $false
@@ -33,6 +33,7 @@ function Test-AgentsChatStoppedHistoryHandoffRestartCommit(
         directory=$lock.DirectoryIdentity; owner=$lock.OwnerDescriptor
         runtimeAuthority=$false; lockAuthority=$false
     }
+    if ($Continue) { return $result }
     $refused = $false
     try { $null = Complete-AgentsChatStoppedHistoryHandoffRestartCommit $Context $ControllerPid $ControllerIdentity }
     catch {
