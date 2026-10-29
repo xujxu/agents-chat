@@ -115,10 +115,11 @@ try {
                 $request.control.GetString() -cne $HandoffControl) {
                 throw 'Handoff-aware admission differs from its handoff-aware inspection.'
             }
-            $handoff = Read-AgentsChatRetirementJson $handoffText
+            # Distinct name: PowerShell variables are case-insensitive and $Handoff is the [string] parameter.
+            $handoffRecord = Read-AgentsChatRetirementJson $handoffText
             $value = New-AgentsChatManagedTaskAdmission -Context $scope -Control $request.control.GetString() `
                 -LockSha256 $request.lockSha256.GetString() -StateSha256 $request.stateSha256.GetString() `
-                -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity -Inactive -Handoff $handoff
+                -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity -Inactive -Handoff $handoffRecord
         } else {
             $value = if ($Inactive) { Assert-AgentsChatInactiveTask $scope } else { Assert-AgentsChatManagedTask $scope }
         }
