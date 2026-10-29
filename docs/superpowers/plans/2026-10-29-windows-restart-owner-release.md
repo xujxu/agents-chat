@@ -21,14 +21,15 @@
 - Modify: `tests/deployment-windows-restart-preparation.mjs` (`releaseRestart`), `tests/deployment-windows-lost-runtime-session.mjs` (`resume-restart-released-history`), `tests/deployment-windows-inactive-task.ps1` (boundary `restart-released-history`, shard `release`)
 - Modify: `.github/workflows/deployment-lifecycle.yml` (sixth shard `release`, new required receipt)
 
-- [ ] Role refusal `Restart release requires its independent native role.` leaves owner, lock, scope and records unchanged.
-- [ ] Success: two ancestor proof frames, `lock` absent, original `state.json` hash unchanged, no `state.json.lock*`, prepared and committed bytes unchanged.
-- [ ] Result `{status:'restart-released', attemptId, prepared, committed, retirement, released, state, runtimeAuthority:false, lockAuthority:false, taskAuthority:false}`; Node verifies both records field-for-field (`createdAt >= committedAt`, `releasedAt >= createdAt`) and identity-pinned descriptors.
-- [ ] Duplicate refusal `Restart release failed; retain evidence.` poisons the context and preserves both records.
-- [ ] Ordinary `acquireLock`/`releaseLock` and the plain six-record native rerun remain refused; original state inode and bytes unchanged; namespace is exactly the eight records plus the two release records.
-- [ ] Boundary `restart-released-history` is the only boundary of shard `release`; the guard requires `restart-state-dead-history` second-last and `restart-released-history` last.
-- [ ] Receipt `PASS: native live restart owner releases only its exact committed lock before any state write while original state and eight records remain exact without authority`.
-- [ ] Actions red: release shard fails because `windows-stopped-history-handoff-restart-release.ps1` does not exist.
+- [x] Role refusal `Restart release requires its independent native role.` leaves owner, lock, scope and records unchanged.
+- [x] Success: two ancestor proof frames, `lock` absent, original `state.json` hash unchanged, no `state.json.lock*`, prepared and committed bytes unchanged.
+- [x] Result `{status:'restart-released', attemptId, prepared, committed, retirement, released, state, runtimeAuthority:false, lockAuthority:false, taskAuthority:false}`; Node verifies both records field-for-field (`createdAt >= committedAt`, `releasedAt >= createdAt`) and identity-pinned descriptors.
+- [x] Duplicate refusal `Restart release failed; retain evidence.` poisons the context and preserves both records.
+- [x] Ordinary `acquireLock`/`releaseLock` and the plain six-record native rerun remain refused; original state inode and bytes unchanged; namespace is exactly the eight records plus the two release records.
+- [x] Boundary `restart-released-history` is the only boundary of shard `release`; the guard requires `restart-state-dead-history` second-last and `restart-released-history` last.
+- [x] Receipt `PASS: native live restart owner releases only its exact committed lock before any state write while original state and eight records remain exact without authority`.
+- [x] Actions red: release shard fails because `windows-stopped-history-handoff-restart-release.ps1` does not exist.
+  Evidence: test contract `f3280d35`, focused run `40876522937`, release shard job `123456655666` failed during `restart-release-before-proof` with "The term ...\windows-stopped-history-handoff-restart-release.ps1 is not recognized".
 
 ### Task 2: Production module (green)
 
@@ -36,7 +37,7 @@
 - Create: `scripts/deployment/windows-stopped-history-handoff-restart-release.ps1`
 - Modify: `scripts/deployment/windows-stopped-history-handoff-restart-lock.ps1` (accept `Released`)
 - Modify: `scripts/deployment/windows-stopped-history-handoff-committed-observation.ps1` (namespace adds release records)
-- Modify: `scripts/deployment/saved-worker-engine.mjs`, `tests/deployment-saved-worker.test.mjs` (saved closure)
+- No saved-closure change: restart handoff modules are not part of the saved worker engine closure (same as state-write).
 
 - [ ] Release intent, owner deletion, directory deletion, settlement, second observation; any failure poisons and throws `Restart release failed; retain evidence.`
 - [ ] Release refused when a state intent, writer, stage or written state is retained.
