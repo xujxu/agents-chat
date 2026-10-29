@@ -19,7 +19,10 @@ const { withWindowsAdmission } = await load('windows-admission.mjs');
 const { processIdentity } = await load('process-identity.mjs');
 assert.equal(typeof api.openWindowsInactiveLostRuntimeAuthority, 'function',
   'Missing owned inactive lost-runtime transport');
-const state = await readFile(path.join(control, 'state.json'));
+// After the dead writer's actual write, the original state is resolvable only through its ninth record.
+const state = mode === 'resume-restart-state-dead-history'
+  ? Buffer.from(JSON.parse(await readFile(path.join(control, JSON.parse(crashStep).restartStateIntent.path))).oldState)
+  : await readFile(path.join(control, 'state.json'));
 let expectedFinalState = state;
 const progress = phase => console.error(`INACTIVE_ROLLBACK_PHASE ${JSON.stringify({
   mode, phase, elapsedMs: Math.round(performance.now()),
