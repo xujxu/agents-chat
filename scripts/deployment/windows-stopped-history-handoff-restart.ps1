@@ -1,5 +1,39 @@
 . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-successor-abandoned-observation.ps1')
 
+# Handoff-aware admission observes from inside the exact live restart owner; earlier observers require its death.
+function Test-AgentsChatStoppedHistoryHandoffRestartOwnerAdmitter([hashtable]$Context) {
+    if (-not $Context.ContainsKey('HistoryHandoffRestartOwnerAdmitter')) { return $false }
+    $observed = $Context.HistoryHandoffObservedCommit
+    if ($Context.HistoryHandoffRestartOwnerAdmitter -ne $true -or
+        -not $Context.ContainsKey('HistoryHandoffRestartObserver') -or
+        $Context.HistoryHandoffRestartObserver -ne $true -or
+        -not $Context.ContainsKey('HistoryHandoffRestartPrepared') -or
+        $Context.ContainsKey('HistoryHandoffRestartPreparer') -or
+        $Context.ContainsKey('HistoryHandoffRestartPublisher') -or
+        $Context.HistoryHandoffRestartPrepared.Request.ControllerPid -ne $observed.ControllerPid -or
+        $Context.HistoryHandoffRestartPrepared.Request.ControllerIdentity -cne $observed.ControllerIdentity -or
+        $observed.ControllerPid -eq $PID -or
+        [Deployment.WindowsWorkerJob]::ProcessIdentity($observed.ControllerPid) -cne $observed.ControllerIdentity) {
+        throw 'Restart owner admission requires the exact live restart owner.'
+    }
+    return $true
+}
+
+function Assert-AgentsChatStoppedHistoryHandoffRestartOwnerCreator([hashtable]$Context, $Creator) {
+    $request = $Context.HistoryHandoffRestartPrepared.Request
+    Assert-AgentsChatRetirementFields $Creator @('pid', 'processIdentity', 'bridgePid', 'bridgeIdentity')
+    if ($Creator.pid -isnot [int] -or $Creator.bridgePid -isnot [int] -or $Creator.pid -eq $Creator.bridgePid) {
+        throw 'Invalid retirement creator.'
+    }
+    Assert-AgentsChatCompletionProcessIdentity $Creator.pid $Creator.processIdentity
+    Assert-AgentsChatCompletionProcessIdentity $Creator.bridgePid $Creator.bridgeIdentity
+    if ($Creator.pid -ne $request.ControllerPid -or $Creator.processIdentity -cne $request.ControllerIdentity -or
+        $Creator.bridgePid -eq $PID -or -not (Test-AgentsChatStoppedHistoryHandoffRestartOwnerAdmitter $Context)) {
+        throw 'Restart owner admission creator differs from its live restart owner.'
+    }
+    Assert-AgentsChatCompletionProcessAbsent $Creator.bridgePid $Creator.bridgeIdentity
+}
+
 function Get-AgentsChatStoppedHistoryHandoffRestartBinding(
     [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity,
     [string]$AttemptId, [string]$OperationId, [string]$Token, [string]$CreatedAt
@@ -62,7 +96,9 @@ function Get-AgentsChatStoppedHistoryHandoffRestartBinding(
     }
     $record.phase = 'stopped-history-handoff-restart-prepared'
     $record.attemptId = $AttemptId
-    $record.newOwner = if ($observer) { Get-AgentsChatStoppedHistoryHandoffRetiredOwner @request }
+    $admitter = $observer -and (Test-AgentsChatStoppedHistoryHandoffRestartOwnerAdmitter $Context)
+    $record.newOwner = if ($admitter) { Get-AgentsChatStoppedHistoryHandoffOwnerRecord @request }
+        elseif ($observer) { Get-AgentsChatStoppedHistoryHandoffRetiredOwner @request }
         else { New-AgentsChatStoppedHistoryHandoffOwner @request }
     $intent = $Context.HistoryHandoffLockRetirementIntent
     $settlement = $Context.HistoryHandoffLockSettlement
@@ -81,7 +117,8 @@ function Get-AgentsChatStoppedHistoryHandoffRestartBinding(
     if ([Text.Encoding]::UTF8.GetByteCount(($record | ConvertTo-Json -Depth 16 -Compress)) -gt 1048576) {
         throw 'Native restart preparation response is oversized.'
     }
-    if ($observer) { $null = Get-AgentsChatStoppedHistoryHandoffRetiredOwner @request }
+    if ($admitter) { $null = Test-AgentsChatStoppedHistoryHandoffRestartOwnerAdmitter $Context }
+    elseif ($observer) { $null = Get-AgentsChatStoppedHistoryHandoffRetiredOwner @request }
     else { $null = New-AgentsChatStoppedHistoryHandoffOwner @request }
     return $record
 }

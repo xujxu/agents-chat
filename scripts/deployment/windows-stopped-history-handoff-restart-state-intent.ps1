@@ -7,18 +7,23 @@ function Get-AgentsChatStoppedHistoryHandoffRestartStateIntentRecord(
     $observed = $Context.HistoryHandoffObservedCommit
     $prepared = $Context.HistoryHandoffRestartPrepared
     $request = $prepared.Request
-    Assert-AgentsChatRetirementCreator $Creator $observed.ControllerPid $observed.ControllerIdentity
-    if ($ObservedOwner) {
+    if ($ObservedOwner -and (Test-AgentsChatStoppedHistoryHandoffRestartOwnerAdmitter $Context)) {
+        Assert-AgentsChatStoppedHistoryHandoffRestartOwnerCreator $Context $Creator
+    } elseif ($ObservedOwner) {
+        Assert-AgentsChatRetirementCreator $Creator $observed.ControllerPid $observed.ControllerIdentity
         if ($Creator.pid -ne $request.ControllerPid -or
             $Creator.processIdentity -cne $request.ControllerIdentity -or
             $Creator.pid -eq $observed.ControllerPid -or $Creator.bridgePid -eq $PID) {
             throw 'Restart state intent creator differs from its restart owner.'
         }
-    } elseif ($Creator.pid -ne $observed.ControllerPid -or
-        $Creator.processIdentity -cne $observed.ControllerIdentity -or
-        $Creator.bridgePid -ne $PID -or
-        $Creator.bridgeIdentity -cne [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)) {
-        throw 'Restart state intent creator differs from its actual publisher.'
+    } else {
+        Assert-AgentsChatRetirementCreator $Creator $observed.ControllerPid $observed.ControllerIdentity
+        if ($Creator.pid -ne $observed.ControllerPid -or
+            $Creator.processIdentity -cne $observed.ControllerIdentity -or
+            $Creator.bridgePid -ne $PID -or
+            $Creator.bridgeIdentity -cne [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)) {
+            throw 'Restart state intent creator differs from its actual publisher.'
+        }
     }
     $record = Get-AgentsChatStoppedHistoryHandoffRestartBinding -Context $Context @request
     $committed = $Context.HistoryHandoffRestartCommitted

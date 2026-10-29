@@ -1,11 +1,12 @@
 function New-AgentsChatManagedTaskAdmission {
     param(
         [hashtable]$Context, [string]$Control, [string]$LockSha256, [string]$StateSha256,
-        [int]$ControllerPid, [string]$ControllerIdentity, [switch]$Inactive
+        [int]$ControllerPid, [string]$ControllerIdentity, [switch]$Inactive, $Handoff
     )
     $files = [Collections.Generic.List[IDisposable]]::new()
-    $failure = $null
+    $failure = $proof = $null
     try {
+        if ($null -ne $Handoff -and -not $Inactive) { throw 'Handoff-aware admission requires an inactive observer.' }
         $project = $Context.Project
         if ($Control -cnotmatch '^[A-Za-z]:\\' -or [IO.Path]::GetFullPath($Control) -cne $Control -or
             $Control -match '[\x00\r\n]' -or $Control.Length -gt 4096 -or
@@ -21,6 +22,21 @@ function New-AgentsChatManagedTaskAdmission {
             'task-retirement-checkpoint.json', 'worker-retirement.json', 'live-retirement.json',
             'cold-restore-complete.json')) {
             if (Test-Path -LiteralPath (Join-Path $Control $entry)) { throw "Existing admission or recovery evidence: $entry." }
+        }
+        $evidence = $false
+        foreach ($entry in [IO.Directory]::EnumerateFileSystemEntries($Control)) {
+            $name = [IO.Path]::GetFileName($entry).ToLowerInvariant()
+            if (($name.StartsWith('inactive-handoff-') -and $name.EndsWith('.json')) -or
+                ($name.StartsWith('retired-') -and ($name.EndsWith('-inactive-rollback-history-intent.json') -or
+                    $name.EndsWith('-inactive-rollback-history-complete.json')))) {
+                $evidence = $true
+            }
+        }
+        if ($evidence -and $null -eq $Handoff) {
+            throw 'Stopped-history handoff evidence requires its handoff-aware admission.'
+        }
+        if (-not $evidence -and $null -ne $Handoff) {
+            throw 'Handoff-aware admission requires its stopped-history handoff evidence.'
         }
         $lockPath = Join-Path $Control 'lock/owner.json'
         $statePath = Join-Path $Control 'state.json'
@@ -53,6 +69,10 @@ function New-AgentsChatManagedTaskAdmission {
         }
         if ($Inactive) { $null = Assert-AgentsChatInactiveTask $Context }
         else { $null = Assert-AgentsChatManagedTask $Context }
+        if ($null -ne $Handoff) {
+            $proof = Open-AgentsChatStoppedHistoryHandoffAdmissionProof $Control $ControllerPid $ControllerIdentity `
+                $LockSha256 $StateSha256 $Handoff
+        }
         foreach ($file in $files) { $file.Check() }
         $record = if ($Inactive) { [ordered]@{
             version=2; kind='inactive'; operationId=$operationId
@@ -78,6 +98,9 @@ function New-AgentsChatManagedTaskAdmission {
         $files.Add($published)
         if ($Inactive) { $null = Assert-AgentsChatInactiveTask $Context }
         else { $null = Assert-AgentsChatManagedTask $Context }
+        if ($null -ne $proof) {
+            Assert-AgentsChatStoppedHistoryHandoffAdmissionProofRetained $proof $ControllerPid $ControllerIdentity
+        }
         foreach ($file in $files) { $file.Check() }
         if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity -or
             (Test-Path -LiteralPath (Join-Path $Control 'recovery-lock'))) { throw 'Admission ownership changed.' }
@@ -100,6 +123,10 @@ function New-AgentsChatManagedTaskAdmission {
     } finally {
         $failures = [Collections.Generic.List[Exception]]::new()
         if ($failure) { $failures.Add($failure) }
+        if ($null -ne $proof) {
+            try { Close-AgentsChatTaskCompletionProof $proof }
+            catch { $failures.Add($_.Exception) }
+        }
         for ($index = $files.Count - 1; $index -ge 0; $index--) {
             try { $files[$index].Dispose() }
             catch { $failures.Add($_.Exception) }

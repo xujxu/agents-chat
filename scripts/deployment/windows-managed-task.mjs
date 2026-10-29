@@ -1,3 +1,4 @@
+import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -20,6 +21,13 @@ const inactiveScopes = new WeakMap();
 const canonical = value => typeof value === 'string' && value.length <= 4096
   && path.isAbsolute(value) && path.resolve(value) === value && !/[\0\r\n]/.test(value);
 const task = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,180}$/.test(value);
+// Stopped-history handoff evidence may admit only its exact committed owner through the handoff verifier.
+const handoffEvidence = name => {
+  const entry = name.toLowerCase();
+  return (entry.startsWith('inactive-handoff-') && entry.endsWith('.json'))
+    || (entry.startsWith('retired-') && (entry.endsWith('-inactive-rollback-history-intent.json')
+      || entry.endsWith('-inactive-rollback-history-complete.json')));
+};
 function refused(cause) {
   return Object.assign(new Error('Managed Windows task discovery refused; retain the existing deployment.', { cause }), {
     code: 'DEPLOYMENT_WINDOWS_MANAGED_TASK_REFUSED', runtimeAuthority: false,
@@ -33,7 +41,20 @@ export async function inspectWindowsInactiveTask({ taskName, project, pwsh, sign
   return inspectTask({ taskName, project, pwsh, signal }, true);
 }
 
-async function inspectTask({ taskName, project, pwsh, signal }, inactive) {
+// A released stopped-history rollback relocates its readiness evidence, so inspection first proves the exact
+// handoff and then observes the task through that proof's physical bundle.
+export async function inspectWindowsInactiveTaskHandoff({ taskName, project, pwsh, control, handoff, signal }) {
+  let captured;
+  let root;
+  try {
+    if (!canonical(control)) throw new Error('Handoff-aware inspection requires its canonical control directory.');
+    captured = captureHandoff(handoff);
+    ({ root } = await externalWorkerDirectory(control, project));
+  } catch (cause) { throw refused(cause); }
+  return inspectTask({ taskName, project, pwsh, signal, handoff: { control: root, value: captured } }, true);
+}
+
+async function inspectTask({ taskName, project, pwsh, signal, handoff }, inactive) {
   const capture = inactive ? captureWindowsInactiveTaskObservation : captureWindowsManagedTaskObservation;
   signal?.throwIfAborted();
   if (process.platform !== 'win32' || !task(taskName) || !canonical(project) || !canonical(pwsh)) {
@@ -46,14 +67,16 @@ async function inspectTask({ taskName, project, pwsh, signal }, inactive) {
     pwsh, refused, label: 'Native managed task observer',
     args: ['-NoProfile', '-NonInteractive', '-File', script, '-TaskName', taskName, '-Project', project,
       '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity,
-      ...(inactive ? ['-Inactive'] : [])],
+      ...(inactive ? ['-Inactive'] : []),
+      ...(handoff ? ['-HandoffControl', handoff.control,
+        '-Handoff', Buffer.from(JSON.stringify(handoff.value)).toString('base64')] : [])],
   });
   let closed = false;
   let busy = false;
   let sequence = 0;
   let failure;
   try {
-    const ready = captureWorkerFields(await wire.receive({ signal, timeoutMs: 60000 }),
+    const ready = captureWorkerFields(await wire.receive({ signal, timeoutMs: handoff ? 300000 : 60000 }),
       ['type', 'pid', 'processIdentity', 'project', 'taskName', 'controllerIdentity', 'accountSid', 'sessionId', 'value'],
       'managed task readiness');
     if (ready.type !== 'ready' || ready.pid !== child.pid || ready.project !== project || ready.taskName !== taskName
@@ -80,7 +103,8 @@ async function inspectTask({ taskName, project, pwsh, signal }, inactive) {
         const id = ++sequence;
         await wire.send({ id, method, ...payload });
         const reply = captureWorkerFields(await wire.receive({
-          signal: requestSignal, timeoutMs: method === 'start-inactive' ? 60000 : 30000,
+          signal: requestSignal,
+          timeoutMs: method === 'capture-handoff-admission' ? 300000 : method === 'start-inactive' ? 60000 : 30000,
         }),
           ['id', 'type', 'value', 'processIdentity'], 'managed task reply');
         if (reply.id !== id || reply.type !== 'reply' || reply.processIdentity !== identity.processIdentity) {
@@ -107,7 +131,7 @@ async function inspectTask({ taskName, project, pwsh, signal }, inactive) {
           return captureWorkerFields(reply.value, ['status', 'step', 'taskName', 'runtime', 'definition'], 'inactive startup');
         }
         if (method === 'complete-inactive') return reply.value;
-        if (method === 'capture-admission') {
+        if (method === 'capture-admission' || method === 'capture-handoff-admission') {
           const result = captureWorkerFields(reply.value, ['admission', 'sha256'], 'managed task admission');
           if (result.admission !== path.join(payload.control, 'task-maintenance', 'admission.json')
             || typeof result.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(result.sha256)) {
@@ -133,7 +157,7 @@ async function inspectTask({ taskName, project, pwsh, signal }, inactive) {
       } : {}),
       close: async () => { if (!closed) await request('close'); },
     });
-    (inactive ? inactiveScopes : scopes).set(scope, { observation, request });
+    (inactive ? inactiveScopes : scopes).set(scope, { observation, request, handoff: handoff?.value });
     return scope;
   } catch (cause) {
     closed = true;
@@ -161,13 +185,58 @@ export async function captureWindowsInactiveTaskAdmission({ scope, control, lock
   return captureTaskAdmission({ scope, control, lock, admission, signal }, true);
 }
 
-async function captureTaskAdmission({ scope, control, lock: suppliedLock, admission, signal }, inactive) {
+const handoffDescriptors = ['prepared', 'committed', 'retirement', 'terminal', 'successor', 'abandoned',
+  'restart', 'restartCommitted', 'restartStateIntent', 'restartState'];
+function captureHandoff(value) {
+  const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  const handoff = captureWorkerFields(value, ['attemptId', ...handoffDescriptors], 'handoff-aware admission');
+  if (typeof handoff.attemptId !== 'string' || !guid.test(handoff.attemptId)) {
+    throw new Error('Handoff-aware admission attempt differs.');
+  }
+  return Object.freeze({
+    attemptId: handoff.attemptId,
+    ...Object.fromEntries(handoffDescriptors.map(name => {
+      const descriptor = captureWorkerFields(handoff[name], ['path', 'dev', 'ino', 'bytes', 'sha256'], `handoff ${name}`);
+      if (typeof descriptor.path !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,180}$/.test(descriptor.path)
+        || typeof descriptor.dev !== 'string' || !/^(0|[1-9][0-9]{0,9})$/.test(descriptor.dev)
+        || typeof descriptor.ino !== 'string' || !/^(0|[1-9][0-9]{0,19})$/.test(descriptor.ino)
+        || !Number.isSafeInteger(descriptor.bytes) || descriptor.bytes < 1 || descriptor.bytes > 1048576
+        || typeof descriptor.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(descriptor.sha256)) {
+        throw new Error(`Handoff-aware admission ${name} descriptor differs.`);
+      }
+      return [name, Object.freeze({
+        path: descriptor.path, dev: descriptor.dev, ino: descriptor.ino, bytes: descriptor.bytes, sha256: descriptor.sha256,
+      })];
+    })),
+  });
+}
+
+// Admits the exact live restart owner's written preflight only through the shared native handoff verifier.
+export async function captureWindowsInactiveTaskHandoffAdmission({ scope, control, lock, admission, handoff, signal }) {
+  let captured;
+  try { captured = captureHandoff(handoff); } catch (cause) { throw refused(cause); }
+  return captureTaskAdmission({ scope, control, lock, admission, signal, handoff: captured }, true);
+}
+
+async function captureTaskAdmission({ scope, control, lock: suppliedLock, admission, signal, handoff }, inactive) {
   signal?.throwIfAborted();
   const retained = (inactive ? inactiveScopes : scopes).get(scope);
   if (!retained) throw refused(new Error('Original retained managed task scope is required.'));
+  if (retained.publication) throw refused(new Error('Inactive admission is already published.'));
+  if (handoff && (!retained.handoff || JSON.stringify(handoff) !== JSON.stringify(retained.handoff))) {
+    throw refused(new Error('Handoff-aware admission requires its handoff-aware inspection.'));
+  }
+  if (!handoff && retained.handoff) {
+    throw refused(new Error('Handoff-aware inspection requires its handoff-aware admission.'));
+  }
   const lock = captureLockOwner(suppliedLock);
   const { root } = await externalWorkerDirectory(control, lock.project);
   if (retained.observation.project !== lock.project) throw refused(new Error('Managed task project differs.'));
+  const evidence = (await readdir(root)).some(handoffEvidence);
+  if (evidence && !handoff) {
+    throw refused(new Error('Stopped-history handoff evidence requires its handoff-aware admission.'));
+  }
+  if (!evidence && handoff) throw refused(new Error('Handoff-aware admission requires its stopped-history handoff evidence.'));
   await assertWindowsAdmission(root, admission, { signal });
   await assertLockOwner(root, lock);
   const lockBytes = await readWorkerFile(path.join(root, 'lock', 'owner.json'), 65536, { privateMode: true });
@@ -187,8 +256,11 @@ async function captureTaskAdmission({ scope, control, lock: suppliedLock, admiss
   await assertLockOwner(root, lock);
   await assertWindowsAdmission(root, admission, { signal });
   const digest = bytes => createHash('sha256').update(bytes).digest('hex');
-  const result = await retained.request('capture-admission', signal, {
-    control: root, lockSha256: digest(lockBytes), stateSha256: digest(stateBytes),
+  if (handoff && handoff.restartState.sha256 !== digest(stateBytes)) {
+    throw refused(new Error('Handoff-aware admission requires its exact written restart state.'));
+  }
+  const result = await retained.request(handoff ? 'capture-handoff-admission' : 'capture-admission', signal, {
+    control: root, lockSha256: digest(lockBytes), stateSha256: digest(stateBytes), ...(handoff ? { handoff } : {}),
   });
   if (inactive) {
     const bytes = await readWorkerFile(result.admission, 4194304, { privateMode: true });

@@ -100,7 +100,7 @@ function Get-AgentsChatStoppedHistoryHandoffRestartStateObservation(
 function Open-AgentsChatStoppedHistoryHandoffRestartStateObservation(
     [string]$Control, [int]$ControllerPid, [string]$ControllerIdentity,
     [string]$AttemptId, $Prepared, $Committed, $Retirement, $Terminal, $Successor, $Abandoned, $Restart,
-    $RestartCommitted, $RestartStateIntent, $RestartState
+    $RestartCommitted, $RestartStateIntent, $RestartState, [switch]$OwnerAdmission
 ) {
     try {
         if ($null -eq $RestartCommitted -or $null -eq $RestartStateIntent -or $null -eq $RestartState) {
@@ -108,7 +108,7 @@ function Open-AgentsChatStoppedHistoryHandoffRestartStateObservation(
         }
         return Open-AgentsChatStoppedHistoryHandoffRestartObservation $Control $ControllerPid $ControllerIdentity `
             $AttemptId $Prepared $Committed $Retirement $Terminal $Successor $Abandoned $Restart $RestartCommitted `
-            $RestartStateIntent $RestartState
+            $RestartStateIntent $RestartState -OwnerAdmission:$OwnerAdmission
     } catch {
         throw [InvalidOperationException]::new('Restart state observation failed; retain evidence.', $_.Exception)
     }

@@ -104,7 +104,7 @@ function Assert-AgentsChatInactiveTask([hashtable]$Context) {
     } finally { $Context.Busy = $false }
 }
 
-function Open-AgentsChatInactiveTask([string]$TaskName, [string]$Project) {
+function Open-AgentsChatInactiveTask([string]$TaskName, [string]$Project, $ProvedObservation) {
     $context = @{
         Project=$Project; TaskName=$TaskName; Files=[Collections.Generic.List[IDisposable]]::new()
         Closed=$false; Poisoned=$false; Busy=$false; Owner=$null; Instance=$null; Folder=$null; Stage='input'
@@ -118,6 +118,22 @@ function Open-AgentsChatInactiveTask([string]$TaskName, [string]$Project) {
         $sid = if ($userId -match '^S-1-') { [Security.Principal.SecurityIdentifier]::new($userId) }
             else { ([Security.Principal.NTAccount]::new($userId)).Translate([Security.Principal.SecurityIdentifier]) }
         $context.PrincipalSid = $sid.Value
+        if ($null -ne $ProvedObservation) {
+            $proved = $ProvedObservation.configuration
+            if ($ProvedObservation -isnot [Collections.IDictionary] -or $proved -isnot [string] -or
+                $ProvedObservation.status -cne 'inactive-task-observed' -or $ProvedObservation.project -cne $Project -or
+                $ProvedObservation.taskName -cne $TaskName -or $ProvedObservation.definition -cne $context.NativeDefinition -or
+                $ProvedObservation.securityDescriptor -cne $context.SecurityDescriptor -or
+                $ProvedObservation.principalSid -cne $context.PrincipalSid -or
+                $ProvedObservation.configurationSha256 -cne $context.ConfigurationSha256 -or
+                -not [IO.Path]::IsPathRooted($proved) -or [IO.Path]::GetFullPath($proved) -cne $proved -or
+                [IO.Path]::GetFileName($proved) -cne 'configuration.json') {
+                throw 'Inactive task differs from its proved handoff observation.'
+            }
+            $context.Files.Add([Deployment.WindowsPrivateFile]::OpenDirectory([IO.Path]::GetDirectoryName($proved)))
+            $context.Configuration = $proved
+            $context.HandoffObservation = $true
+        }
         Open-AgentsChatCompletionConfiguration $context $context.Configuration $context.ConfigurationSha256
         $bundle = [IO.Path]::GetDirectoryName($context.Configuration)
         $entries = @(Get-ChildItem -LiteralPath $bundle -Force | Where-Object Name -Match '^(runtime|launch)-.*\.json$')
