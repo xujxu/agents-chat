@@ -28,7 +28,7 @@
 - [x] Duplicate refusal `Restart state write failed; retain evidence.` poisons the context.
 - [x] Result `{status:'restart-state-written', attemptId, stateIntent, state:{path:'state.json',dev,ino,bytes,sha256}, runtimeAuthority:false, lockAuthority:false, taskAuthority:false}`.
 - [x] Boundary `restart-state-written-history` joins the `commitment` shard; the Node fixture restores the original state bytes in place after asserting the written inode so later boundary hash checks are unchanged.
-- [ ] Actions red: missing `windows-stopped-history-handoff-restart-state-write.ps1`.
+- [x] Actions red: focused run `40814409746` passed baseline `123253770727`, successor `123253770896` and restart `123253770926`; commitment job `123253770883` re-passed gate 43 at `04:30:44Z`, delivered the exact write command and failed at `2026-10-29T04:39:16Z` in `restart-state-write-before-proof` because `windows-stopped-history-handoff-restart-state-write.ps1` did not exist.
 
 ### Task 2: Production module (green)
 
