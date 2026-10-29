@@ -372,6 +372,7 @@ export async function assertRestartPreparation({
       await assert.rejects(lstat(maintenance), { code: 'ENOENT' });
     }
     const scope = await open();
+    let published;
     try {
       await assert.rejects(captureWindowsInactiveTaskHandoffAdmission({
         scope, control, lock: { ...owner, token: randomUUID() }, admission, handoff,
@@ -395,9 +396,11 @@ export async function assertRestartPreparation({
       await assert.rejects(captureWindowsInactiveTaskHandoffAdmission({ scope, control, lock: owner, admission, handoff }));
       assert.deepEqual(await readFile(result.admission), bytes);
       assert.deepEqual(await readdir(maintenance), ['admission.json']);
-      await unlink(result.admission);
-      await rmdir(maintenance);
+      published = result.admission;
     } finally { await scope.close(); }
+    // The inactive scope retains its published admission handle until it closes.
+    await unlink(published);
+    await rmdir(maintenance);
   }
   if (publish && !held) {
     await assert.rejects(promisify(execFile)(pwsh,
