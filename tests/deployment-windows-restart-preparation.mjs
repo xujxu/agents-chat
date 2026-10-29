@@ -397,6 +397,41 @@ export async function assertRestartPreparation({
       assert.deepEqual(await readFile(result.admission), bytes);
       assert.deepEqual(await readdir(maintenance), ['admission.json']);
       published = result.admission;
+      // Subsequent states use the existing inactive transaction checks through the handoff-aware scope.
+      const { writeState: writeDeploymentState } = await load('state.mjs');
+      const { beginWindowsInactiveTaskTransaction, assertWindowsInactiveTaskSnapshotStage } =
+        await load('windows-inactive-task-transaction.mjs');
+      const transactionOptions = { scope, control, lock: owner, ...result };
+      await assert.rejects(beginWindowsInactiveTaskTransaction(transactionOptions), /stopped-phase transaction/);
+      const written = JSON.parse(writtenState.bytes);
+      const sourceCommit = written.sourceCommit ?? 'a'.repeat(40);
+      const stopped = {
+        ...written, phase: 'stopped', previousPhase: 'preflight', sourceCommit,
+        targetCommit: written.targetCommit ?? 'b'.repeat(40),
+      };
+      await writeDeploymentState(control, stopped);
+      await assert.rejects(beginWindowsInactiveTaskTransaction({ ...transactionOptions, scope: { ...scope } }));
+      await assert.rejects(beginWindowsInactiveTaskTransaction({ ...transactionOptions, sha256: '0'.repeat(64) }));
+      const transaction = await beginWindowsInactiveTaskTransaction(transactionOptions);
+      assert.deepEqual(await transaction.check(), validateState(stopped));
+      await assert.rejects(beginWindowsInactiveTaskTransaction(transactionOptions), /transaction consumer/);
+      const snapshotOptions = { context: transaction, control, lock: owner, sourceCommit };
+      await assert.rejects(assertWindowsInactiveTaskSnapshotStage(snapshotOptions), /copying/);
+      await writeDeploymentState(control, { ...stopped, phase: 'copying', previousPhase: 'stopped' });
+      const metadata = await assertWindowsInactiveTaskSnapshotStage(snapshotOptions);
+      assert.deepEqual(metadata, {
+        project: owner.project, sourceCommit, task: {
+          version: 1, name: original.observation.taskName, definition: original.observation.definition,
+          securityDescriptor: original.observation.securityDescriptor,
+          configuration: original.observation.configuration,
+          configurationSha256: original.observation.configurationSha256,
+        },
+      });
+      await assert.rejects(assertWindowsInactiveTaskSnapshotStage({ ...snapshotOptions, context: { ...transaction } }));
+      await transaction.close();
+      writtenState = Object.freeze({
+        ...writtenState, bytes: await readFile(stateFile), identity: await lstat(stateFile, { bigint: true }),
+      });
     } finally { await scope.close(); }
     // The inactive scope retains its published admission handle until it closes.
     await unlink(published);
@@ -463,6 +498,7 @@ export async function assertRestartPreparation({
   if (refuseAdmission) {
     console.log('PASS: ordinary inactive task admission refuses the exact live restart owner written preflight while handoff evidence remains without publishing maintenance');
     console.log('PASS: handoff-aware inactive admission publishes only the exact live restart owner written preflight binding through the shared native verifier while copied foreign ordinary and duplicate admission remain refused');
+    console.log('PASS: handoff-aware inactive admission begins the existing inactive transaction for the exact live restart owner and reaches its copying snapshot stage while copied scopes and duplicate consumers remain refused');
   }
   console.log(releaseRestart && writeState
     ? 'PASS: native live restart owner releases only its exact committed lock after its acknowledged state write while nine records and written state remain exact without authority'
