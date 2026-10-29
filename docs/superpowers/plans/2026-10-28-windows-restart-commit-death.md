@@ -28,7 +28,15 @@
 
 ### Task 3: Validate only in GitHub Actions
 
-- [ ] Commit `[skip ci]`, push, dispatch focused stopped-history and Contracts runs.
-- [ ] Require all 42 receipts across the three native raw logs, including
+- [x] Commit `[skip ci]`, push, dispatch focused stopped-history and Contracts runs.
+- [x] Require all 42 receipts across the three native raw logs, including
   `PASS: actual fresh restart committed publisher death preserves its exact eighth record owner directory and seven records without state authority`.
-- [ ] Record run/job IDs in an acceptance section.
+- [x] Record run/job IDs in an acceptance section.
+
+## Acceptance (2026-10-29)
+
+Test-only change `a88db462`; no production change was required because committed initialization refuses the unauthorized eighth file through the namespace check.
+
+- Focused run `40791608534` succeeded: baseline `123177942702`, successor `123177942368`, restart `123177942779`, aggregate `Stopped-history acceptance (all boundaries)` `123193405796`.
+- All 42 required receipts present across the three native raw logs (0 missing), including the new receipt at `2026-10-29T00:46:46.2502367Z`.
+- Same-SHA Contracts run `40791611930` / `Contracts (windows-2022)` `123177953077` succeeded.
