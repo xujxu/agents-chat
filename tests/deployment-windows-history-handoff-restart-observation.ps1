@@ -36,7 +36,15 @@ try {
             throw 'Restart lock owner retirement request differs.'
         }
     }
-    $retireDirectory = $observeRetirement -and -not $retireRestart -and -not $retireOwner -and
+    $settleRestart = $observeRetirement -and -not $retireRestart -and -not $retireOwner -and
+        $inputRecord.Contains('settleRestart')
+    if ($settleRestart) {
+        $fields += 'settleRestart'
+        if ($inputRecord.settleRestart -isnot [bool] -or $inputRecord.settleRestart -ne $true) {
+            throw 'Restart lock settlement request differs.'
+        }
+    }
+    $retireDirectory = $observeRetirement -and -not $retireRestart -and -not $retireOwner -and -not $settleRestart -and
         $inputRecord.Contains('retireDirectory')
     if ($retireDirectory) {
         $fields += 'retireDirectory'
@@ -147,6 +155,24 @@ try {
             $repeat = Remove-AgentsChatStoppedHistoryHandoffRestartLockDirectory $scope $ControllerPid $ControllerIdentity
             if (($repeat | ConvertTo-Json -Depth 12 -Compress) -cne ($observation | ConvertTo-Json -Depth 12 -Compress)) {
                 throw 'Repeated restart lock directory retirement differs.'
+            }
+        }
+        if ($settleRestart) {
+            . (Join-Path $Source 'windows-stopped-history-handoff-restart-retirement-settlement.ps1')
+            $refused = $false
+            try { $null = Publish-AgentsChatStoppedHistoryHandoffRestartLockSettlement $scope $ControllerPid $ControllerIdentity }
+            catch {
+                if ($_.Exception.Message -cne 'Restart lock settlement requires its independent native role.') { throw }
+                $refused = $true
+            }
+            if (-not $refused -or $scope.ContainsKey('HistoryHandoffRestartSettlement')) {
+                throw 'Restart lock retirement observer settled without role.'
+            }
+            $scope.HistoryHandoffRestartSettler = $true
+            $observation = Publish-AgentsChatStoppedHistoryHandoffRestartLockSettlement $scope $ControllerPid $ControllerIdentity
+            $repeat = Publish-AgentsChatStoppedHistoryHandoffRestartLockSettlement $scope $ControllerPid $ControllerIdentity
+            if (($repeat | ConvertTo-Json -Depth 12 -Compress) -cne ($observation | ConvertTo-Json -Depth 12 -Compress)) {
+                throw 'Repeated restart lock settlement differs.'
             }
         }
         [Console]::Out.WriteLine(($observation | ConvertTo-Json -Depth 12 -Compress))

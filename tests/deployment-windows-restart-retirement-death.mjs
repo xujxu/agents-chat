@@ -160,4 +160,43 @@ export async function assertDeadRestartRetirement({
   assert.deepEqual(JSON.parse(removed.stdout), { ...expected, status: 'restart-lock-retirement-directory-retired' });
   await assert.rejects(lstat(directory), { code: 'ENOENT' });
   assert.deepEqual(await readFile(path.join(control, descriptor.path)), intentBytes);
+  // The directory retirer has exited; a fresh distinct observer takes over the absent lock and settles it.
+  for (let pass = 0; pass < 2; pass++) {
+    const result = await observe(restartArgs(retirementRequest));
+    assert.equal(result.stderr, '');
+    assert.deepEqual(JSON.parse(result.stdout), { ...expected, status: 'restart-lock-retirement-directory-retired' });
+  }
+  const settled = await observe(restartArgs({ ...retirementRequest, settleRestart: true }));
+  assert.equal(settled.stderr, '');
+  const value = JSON.parse(settled.stdout);
+  const settlement = captureWorkerFields(value.settlement, descriptorFields, 'restart lock settlement');
+  assert.deepEqual(value, { ...expected, status: 'restart-lock-settled', settlement });
+  assert.equal(settlement.path, `inactive-handoff-${previous.restartAttemptId}-lock-retired.json`);
+  const file = path.join(control, settlement.path);
+  const bytes = await readFile(file);
+  const identityAfter = await lstat(file, { bigint: true });
+  assert.equal(identityAfter.nlink, 1n);
+  assert.equal(identityAfter.dev.toString(), settlement.dev);
+  assert.equal(identityAfter.ino.toString(), settlement.ino);
+  assert.equal(bytes.length, settlement.bytes);
+  assert.equal(createHash('sha256').update(bytes).digest('hex'), settlement.sha256);
+  const record = JSON.parse(bytes);
+  assert.equal(new Date(record.settledAt).toISOString(), record.settledAt);
+  assert.ok(record.settledAt >= intent.createdAt);
+  const settler = captureWorkerFields(record.creator,
+    ['pid', 'processIdentity', 'bridgePid', 'bridgeIdentity'], 'restart lock settler');
+  assert.equal(settler.pid, process.pid);
+  assert.equal(settler.processIdentity, identity);
+  assert.notEqual(settler.bridgePid, retirer.pid);
+  assert.notEqual(settler.bridgeIdentity, retirer.processIdentity);
+  assert.deepEqual(record, {
+    version: 1, phase: 'stopped-history-handoff-restart-lock-retired',
+    attemptId: previous.restartAttemptId, control, project: original.project,
+    controlIdentity: original.controlIdentity, previousOperationId: original.previousOperationId,
+    prepared: previous.restartPrepared, committed: previous.restartCommitted, retirement: descriptor, newOwner,
+    lockIdentity: previous.restartDirectory, lock: previous.restartOwner, state: original.state,
+    owner: committedValue.creator, retirer: creator, creator: settler, settledAt: record.settledAt,
+  });
+  assert.deepEqual(await readFile(path.join(control, descriptor.path)), intentBytes);
+  return { file, bytes, identity: identityAfter };
 }

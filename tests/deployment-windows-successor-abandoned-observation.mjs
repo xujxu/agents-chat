@@ -287,11 +287,11 @@ export async function assertSuccessorAbandonedAfterDeath({
       releasedObserved = true;
     } else if (blockedRetirement) {
       const { captureWorkerFields } = await load('worker-identity.mjs');
-      await assertDeadRestartRetirement({
+      snapshots.push(await assertDeadRestartRetirement({
         control, identity, previous, original, newOwner: JSON.parse(published.bytes).newOwner,
         committedValue: JSON.parse(snapshots[7].bytes), snapshot: snapshots[8], observe, restartArgs,
         processIdentity, captureWorkerFields,
-      });
+      }));
       // The distinct observer has retired only the dead owner file; its empty directory remains.
       ownerSnapshot = undefined;
       retirementObserved = true;
@@ -492,12 +492,13 @@ export async function assertSuccessorAbandonedAfterDeath({
         { attemptId: previous.attemptId, records: ['prepared', 'committed', 'lock-retirement', 'lock-retired'],
           status: 'lock-settled' },
         { attemptId: previous.successorAttemptId, records: ['prepared', 'abandoned'], status: 'abandoned' },
-        { attemptId: previous.restartAttemptId, records: ['prepared', 'committed', 'lock-retirement'],
-          status: 'lock-retiring' },
+        { attemptId: previous.restartAttemptId,
+          records: ['prepared', 'committed', 'lock-retirement', ...(retirementObserved ? ['lock-retired'] : [])],
+          status: retirementObserved ? 'lock-settled' : 'lock-retiring' },
       ].sort((left, right) => left.attemptId < right.attemptId ? -1 : 1),
       unrecognized: [],
     });
-    assert.equal(snapshots.length, 9);
+    assert.equal(snapshots.length, retirementObserved ? 10 : 9);
   }
   if (blockedReleased) {
     const report = await reconcileInterruptedOperation(control);
@@ -561,7 +562,8 @@ export async function assertSuccessorAbandonedAfterDeath({
       console.log('PASS: distinct restart lock retirement observer proves the retirer and owner dead from the exact intent and refuses a duplicate without authority');
       console.log('PASS: distinct restart lock owner retirer deletes only the dead owner file from the exact intent and preserves its empty directory without authority');
       console.log('PASS: fresh restart lock retirement observer takes over the owner-retired stage from the exact intent and retires only its empty directory without authority');
-      console.log('PASS: ordinary reconciliation reports the dead restart attempt as lock-retiring while staying blocked without authority');
+      console.log('PASS: fresh restart lock retirement observer takes over the absent directory from the exact intent and publishes only its exact settlement without authority');
+      console.log('PASS: ordinary reconciliation reports the settled dead restart retirement as lock-settled while staying blocked without authority');
     }
     if (releasedObserved) {
       console.log('PASS: ordinary reconciliation reports the released restart attempt as lock-settled while staying blocked without authority');
