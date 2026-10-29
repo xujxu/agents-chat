@@ -21,7 +21,7 @@ const { processIdentity } = await load('process-identity.mjs');
 assert.equal(typeof api.openWindowsInactiveLostRuntimeAuthority, 'function',
   'Missing owned inactive lost-runtime transport');
 // After the dead writer's actual write, the original state is resolvable only through its ninth record.
-const state = mode === 'resume-restart-state-dead-history'
+const state = ['resume-restart-state-dead-history', 'resume-restart-state-released-dead-history'].includes(mode)
   ? Buffer.from(JSON.parse(await readFile(path.join(control, JSON.parse(crashStep).restartStateIntent.path))).oldState)
   : await readFile(path.join(control, 'state.json'));
 let expectedFinalState = state;
@@ -510,8 +510,10 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     || mode === 'resume-restart-state-released-history';
   const restartCommittedCrash = mode === 'crash-restart-committed-history';
   const restartCommittedDeadResume = mode === 'resume-restart-committed-dead-history';
-  const restartStateCrash = mode === 'crash-restart-state-history';
-  const restartStateDeadResume = mode === 'resume-restart-state-dead-history';
+  const restartStateReleasedCrash = mode === 'crash-restart-state-released-history';
+  const restartStateReleasedDeadResume = mode === 'resume-restart-state-released-dead-history';
+  const restartStateCrash = mode === 'crash-restart-state-history' || restartStateReleasedCrash;
+  const restartStateDeadResume = mode === 'resume-restart-state-dead-history' || restartStateReleasedDeadResume;
   const restartReleasedCrash = mode === 'crash-restart-released-history';
   const restartReleasedDeadResume = mode === 'resume-restart-released-dead-history';
   const restartRetirementCrash = mode === 'crash-restart-retirement-history';
@@ -543,6 +545,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     'crash-restart-committed-history': 'Committed', 'resume-restart-committed-dead-history': 'Committed',
     'crash-restart-state-history': 'Committed', 'resume-restart-state-dead-history': 'Committed',
     'crash-restart-released-history': 'Committed', 'resume-restart-released-dead-history': 'Committed',
+    'crash-restart-state-released-history': 'Committed', 'resume-restart-state-released-dead-history': 'Committed',
     'crash-restart-retirement-history': 'Committed', 'resume-restart-retirement-dead-history': 'Committed',
     'crash-restart-directory-history': 'Committed', 'resume-restart-directory-dead-history': 'Committed',
     'crash-restart-prepared-history': 'Committed', 'resume-restart-prepared-history': 'Committed',
@@ -700,6 +703,19 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       await assertSuccessorAbandonedAfterDeath({
         source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
         restart: true, blockedDirectory: true, blockedOwner: true, blockedCommitted: true, blockedRetirement: true,
+      });
+    } else if (restartStateReleasedCrash) {
+      await assertRestartPreparation({
+        source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
+        publish: true, createDirectory: true, publishOwner: true, commitRestart: true,
+        prepareState: true, writeState: true, releaseRestart: true, holdReleased: true,
+      });
+      throw new Error('Held post-write restart releaser unexpectedly returned.');
+    } else if (restartStateReleasedDeadResume) {
+      await assertSuccessorAbandonedAfterDeath({
+        source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
+        restart: true, blockedDirectory: true, blockedOwner: true, blockedCommitted: true, blockedState: true,
+        blockedReleased: true,
       });
     } else if (restartReleasedCrash) {
       await assertRestartPreparation({

@@ -61,7 +61,7 @@ export async function assertSuccessorAbandonedAfterDeath({
   assert.ok(!blockedOwner || blockedDirectory);
   assert.ok(!blockedCommitted || blockedOwner);
   assert.ok(!blockedState || blockedCommitted);
-  assert.ok(!blockedReleased || (blockedCommitted && !blockedState));
+  assert.ok(!blockedReleased || blockedCommitted);
   assert.ok(!blockedRetirement || (blockedCommitted && !blockedState && !blockedReleased));
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
@@ -243,7 +243,8 @@ export async function assertSuccessorAbandonedAfterDeath({
         committedAt: record.committedAt,
       });
       if (blockedReleased) {
-        const [retirement, released] = [snapshots[8], snapshots[9]];
+        const releaseIndex = blockedState ? 9 : 8;
+        const [retirement, released] = [snapshots[releaseIndex], snapshots[releaseIndex + 1]];
         assert.equal(previous.restartRelease.path, `inactive-handoff-${previous.restartAttemptId}-lock-retirement.json`);
         assert.equal(previous.restartReleased.path, `inactive-handoff-${previous.restartAttemptId}-lock-retired.json`);
         const binding = {
@@ -252,6 +253,7 @@ export async function assertSuccessorAbandonedAfterDeath({
           prepared: previous.restartPrepared, committed: previous.restartCommitted,
           newOwner: JSON.parse(published.bytes).newOwner, lockIdentity: previous.restartDirectory,
           lock: previous.restartOwner, state: original.state,
+          ...(blockedState ? { stateIntent: previous.restartStateIntent, writtenState: previous.restartState } : {}),
           creator: {
             pid: previous.actorPid, processIdentity: previous.actorIdentity,
             bridgePid: previous.pid, bridgeIdentity: previous.processIdentity,
@@ -263,6 +265,7 @@ export async function assertSuccessorAbandonedAfterDeath({
         }
         const intent = JSON.parse(retirement.bytes);
         assert.ok(intent.createdAt >= record.committedAt);
+        if (blockedState) { assert.ok(intent.createdAt >= JSON.parse(snapshots[8].bytes).createdAt); }
         assert.deepEqual(intent, {
           version: 1, phase: 'stopped-history-handoff-restart-release-prepared', ...binding, createdAt: intent.createdAt,
         });
@@ -279,7 +282,7 @@ export async function assertSuccessorAbandonedAfterDeath({
     await assert.rejects(observe(args), error => refused(error) && error.message.includes(blockedState
       ? `retired-${JSON.parse(writtenState).operationId}-inactive-rollback-history-intent.json`
       : blockedCommitted ? 'Retired prepared handoff namespace differs.' : 'Committed lock directory identity differs.'));
-    if (blockedReleased) {
+    if (blockedReleased && !blockedState) {
       // The released lock and its two release records are outside every observer this gate exposes.
       const committedRequest = { ...request, restartCommitted: previous.restartCommitted };
       await assert.rejects(observe(restartArgs(committedRequest)),
@@ -388,6 +391,11 @@ export async function assertSuccessorAbandonedAfterDeath({
       };
       const stateRefused = error => error.message.includes('Restart state observation failed; retain evidence.');
       for (let pass = 0; pass < 2; pass++) {
+        if (blockedReleased) {
+          // After the dead owner's post-write release, its lock and two release records are outside every observer.
+          await assert.rejects(observe(restartArgs(stateRequest)), stateRefused);
+          continue;
+        }
         const result = await observe(restartArgs(stateRequest));
         assert.equal(result.stderr, '');
         assert.deepEqual(JSON.parse(result.stdout), stateExpected);
@@ -402,7 +410,7 @@ export async function assertSuccessorAbandonedAfterDeath({
       ]) {
         await assert.rejects(observe(restartArgs({ ...stateRequest, ...wrong })), stateRefused);
       }
-      stateObserved = true;
+      if (blockedReleased) { releasedObserved = true; } else { stateObserved = true; }
     }
   } else {
     const first = await observe(args);
@@ -464,6 +472,8 @@ export async function assertSuccessorAbandonedAfterDeath({
   let reconciled = false;
   if (blockedState) {
     const report = await reconcileInterruptedOperation(control);
+    const restartRecords = blockedReleased
+      ? ['prepared', 'committed', 'lock-retirement', 'lock-retired', 'state-intent'] : ['prepared', 'committed', 'state-intent'];
     assert.deepEqual(report, {
       status: 'blocked', operationId: JSON.parse(writtenState).operationId, phase: 'preflight',
       message: 'Service, task or worker retirement evidence exists. Retain it; inspect before restart or recovery.',
@@ -473,14 +483,13 @@ export async function assertSuccessorAbandonedAfterDeath({
           { attemptId: previous.attemptId, records: ['prepared', 'committed', 'lock-retirement', 'lock-retired'],
             status: 'lock-settled' },
           { attemptId: previous.successorAttemptId, records: ['prepared', 'abandoned'], status: 'abandoned' },
-          { attemptId: previous.restartAttemptId, records: ['prepared', 'committed', 'state-intent'],
-            status: 'state-transition' },
+          { attemptId: previous.restartAttemptId, records: restartRecords, status: 'state-transition' },
         ].sort((left, right) => left.attemptId < right.attemptId ? -1 : 1),
         unrecognized: [],
       },
     });
-    assert.equal(snapshots.length, 9);
-    reconciled = true;
+    assert.equal(snapshots.length, blockedReleased ? 11 : 9);
+    if (!blockedReleased) { reconciled = true; }
   }
   if (retirementPublished || retirementObserved) {
     const report = await reconcileInterruptedOperation(control);
@@ -500,7 +509,7 @@ export async function assertSuccessorAbandonedAfterDeath({
     });
     assert.equal(snapshots.length, retirementObserved ? 10 : 9);
   }
-  if (blockedReleased) {
+  if (blockedReleased && !blockedState) {
     const report = await reconcileInterruptedOperation(control);
     assert.equal(report.status, 'blocked');
     assert.equal(report.operationId, JSON.parse(state).operationId);
@@ -567,10 +576,14 @@ export async function assertSuccessorAbandonedAfterDeath({
       console.log('PASS: ordinary reconciliation reports the settled dead restart retirement as lock-settled while staying blocked without authority');
     }
     if (releasedObserved) {
-      console.log('PASS: ordinary reconciliation reports the released restart attempt as lock-settled while staying blocked without authority');
+      console.log(blockedState
+        ? 'PASS: ordinary reconciliation reports the post-write released restart attempt as a state transition while staying blocked without authority'
+        : 'PASS: ordinary reconciliation reports the released restart attempt as lock-settled while staying blocked without authority');
     }
     console.log(blockedRetirement
       ? 'PASS: actual restart lock retirer death preserves its exact intent dead owner and directory for a distinct observer without deletion authority'
+      : blockedReleased && blockedState
+      ? 'PASS: actual post-write restart releaser death preserves eleven records and written state for a distinct observer without authority'
       : blockedReleased
       ? 'PASS: actual restart releaser death after exact lock release preserves ten records and original state for a distinct observer without authority'
       : blockedState
