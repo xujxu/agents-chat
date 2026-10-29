@@ -1,7 +1,8 @@
 function Stop-AgentsChatRestartDirectoryPublisher(
     [string]$Node, [string]$Source, [string]$Control, [string]$Pwsh,
-    $Environment, [string]$HistoryActor, [string]$StateHash, [switch]$Owner, [switch]$Committed
+    $Environment, [string]$HistoryActor, [string]$StateHash, [switch]$Owner, [switch]$Committed, [switch]$State
 ) {
+    if ($State) { $Committed = $true }
     if ($Committed) { $Owner = $true }
     function Read-RestartDirectoryCheckpoint($Process, $Diagnostic, [string]$Prefix) {
         $clock = [Diagnostics.Stopwatch]::StartNew()
@@ -23,7 +24,7 @@ function Stop-AgentsChatRestartDirectoryPublisher(
     $publisher = [Deployment.WindowsControllerProcess]::Start($Node,
         @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
             $Source, $Control, $Pwsh,
-            $(if ($Committed) { 'crash-restart-committed-history' } elseif ($Owner) { 'crash-restart-owner-history' } else { 'crash-restart-directory-history' }),
+            $(if ($State) { 'crash-restart-state-history' } elseif ($Committed) { 'crash-restart-committed-history' } elseif ($Owner) { 'crash-restart-owner-history' } else { 'crash-restart-directory-history' }),
             $HistoryActor), $Control, $Environment)
     try {
         $diagnostic = $publisher.StandardError.ReadToEndAsync()
@@ -46,7 +47,13 @@ function Stop-AgentsChatRestartDirectoryPublisher(
             . (Join-Path $PSScriptRoot 'deployment-windows-restart-commit-controller.ps1')
             Send-AgentsChatRestartCommitCommand $publisher $diagnostic $live $Control
         }
-        $prefix = if ($Committed) { 'INACTIVE_HISTORY_RESTART_COMMITTED_HELD ' } elseif ($Owner) { 'INACTIVE_HISTORY_RESTART_OWNER_HELD ' } else { 'INACTIVE_HISTORY_RESTART_DIRECTORY_HELD ' }
+        if ($State) {
+            . (Join-Path $PSScriptRoot 'deployment-windows-restart-state-intent-controller.ps1')
+            Send-AgentsChatRestartStateIntentCommand $publisher $diagnostic $live $Control
+            . (Join-Path $PSScriptRoot 'deployment-windows-restart-state-write-controller.ps1')
+            Send-AgentsChatRestartStateWriteCommand $publisher $diagnostic $live $Control
+        }
+        $prefix = if ($State) { 'INACTIVE_HISTORY_RESTART_STATE_HELD ' } elseif ($Committed) { 'INACTIVE_HISTORY_RESTART_COMMITTED_HELD ' } elseif ($Owner) { 'INACTIVE_HISTORY_RESTART_OWNER_HELD ' } else { 'INACTIVE_HISTORY_RESTART_DIRECTORY_HELD ' }
         $metadata = Read-RestartDirectoryCheckpoint $publisher $diagnostic $prefix
         $held = $metadata | ConvertFrom-Json
         Assert ($held.actorPid -eq $publisher.Id -and $held.actorIdentity -ceq $live.actorIdentity -and
@@ -64,7 +71,7 @@ function Stop-AgentsChatRestartDirectoryPublisher(
         if ($errors) { [Console]::Error.WriteLine($errors) }
         foreach ($descriptor in @($held.prepared, $held.committed, $held.retirement,
             $held.terminal, $held.successor, $held.successorAbandoned, $held.restartPrepared) +
-            @($(if ($Committed) { $held.restartCommitted }))) {
+            @($(if ($Committed) { $held.restartCommitted })) + @($(if ($State) { $held.restartStateIntent }))) {
             Assert ((Get-FileHash -LiteralPath (Join-Path $Control $descriptor.path) -Algorithm SHA256).Hash.ToLowerInvariant() -ceq
                 $descriptor.sha256) 'Restart directory publisher death changed immutable evidence'
         }
@@ -87,8 +94,16 @@ function Stop-AgentsChatRestartDirectoryPublisher(
         } else {
             Assert ($children.Count -eq 0) 'Restart directory publisher death introduced an owner or foreign child'
         }
-        Assert ((Get-FileHash -LiteralPath (Join-Path $Control 'state.json') -Algorithm SHA256).Hash -ceq
-            $StateHash) 'Restart directory publisher death changed original state'
+        if ($State) {
+            Assert ($held.restartStateIntent.path -ceq ($held.restartPrepared.path -creplace '-prepared\.json$', '-state-intent.json') -and
+                $held.restartState.path -ceq 'state.json' -and
+                (Get-FileHash -LiteralPath (Join-Path $Control 'state.json') -Algorithm SHA256).Hash.ToLowerInvariant() -ceq
+                $held.restartState.sha256 -and $held.restartState.sha256 -cne $StateHash.ToLowerInvariant() -and
+                -not (Test-Path -LiteralPath (Join-Path $Control 'state.json.lock'))) 'Restart state writer death changed its written state'
+        } else {
+            Assert ((Get-FileHash -LiteralPath (Join-Path $Control 'state.json') -Algorithm SHA256).Hash -ceq
+                $StateHash) 'Restart directory publisher death changed original state'
+        }
         return $metadata
     } finally { $publisher.Dispose() }
 }

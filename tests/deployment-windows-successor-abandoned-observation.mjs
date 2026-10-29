@@ -53,11 +53,12 @@ export async function holdSuccessorAbandoned({ source, control, pwsh, previous }
 
 export async function assertSuccessorAbandonedAfterDeath({
   source, control, pwsh, admission, previous, state, completionBytes, restart = false, blockedDirectory = false,
-  blockedOwner = false, blockedCommitted = false,
+  blockedOwner = false, blockedCommitted = false, blockedState = false,
 }) {
   assert.ok(!blockedDirectory || restart);
   assert.ok(!blockedOwner || blockedDirectory);
   assert.ok(!blockedCommitted || blockedOwner);
+  assert.ok(!blockedState || blockedCommitted);
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
   const identity = await processIdentity(process.pid);
@@ -78,7 +79,7 @@ export async function assertSuccessorAbandonedAfterDeath({
   const snapshots = [];
   for (const descriptor of [previous.prepared, previous.committed, previous.retirement,
     previous.terminal, previous.successor, previous.successorAbandoned, ...(restart ? [previous.restartPrepared] : []),
-    ...(blockedCommitted ? [previous.restartCommitted] : [])]) {
+    ...(blockedCommitted ? [previous.restartCommitted] : []), ...(blockedState ? [previous.restartStateIntent] : [])]) {
     const file = path.join(control, descriptor.path);
     const bytes = await readFile(file);
     const current = await lstat(file, { bigint: true });
@@ -104,8 +105,38 @@ export async function assertSuccessorAbandonedAfterDeath({
   assert.deepEqual(abandoned.prepared, previous.successor);
   const stateFile = path.join(control, 'state.json');
   const stateIdentity = await lstat(stateFile, { bigint: true });
-  assert.equal(stateIdentity.dev.toString(), original.state.dev);
-  assert.equal(stateIdentity.ino.toString(), original.state.ino);
+  let writtenState;
+  if (blockedState) {
+    const intent = JSON.parse(snapshots[8].bytes);
+    assert.equal(previous.restartStateIntent.path, `inactive-handoff-${previous.restartAttemptId}-state-intent.json`);
+    assert.equal(snapshots[8].identity.nlink, 1n);
+    assert.equal(intent.phase, 'stopped-history-handoff-restart-state-intent');
+    assert.equal(intent.attemptId, previous.restartAttemptId);
+    assert.deepEqual(intent.prepared, previous.restartPrepared);
+    assert.deepEqual(intent.committed, previous.restartCommitted);
+    assert.deepEqual(intent.lockIdentity, previous.restartDirectory);
+    assert.deepEqual(intent.lock, previous.restartOwner);
+    assert.equal(intent.oldState, state.toString('utf8'));
+    assert.deepEqual(intent.state, original.state);
+    assert.deepEqual(intent.creator, {
+      pid: previous.actorPid, processIdentity: previous.actorIdentity,
+      bridgePid: previous.pid, bridgeIdentity: previous.processIdentity,
+    });
+    const bytes = await readFile(stateFile);
+    assert.equal(bytes.toString('utf8'), `${JSON.stringify(intent.nextState)}\n`);
+    assert.equal(intent.nextState.operationId, intent.newOwner.operationId);
+    assert.equal(stateIdentity.nlink, 1n);
+    assert.equal(stateIdentity.dev.toString(), previous.restartState.dev);
+    assert.equal(stateIdentity.ino.toString(), previous.restartState.ino);
+    assert.equal(bytes.length, previous.restartState.bytes);
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), previous.restartState.sha256);
+    assert.notEqual(stateIdentity.ino.toString(), original.state.ino);
+    await assert.rejects(readFile(path.join(control, 'state.json.lock')), { code: 'ENOENT' });
+    writtenState = bytes;
+  } else {
+    assert.equal(stateIdentity.dev.toString(), original.state.dev);
+    assert.equal(stateIdentity.ino.toString(), original.state.ino);
+  }
   const completionFile = path.join(control, `retired-${original.previousOperationId}-inactive-rollback-history-complete.json`);
   const completionIdentity = await lstat(completionFile, { bigint: true });
   assert.equal(createHash('sha256').update(completionBytes).digest('hex'), previous.completionSha256);
@@ -266,7 +297,7 @@ export async function assertSuccessorAbandonedAfterDeath({
   assert.deepEqual((await readdir(control)).filter(name => name.toLowerCase().startsWith('inactive-handoff-')).sort(),
     snapshots.map(snapshot => path.basename(snapshot.file)).sort());
   for (const [file, bytes, originalIdentity] of [
-    [stateFile, state, stateIdentity], [completionFile, completionBytes, completionIdentity],
+    [stateFile, writtenState ?? state, stateIdentity], [completionFile, completionBytes, completionIdentity],
   ]) {
     assert.deepEqual(await readFile(file), bytes);
     const current = await lstat(file, { bigint: true });
@@ -283,7 +314,10 @@ export async function assertSuccessorAbandonedAfterDeath({
   } else { await assert.rejects(lstat(directory), { code: 'ENOENT' }); }
   if (restart) {
     for (const snapshot of snapshots.reverse()) await unlink(snapshot.file);
-    console.log(blockedCommitted
+    if (writtenState) { await writeFile(stateFile, state); }
+    console.log(blockedState
+      ? 'PASS: actual restart state writer death preserves its written state nine records owner and directory for a distinct observer without authority'
+      : blockedCommitted
       ? 'PASS: actual fresh restart committed publisher death preserves its exact eighth record owner directory and seven records without state authority'
       : blockedOwner
       ? 'PASS: actual fresh restart owner publisher death preserves its exact owner directory and seven records without committed authority'

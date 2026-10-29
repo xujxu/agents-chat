@@ -6,6 +6,7 @@ import { assertRestartPublicationProofs } from './deployment-windows-restart-pub
 
 export async function assertRestartStateWritePublication({
   control, identity, ready, record, intent, transport, controllerWire, captureWorkerFields, enterPhase,
+  holdState = false, processIdentity,
 }) {
   enterPhase('host-state-write-command');
   console.log(`INACTIVE_HISTORY_RESTART_STATE_INTENT_LIVE ${JSON.stringify({
@@ -20,7 +21,19 @@ export async function assertRestartStateWritePublication({
   await assertRestartPublicationProofs({
     publication: 'state-write', transport, ready, control, identity, captureWorkerFields, enterPhase,
   });
-  const result = captureWorkerFields(await transport.wire.receive({ timeoutMs: 45000 }),
+  let response = await transport.wire.receive({ timeoutMs: 45000 });
+  if (holdState) {
+    const frame = captureWorkerFields(response,
+      ['type', 'pid', 'processIdentity', 'control', 'controllerIdentity', 'value'], 'held restart state write');
+    assert.equal(frame.type, 'ready');
+    assert.equal(frame.pid, ready.pid);
+    assert.equal(frame.processIdentity, ready.processIdentity);
+    assert.equal(frame.processIdentity, await processIdentity(frame.pid));
+    assert.equal(frame.control, control);
+    assert.equal(frame.controllerIdentity, identity);
+    response = frame.value;
+  }
+  const result = captureWorkerFields(response,
     ['status', 'attemptId', 'stateIntent', 'state', 'runtimeAuthority', 'lockAuthority', 'taskAuthority'],
     'restart state write');
   const descriptor = captureWorkerFields(result.state,

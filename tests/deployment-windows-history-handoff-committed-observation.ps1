@@ -35,6 +35,7 @@ param(
     [switch]$HoldRestartCommitted,
     [switch]$PrepareRestartState,
     [switch]$WriteRestartState,
+    [switch]$HoldRestartState,
     [string]$AbandonedDev,
     [string]$AbandonedIno,
     [int]$AbandonedBytes,
@@ -69,6 +70,7 @@ try {
         ($HoldRestartCommitted -and -not $CommitRestart) -or
         ($PrepareRestartState -and (-not $CommitRestart -or $HoldRestartCommitted)) -or
         ($WriteRestartState -and -not $PrepareRestartState) -or
+        ($HoldRestartState -and -not $WriteRestartState) -or
         ($PhasedPublication -and -not $PublishSuccessor) -or
         ($SealSuccessor -and -not $ObserveSuccessor) -or
         ($PublishSuccessor -and -not $PrepareSuccessor) -or
@@ -378,9 +380,10 @@ try {
             throw 'Restart state write requires its exact command.'
         }
         . (Join-Path $PSScriptRoot 'deployment-windows-history-handoff-restart-state-write.ps1')
-        $observation = Test-AgentsChatStoppedHistoryHandoffRestartStateWrite $Source $scope $ControllerPid $ControllerIdentity
+        $observation = Test-AgentsChatStoppedHistoryHandoffRestartStateWrite $Source $scope $ControllerPid $ControllerIdentity `
+            -Continue:$HoldRestartState
     }
-    if ($HoldRestartDirectory -or $HoldRestartOwner -or $HoldRestartCommitted) {
+    if ($HoldRestartDirectory -or $HoldRestartOwner -or $HoldRestartCommitted -or $HoldRestartState) {
         [Console]::Out.WriteLine((@{
             type='ready'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
             control=$Control; controllerIdentity=$ControllerIdentity; value=$observation
