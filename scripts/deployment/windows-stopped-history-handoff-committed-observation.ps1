@@ -224,6 +224,10 @@ function Get-AgentsChatStoppedHistoryHandoffCommittedNamespace([hashtable]$Conte
         Assert-AgentsChatStoppedHistoryHandoffRestartReleased $Context
         $names += $Context.HistoryHandoffRestartReleased.Descriptor.path
     }
+    if ($Context.ContainsKey('HistoryHandoffRestartRetirement')) {
+        Assert-AgentsChatStoppedHistoryHandoffRestartRetirement $Context
+        $names += $Context.HistoryHandoffRestartRetirement.Descriptor.path
+    }
     return $names
 }
 
