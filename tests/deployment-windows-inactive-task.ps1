@@ -479,11 +479,15 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                         'lock-directory-history', 'lock-owner-history', 'lock-committed-history', 'lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history', 'restart-directory-history', 'restart-directory-dead-history', 'restart-owner-history', 'restart-owner-dead-history', 'restart-committed-history', 'restart-committed-dead-history', 'restart-state-intent-history', 'restart-state-written-history', 'restart-state-dead-history')
                     $historyShard = $env:DEPLOYMENT_TEST_HISTORY_SHARD
                     if ([string]::IsNullOrEmpty($historyShard)) { $historyShard = 'all' }
-                    if ($historyShard -cnotin @('all', 'baseline', 'successor', 'restart', 'commitment')) { throw 'Unknown stopped-history test shard.' }
+                    if ($historyShard -cnotin @('all', 'baseline', 'successor', 'restart', 'commitment', 'state')) { throw 'Unknown stopped-history test shard.' }
                     $successorIndex = [Array]::IndexOf($historyBoundaries, 'successor-prepared-history')
                     $restartIndex = [Array]::IndexOf($historyBoundaries, 'restart-directory-history')
                     $commitmentIndex = [Array]::IndexOf($historyBoundaries, 'restart-committed-history')
-                    if ($successorIndex -le 0 -or $restartIndex -le $successorIndex -or $commitmentIndex -le $restartIndex) {
+                    # Each actual state write replaces the shared original state inode, so a write boundary must end its shard.
+                    $stateIndex = [Array]::IndexOf($historyBoundaries, 'restart-state-dead-history')
+                    if ($successorIndex -le 0 -or $restartIndex -le $successorIndex -or $commitmentIndex -le $restartIndex -or
+                        $stateIndex -ne $historyBoundaries.Count - 1 -or
+                        $historyBoundaries[$stateIndex - 1] -cne 'restart-state-written-history') {
                         throw 'Stopped-history shard boundary is missing.'
                     }
                     $selectedBoundaries = switch -CaseSensitive ($historyShard) {
@@ -491,7 +495,8 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                         'baseline' { $historyBoundaries[0..($successorIndex - 1)] }
                         'successor' { $historyBoundaries[$successorIndex..($restartIndex - 1)] }
                         'restart' { $historyBoundaries[$restartIndex..($commitmentIndex - 1)] }
-                        'commitment' { $historyBoundaries[$commitmentIndex..($historyBoundaries.Count - 1)] }
+                        'commitment' { $historyBoundaries[$commitmentIndex..($stateIndex - 1)] }
+                        'state' { @($historyBoundaries[$stateIndex]) }
                     }
                     foreach ($historyBoundary in $selectedBoundaries) {
                         $lockBoundary = $historyBoundary -cin @('lock-directory-history', 'lock-owner-history', 'lock-committed-history', 'lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history', 'restart-directory-history', 'restart-directory-dead-history', 'restart-owner-history', 'restart-owner-dead-history', 'restart-committed-history', 'restart-committed-dead-history', 'restart-state-intent-history', 'restart-state-written-history', 'restart-state-dead-history')
