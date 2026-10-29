@@ -96,3 +96,17 @@ refusal is therefore unreachable after a released rollback, and gate 62 must ins
 - `windows-inactive-task.ps1`: `Open-AgentsChatInactiveTask` accepts an optional proved observation. Its project,
   task name, definition, security descriptor, principal SID and configuration SHA-256 must equal the live task; the
   proved canonical `configuration.json` path then replaces the action path for readiness and repeated assertions.
+
+### Production follow-ups found in Actions
+
+- Handoff evidence is only `inactive-handoff-*.json`. Retired `inactive-rollback-history-{intent,complete}`
+  archives persist after ordinary archival and must not force handoff admission (run 40943467695 refused every
+  ordinary admission).
+- The saved worker engine must ship the full dot-source closure of the controller, including the new admission
+  file and the 22 handoff verifiers it loads (run 40946568281 failed with a missing engine file).
+- The proved prepared record is read with `-AllowNull`, like the other prepared-record readers (run 40947584248).
+- Nested native verifiers compounded two passes per level: one restart retirement observation ran 273 worker
+  cleanups and 18603 process checks (62 s, and 300 s timeouts at owner retirement). `Get-AgentsChatVerificationPasses`
+  returns one pass when an ancestor call frame is inside another verifier pass loop (located from the parsed
+  script extents); outermost verifiers keep two passes, and every inner check still runs inside each outer pass.
+  Observations dropped to about 10 s and the takeover, release and postwrite shards passed (run 40953688458).
