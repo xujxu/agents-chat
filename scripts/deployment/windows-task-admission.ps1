@@ -75,7 +75,8 @@ function New-AgentsChatManagedTaskAdmission {
         $record = if ($Inactive) { [ordered]@{
             version=2; kind='inactive'; operationId=$operationId
             controllerPid=$ControllerPid; controllerIdentity=$ControllerIdentity
-            taskName=$Context.TaskName; definition=$Context.NativeDefinition
+            taskName=$Context.TaskName
+            definition=$(if ($Context.ContainsKey('ProvedDefinition')) { $Context.ProvedDefinition } else { $Context.NativeDefinition })
             securityDescriptor=$Context.SecurityDescriptor
             configuration=$Context.Configuration; configurationSha256=$Context.ConfigurationSha256
             retiredRuntime=[pscustomobject]$runtime

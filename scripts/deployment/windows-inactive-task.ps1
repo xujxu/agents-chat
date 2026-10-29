@@ -93,7 +93,8 @@ function Assert-AgentsChatInactiveTask([hashtable]$Context) {
         foreach ($file in $Context.Files) { $file.Check() }
         return [pscustomobject][ordered]@{
             status='inactive-task-observed'; runtimeAuthority=$false
-            project=$Context.Project; taskName=$Context.TaskName; definition=$Context.NativeDefinition
+            project=$Context.Project; taskName=$Context.TaskName
+            definition=$(if ($Context.ContainsKey('ProvedDefinition')) { $Context.ProvedDefinition } else { $Context.NativeDefinition })
             securityDescriptor=$Context.SecurityDescriptor; principalSid=$Context.PrincipalSid; enabled=$false
             configuration=$Context.Configuration; configurationSha256=$Context.ConfigurationSha256
             runtime=$null; retiredRuntime=[pscustomobject]$retired
@@ -125,11 +126,15 @@ function Open-AgentsChatInactiveTask([string]$TaskName, [string]$Project, $Prove
             $proved = $ProvedObservation.configuration
             $differs = @(foreach ($pair in @(
                 @('status', 'inactive-task-observed'), @('project', $Project), @('taskName', $TaskName),
-                @('definition', $context.NativeDefinition), @('securityDescriptor', $context.SecurityDescriptor),
+                @('securityDescriptor', $context.SecurityDescriptor),
                 @('principalSid', $context.PrincipalSid), @('configurationSha256', $context.ConfigurationSha256)
             )) {
                 if ($ProvedObservation[$pair[0]] -isnot [string] -or $ProvedObservation[$pair[0]] -cne $pair[1]) { $pair[0] }
             })
+            # The prepared record holds the generated restored definition; the Scheduler returns it reformatted.
+            $definition = $ProvedObservation['definition']
+            if ($definition -isnot [string] -or
+                ([xml]$definition).OuterXml -cne ([xml]$context.NativeDefinition).OuterXml) { $differs += 'definition' }
             if ($proved -isnot [string] -or -not [IO.Path]::IsPathRooted($proved) -or
                 [IO.Path]::GetFullPath($proved) -cne $proved -or
                 [IO.Path]::GetFileName($proved) -cne 'configuration.json') { $differs += 'configuration' }
@@ -139,6 +144,7 @@ function Open-AgentsChatInactiveTask([string]$TaskName, [string]$Project, $Prove
             $context.Files.Add([Deployment.WindowsPrivateFile]::OpenDirectory([IO.Path]::GetDirectoryName($proved)))
             $context.Configuration = $proved
             $context.HandoffObservation = $true
+            $context.ProvedDefinition = $definition
         }
         Open-AgentsChatCompletionConfiguration $context $context.Configuration $context.ConfigurationSha256
         $bundle = [IO.Path]::GetDirectoryName($context.Configuration)
