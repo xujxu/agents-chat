@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { readFile, lstat, writeFile, unlink, rename, mkdir, rmdir, readdir } from 'node:fs/promises';
+import { readFile, lstat, writeFile, unlink, rename, mkdir, rmdir, readdir, rm } from 'node:fs/promises';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { fixtureArgs, descriptorArgs } from './deployment-windows-lock-retirement-observation.mjs';
@@ -167,6 +168,8 @@ export async function assertSuccessorAbandonedAfterDeath({
     // Stderr timing lets a timed-out takeover show which native observation consumed its budget.
     const index = ++observation;
     const started = Date.now();
+    const trace = path.join(tmpdir(), `agents-chat-observation-${process.pid}-${index}.trace`);
+    process.env.AGENTS_CHAT_OBSERVATION_TRACE = trace;
     const requestIndex = input.indexOf('-Request');
     const switches = requestIndex < 0 ? input.filter(arg => /^-[A-Z]/.test(arg) && !['-NoProfile', '-NonInteractive', '-File', '-Source', '-Control', '-ControllerPid', '-ControllerIdentity'].includes(arg))
       : Object.keys(JSON.parse(input[requestIndex + 1])).filter(key => /^(restart|retire|settle|release|successor)/.test(key));
@@ -176,7 +179,10 @@ export async function assertSuccessorAbandonedAfterDeath({
       outcome = 'resolved';
       return result;
     } finally {
-      console.error(`NATIVE_OBSERVATION ${index} ${Date.now() - started}ms ${outcome} ${switches.join(' ')}`);
+      delete process.env.AGENTS_CHAT_OBSERVATION_TRACE;
+      const stages = await readFile(trace, 'utf8').catch(() => '');
+      await rm(trace, { force: true });
+      console.error(`NATIVE_OBSERVATION ${index} ${Date.now() - started}ms ${outcome} ${switches.join(' ')} [${stages.trim().split(/\r?\n/).join(', ')}]`);
     }
   };
   const expected = restart ? {

@@ -8,6 +8,11 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+$traceClock = [Diagnostics.Stopwatch]::StartNew()
+function Write-ObservationTrace([string]$Stage) {
+    # Optional stage timing for CI diagnosis of slow native observations; stderr must stay clean.
+    if ($env:AGENTS_CHAT_OBSERVATION_TRACE) { Add-Content -LiteralPath $env:AGENTS_CHAT_OBSERVATION_TRACE -Value "$Stage $($traceClock.ElapsedMilliseconds)" }
+}
 $scope = $watch = $failure = $null
 try {
     Add-Type -Path @(
@@ -15,9 +20,11 @@ try {
         'WindowsRuntimeControl.cs', 'WindowsPrivateFile.cs', 'WindowsPrivateFile.SourceSecurity.cs',
         'WindowsRuntimeLease.cs', 'WindowsRuntimeHost.cs', 'WindowsRuntimeListener.cs' |
         ForEach-Object { Join-Path $Source $_ })
+        Write-ObservationTrace 'compiled'
     . (Join-Path $Source 'windows-inactive-worker-cleanup.ps1')
     . (Join-Path $Source 'windows-stopped-history-handoff-successor-abandoned-observation.ps1')
     $watch = [Deployment.WindowsWorkerLauncher]::WatchOwnerUntilExit($ControllerPid, $ControllerIdentity)
+    Write-ObservationTrace 'watched'
     $inputRecord = Read-AgentsChatRetirementJson $Request
     $fields = @(
         'attemptId', 'prepared', 'committed', 'retirement', 'terminal', 'successor', 'successorAbandoned', 'restart'
@@ -66,6 +73,7 @@ try {
         }
     }
     Assert-AgentsChatRetirementFields $inputRecord $fields
+    Write-ObservationTrace 'parsed'
     . (Join-Path $Source 'windows-stopped-history-handoff-restart-observation.ps1')
     if ($observeState) {
         . (Join-Path $Source 'windows-stopped-history-handoff-restart-state-observation.ps1')
@@ -108,7 +116,9 @@ try {
             $inputRecord.attemptId $inputRecord.prepared $inputRecord.committed $inputRecord.retirement `
             $inputRecord.terminal $inputRecord.successor $inputRecord.successorAbandoned $inputRecord.restart `
             $inputRecord.restartCommitted $inputRecord.restartRetirement $restartSettlement
+        Write-ObservationTrace 'retirement-opened'
         $observation = Get-AgentsChatStoppedHistoryHandoffRestartRetirementObservation $scope $ControllerPid $ControllerIdentity
+        Write-ObservationTrace 'retirement-observed'
         if ($scope.HistoryHandoffRestartRetirementObserver -ne $true -or
             $scope.HistoryHandoffRestartCommittedObserver -ne $true -or
             $scope.ContainsKey('HistoryHandoffRestartRetirer') -or
