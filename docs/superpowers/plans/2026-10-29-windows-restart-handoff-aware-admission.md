@@ -110,3 +110,10 @@ refusal is therefore unreachable after a released rollback, and gate 62 must ins
   returns one pass when an ancestor call frame is inside another verifier pass loop (located from the parsed
   script extents); outermost verifiers keep two passes, and every inner check still runs inside each outer pass.
   Observations dropped to about 10 s and the takeover, release and postwrite shards passed (run 40953688458).
+- Task Scheduler reformats registered XML, so the proved handoff definition is compared with the live task through
+  `([xml]...).OuterXml` normalization, and the observation and inactive admission record report the proved
+  (generated) definition the prepared record holds (run 40960983304).
+- PowerShell variable names are case-insensitive: `$handoff = Read-...` in the controller coerced the parsed record
+  into the `[string]$Handoff` parameter, so the parsed record is `$handoffRecord` (run 40964292491).
+- Ordinary capture on a handoff-aware scope reports the scope-mode refusal before the duplicate-publication refusal
+  (run 40964292491, commitment test line 394).
