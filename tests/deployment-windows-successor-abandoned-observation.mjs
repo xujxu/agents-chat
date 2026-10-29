@@ -167,10 +167,16 @@ export async function assertSuccessorAbandonedAfterDeath({
     // Stderr timing lets a timed-out takeover show which native observation consumed its budget.
     const index = ++observation;
     const started = Date.now();
+    const requestIndex = input.indexOf('-Request');
+    const switches = requestIndex < 0 ? input.filter(arg => /^-[A-Z]/.test(arg) && !['-NoProfile', '-NonInteractive', '-File', '-Source', '-Control', '-ControllerPid', '-ControllerIdentity'].includes(arg))
+      : Object.keys(JSON.parse(input[requestIndex + 1])).filter(key => /^(restart|retire|settle|release|successor)/.test(key));
+    let outcome = 'rejected';
     try {
-      return await promisify(execFile)(pwsh, input, { timeout: 300000, maxBuffer: 131072, windowsHide: true });
+      const result = await promisify(execFile)(pwsh, input, { timeout: 300000, maxBuffer: 131072, windowsHide: true });
+      outcome = 'resolved';
+      return result;
     } finally {
-      console.error(`NATIVE_OBSERVATION ${index} ${Date.now() - started}ms`);
+      console.error(`NATIVE_OBSERVATION ${index} ${Date.now() - started}ms ${outcome} ${switches.join(' ')}`);
     }
   };
   const expected = restart ? {
