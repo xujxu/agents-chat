@@ -36,6 +36,14 @@ try {
             throw 'Restart lock owner retirement request differs.'
         }
     }
+    $retireDirectory = $observeRetirement -and -not $retireRestart -and -not $retireOwner -and
+        $inputRecord.Contains('retireDirectory')
+    if ($retireDirectory) {
+        $fields += 'retireDirectory'
+        if ($inputRecord.retireDirectory -isnot [bool] -or $inputRecord.retireDirectory -ne $true) {
+            throw 'Restart lock directory retirement request differs.'
+        }
+    }
     if ($Hold -and (-not $retireRestart -or $observeRetirement)) { throw 'Held restart observation requires a fresh retirement.' }
     if ($retireRestart) {
         $fields += 'retireRestart'
@@ -121,6 +129,24 @@ try {
             $repeat = Remove-AgentsChatStoppedHistoryHandoffRestartLockOwner $scope $ControllerPid $ControllerIdentity
             if (($repeat | ConvertTo-Json -Depth 12 -Compress) -cne ($observation | ConvertTo-Json -Depth 12 -Compress)) {
                 throw 'Repeated restart lock owner retirement differs.'
+            }
+        }
+        if ($retireDirectory) {
+            . (Join-Path $Source 'windows-stopped-history-handoff-restart-retirement-directory.ps1')
+            $refused = $false
+            try { $null = Remove-AgentsChatStoppedHistoryHandoffRestartLockDirectory $scope $ControllerPid $ControllerIdentity }
+            catch {
+                if ($_.Exception.Message -cne 'Restart lock directory retirement requires its independent native role.') { throw }
+                $refused = $true
+            }
+            if (-not $refused -or -not (Test-Path -LiteralPath (Join-Path $Control 'lock'))) {
+                throw 'Restart lock retirement observer deleted its directory without role.'
+            }
+            $scope.HistoryHandoffRestartDirectoryRetirer = $true
+            $observation = Remove-AgentsChatStoppedHistoryHandoffRestartLockDirectory $scope $ControllerPid $ControllerIdentity
+            $repeat = Remove-AgentsChatStoppedHistoryHandoffRestartLockDirectory $scope $ControllerPid $ControllerIdentity
+            if (($repeat | ConvertTo-Json -Depth 12 -Compress) -cne ($observation | ConvertTo-Json -Depth 12 -Compress)) {
+                throw 'Repeated restart lock directory retirement differs.'
             }
         }
         [Console]::Out.WriteLine(($observation | ConvertTo-Json -Depth 12 -Compress))

@@ -148,4 +148,16 @@ export async function assertDeadRestartRetirement({
   assert.deepEqual(await readdir(directory), []);
   const intentBytes = await readFile(path.join(control, descriptor.path));
   assert.equal(createHash('sha256').update(intentBytes).digest('hex'), descriptor.sha256);
+  // The owner retirer has exited; a fresh distinct observer takes over the partially retired lock.
+  for (let pass = 0; pass < 2; pass++) {
+    const result = await observe(restartArgs(retirementRequest));
+    assert.equal(result.stderr, '');
+    assert.deepEqual(JSON.parse(result.stdout), { ...expected, status: 'restart-lock-retirement-owner-retired' });
+  }
+  assert.deepEqual(await readdir(directory), []);
+  const removed = await observe(restartArgs({ ...retirementRequest, retireDirectory: true }));
+  assert.equal(removed.stderr, '');
+  assert.deepEqual(JSON.parse(removed.stdout), { ...expected, status: 'restart-lock-retirement-directory-retired' });
+  await assert.rejects(lstat(directory), { code: 'ENOENT' });
+  assert.deepEqual(await readFile(path.join(control, descriptor.path)), intentBytes);
 }

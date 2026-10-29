@@ -533,7 +533,7 @@ export async function assertSuccessorAbandonedAfterDeath({
     assert.equal(current.dev, originalIdentity.dev);
     assert.equal(current.ino, originalIdentity.ino);
   }
-  if (blockedDirectory && !blockedReleased) {
+  if (blockedDirectory && !blockedReleased && !blockedRetirement) {
     const current = await lstat(directory, { bigint: true });
     assert.equal(current.dev.toString(), previous.restartDirectory.dev);
     assert.equal(current.ino.toString(), previous.restartDirectory.ino);
@@ -560,6 +560,7 @@ export async function assertSuccessorAbandonedAfterDeath({
     if (retirementObserved) {
       console.log('PASS: distinct restart lock retirement observer proves the retirer and owner dead from the exact intent and refuses a duplicate without authority');
       console.log('PASS: distinct restart lock owner retirer deletes only the dead owner file from the exact intent and preserves its empty directory without authority');
+      console.log('PASS: fresh restart lock retirement observer takes over the owner-retired stage from the exact intent and retires only its empty directory without authority');
       console.log('PASS: ordinary reconciliation reports the dead restart attempt as lock-retiring while staying blocked without authority');
     }
     if (releasedObserved) {
