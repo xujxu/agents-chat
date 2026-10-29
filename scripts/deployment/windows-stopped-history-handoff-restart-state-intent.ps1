@@ -13,7 +13,8 @@ function Get-AgentsChatStoppedHistoryHandoffRestartStateIntentRecord(
         Assert-AgentsChatRetirementCreator $Creator $observed.ControllerPid $observed.ControllerIdentity
         if ($Creator.pid -ne $request.ControllerPid -or
             $Creator.processIdentity -cne $request.ControllerIdentity -or
-            $Creator.pid -eq $observed.ControllerPid -or $Creator.bridgePid -eq $PID) {
+            $Creator.processIdentity -ceq $observed.ControllerIdentity -or
+            $Creator.bridgeIdentity -ceq [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)) {
             throw 'Restart state intent creator differs from its restart owner.'
         }
     } else {

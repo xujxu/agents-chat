@@ -29,7 +29,7 @@ function Get-AgentsChatStoppedHistoryHandoffRestartRetirementRecord([hashtable]$
     Assert-AgentsChatRetirementCreator $Creator $observed.ControllerPid $observed.ControllerIdentity
     $self = $Creator.pid -eq $observed.ControllerPid -and $Creator.processIdentity -ceq $observed.ControllerIdentity
     if ($Context.ContainsKey('HistoryHandoffRestartRetirementObserver')) {
-        if ($self -or $Creator.bridgePid -eq $PID) { throw 'Restart lock retirement observer is its recorded retirer.' }
+        if ($self -or $Creator.bridgeIdentity -ceq [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)) { throw 'Restart lock retirement observer is its recorded retirer.' }
     } elseif (-not $self) {
         throw 'Restart lock retirement creator differs from its observer.'
     }

@@ -28,7 +28,7 @@ function Assert-AgentsChatStoppedHistoryHandoffRestartOwnerCreator([hashtable]$C
     Assert-AgentsChatCompletionProcessIdentity $Creator.pid $Creator.processIdentity
     Assert-AgentsChatCompletionProcessIdentity $Creator.bridgePid $Creator.bridgeIdentity
     if ($Creator.pid -ne $request.ControllerPid -or $Creator.processIdentity -cne $request.ControllerIdentity -or
-        $Creator.bridgePid -eq $PID -or -not (Test-AgentsChatStoppedHistoryHandoffRestartOwnerAdmitter $Context)) {
+        $Creator.bridgeIdentity -ceq [Deployment.WindowsWorkerJob]::ProcessIdentity($PID) -or -not (Test-AgentsChatStoppedHistoryHandoffRestartOwnerAdmitter $Context)) {
         throw 'Restart owner admission creator differs from its live restart owner.'
     }
     Assert-AgentsChatCompletionProcessAbsent $Creator.bridgePid $Creator.bridgeIdentity
