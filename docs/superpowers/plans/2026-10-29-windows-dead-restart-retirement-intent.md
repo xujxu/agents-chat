@@ -37,3 +37,8 @@
 ### Task 3: Acceptance
 
 - [ ] Focused and Contracts runs green; all six shard logs merged and every required receipt present.
+
+### Run classification notes
+
+- Run `40895361895` (`ae425d79`) and run `40897684927` (`c645b8f6`): commitment shard failed with `Fresh actor could not resume actual history archival` after the observer `pwsh` child was killed (`killed: true`, `SIGTERM`, empty output). These were native observation budget timeouts, not the expected missing-module refusal. The budgets were raised to 180000 ms in `ffbb3c92` and to 300000 ms in `42aa336b`.
+- Gate 52 red run `40896793343` also failed on the observation budget timeout rather than the expected refusal. The red evidence for that gate is the refusal recorded above.
