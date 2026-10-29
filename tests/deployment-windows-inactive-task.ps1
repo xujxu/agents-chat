@@ -947,7 +947,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                                 'resume-restart-committed-history'
                             } elseif ($historyBoundary -ceq 'restart-state-intent-history') {
                                 'resume-restart-state-intent-history'
-                            } elseif ($historyBoundary -ceq 'restart-released-history', 'restart-released-dead-history') {
+                            } elseif ($historyBoundary -ceq 'restart-released-history') {
                                 'resume-restart-released-history'
                             } elseif ($historyBoundary -ceq 'restart-state-written-history') {
                                 'resume-restart-state-written-history'
@@ -1077,7 +1077,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                                 . (Join-Path $PSScriptRoot 'deployment-windows-restart-state-intent-controller.ps1')
                                 Send-AgentsChatRestartStateIntentCommand $historyResumer $diagnostic $live $control
                             }
-                            if ($historyBoundary -ceq 'restart-released-history', 'restart-released-dead-history') {
+                            if ($historyBoundary -ceq 'restart-released-history') {
                                 . (Join-Path $PSScriptRoot 'deployment-windows-restart-release-controller.ps1')
                                 Send-AgentsChatRestartReleaseCommand $historyResumer $diagnostic $live $control
                             }
