@@ -29,24 +29,37 @@ function Get-AgentsChatStoppedHistoryHandoffRestartStateIntentRecord(
     $record = Get-AgentsChatStoppedHistoryHandoffRestartBinding -Context $Context @request
     $committed = $Context.HistoryHandoffRestartCommitted
     $lock = $Context.HistoryHandoffRestartLock
-    Assert-AgentsChatStoppedHistoryHandoffLockRetirementTime $CreatedAt $committed.CommittedAt
+    return Get-AgentsChatStoppedHistoryHandoffStateIntentBody $Context @{
+        Label='Restart state intent'; Phase='stopped-history-handoff-restart-state-intent'
+        AttemptId=$request.AttemptId; Prepared=$prepared.Descriptor; Committed=$committed.Descriptor
+        CommittedAt=$committed.CommittedAt; LockIdentity=$lock.DirectoryIdentity; Lock=$lock.OwnerDescriptor
+        Record=$record
+    } $Creator $CreatedAt
+}
+
+function Get-AgentsChatStoppedHistoryHandoffStateIntentBody(
+    [hashtable]$Context, [hashtable]$Binding, $Creator, [string]$CreatedAt
+) {
+    $label = $Binding.Label
+    $record = $Binding.Record
+    Assert-AgentsChatStoppedHistoryHandoffLockRetirementTime $CreatedAt $Binding.CommittedAt
     $time = [DateTimeOffset]::ParseExact($CreatedAt, 'yyyy-MM-ddTHH:mm:ss.fffZ',
         [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal)
-    if ($time -gt [DateTimeOffset]::UtcNow) { throw 'Restart state intent is in the future.' }
+    if ($time -gt [DateTimeOffset]::UtcNow) { throw "$label is in the future." }
     $state = Open-AgentsChatStoppedHistoryState $Context $record.state
-    if ($state.ReadText() -cne $record.oldState) { throw 'Restart state intent original state differs.' }
+    if ($state.ReadText() -cne $record.oldState) { throw "$label original state differs." }
     $old = [Text.Json.JsonDocument]::Parse($record.oldState)
     try {
         $root = $old.RootElement
         if ($root.GetProperty('operationId').GetString() -cne $Context.OperationId -or
             $root.GetProperty('project').GetString() -cne $Context.Project -or
             $record.newOwner.operationId -ceq $Context.OperationId) {
-            throw 'Restart state intent original state identity differs.'
+            throw "$label original state identity differs."
         }
     } finally { $old.Dispose() }
     $generation = [string]$record.observation.retiredRuntime.generation
     Assert-AgentsChatCompletionGuid $generation
-    if ($record.operation -cne 'update') { throw 'Restart state intent operation differs.' }
+    if ($record.operation -cne 'update') { throw "$label operation differs." }
     $nextState = [ordered]@{
         version=1; operationId=$record.newOwner.operationId; project=$Context.Project; operation=$record.operation
         phase='preflight'; previousPhase=$null; sourceCommit=$null; targetCommit=$null; backupId=$null
@@ -54,12 +67,12 @@ function Get-AgentsChatStoppedHistoryHandoffRestartStateIntentRecord(
         startedAt=$record.newOwner.createdAt; updatedAt=$CreatedAt; errorCode=$null
     }
     return [ordered]@{
-        version=1; phase='stopped-history-handoff-restart-state-intent'
-        attemptId=$request.AttemptId; control=$Context.Control; project=$Context.Project
+        version=1; phase=$Binding.Phase
+        attemptId=$Binding.AttemptId; control=$Context.Control; project=$Context.Project
         controlIdentity=$Context.HistoryRecord.controlIdentity
         previousOperationId=$Context.OperationId
-        prepared=$prepared.Descriptor; committed=$committed.Descriptor; newOwner=$record.newOwner
-        lockIdentity=$lock.DirectoryIdentity; lock=$lock.OwnerDescriptor
+        prepared=$Binding.Prepared; committed=$Binding.Committed; newOwner=$record.newOwner
+        lockIdentity=$Binding.LockIdentity; lock=$Binding.Lock
         state=$record.state; oldState=$record.oldState; nextState=$nextState
         creator=$Creator; createdAt=$CreatedAt
     }

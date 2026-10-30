@@ -124,6 +124,8 @@ function Complete-AgentsChatStoppedHistoryHandoffCommit([hashtable]$Context) {
         $held = [Deployment.WindowsPrivateFile]::Publish((Join-Path $Context.Control $committedName), $text)
         $Context.Files.Add($held)
         $committed = Get-AgentsChatStoppedHandoffDescriptor $held $committedName
+        $commit.CommittedFile = $held
+        $commit.CommittedAt = $record.committedAt
         $commit.Committed = $committed
         foreach ($pass in (Get-AgentsChatVerificationPasses)) {
             Assert-AgentsChatStoppedHistoryHandoffNamespace $Context @($preparedName, $committedName)
