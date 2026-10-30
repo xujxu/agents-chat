@@ -22,8 +22,9 @@ Revision: the first in-process contract (`gate69-contract`) failed in run `40994
 
 ### Task 2: Production
 
-- [ ] Only if Actions shows a gap, for example the retired runtime history location for a handoff admission.
+- [x] Not needed. Only if Actions shows a gap, for example the retired runtime history location for a handoff admission.
 
 ### Task 3: Acceptance
 
-- [ ] Stopped-history run green on all 10 shards with 75 receipts, plus a same-SHA Contracts run.
+- [x] Stopped-history run green on all 10 shards with 75 receipts, plus a same-SHA Contracts run.
+- [x] Accepted on `a3f630d1` (tag `gate71-contract3`): stopped-history run `41003468341` green on all 10 shards, aggregate job `123900906165` verified 77 receipts; same-SHA Contracts run `41003504175` (job `123893066026`) green.
