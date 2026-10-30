@@ -9,6 +9,7 @@ import { windowsControllerTransport } from './windows-controller-transport.mjs';
 import { journalUncertain } from './evidence-journal.mjs';
 import { inspectWindowsSnapshotRuntime } from './windows-snapshot-runtime.mjs';
 import { inspectWindowsRestoreTaskPolicy } from './windows-restore-task-policy.mjs';
+import { windowsInactiveTaskHandoffEntries } from './windows-managed-task.mjs';
 
 const script = fileURLToPath(new URL('./windows-runtime-publication.ps1', import.meta.url));
 function refused(cause) {
@@ -63,9 +64,10 @@ async function prepareRuntimeBundle({ scope, control, lock: suppliedLock, node, 
     const sourceConfiguration = archived
       ? archived.files.find(file => file.name === 'configuration.json').file : observation.configuration;
     const sha256 = archived ? archived.task.configurationSha256 : observation.configurationSha256;
+    const handoffEntries = inactive ? await windowsInactiveTaskHandoffEntries(scope, { control: root, signal }) : null;
     const authority = async () => {
       signal?.throwIfAborted();
-      await requireNoServiceMaintenance(root);
+      await requireNoServiceMaintenance(root, { allowEntries: handoffEntries });
       await check({ signal });
       await archived?.check({ signal });
       if (!(await readWorkerFile(stateFile, 65536, { privateMode: true })).equals(stateBytes)) {

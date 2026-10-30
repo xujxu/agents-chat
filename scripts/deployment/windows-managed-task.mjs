@@ -176,6 +176,20 @@ export async function assertWindowsInactiveTaskScope(scope, { signal } = {}) {
   return retained.request('check', signal);
 }
 
+// Names the exact pinned handoff records and retired history archives a handoff-aware scope already verified.
+export async function windowsInactiveTaskHandoffEntries(scope, { control, signal } = {}) {
+  const retained = inactiveScopes.get(scope);
+  if (!retained?.handoff) return null;
+  const names = new Set(handoffDescriptors.map(name => retained.handoff[name].path.toLowerCase()));
+  for (const name of await readdir(control)) {
+    const entry = name.toLowerCase();
+    if (entry.startsWith('retired-') && (entry.endsWith('-inactive-rollback-history-intent.json')
+      || entry.endsWith('-inactive-rollback-history-complete.json'))) names.add(entry);
+  }
+  await retained.request('check', signal);
+  return names;
+}
+
 export async function captureWindowsManagedTaskAdmission({ scope, control, lock: suppliedLock, admission, signal }) {
   return captureTaskAdmission({ scope, control, lock: suppliedLock, admission, signal }, false);
 }

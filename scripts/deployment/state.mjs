@@ -386,8 +386,9 @@ async function requireNoWorkerRetirement(directory) {
   }
 }
 
-export async function requireNoServiceMaintenance(directory, { allowLiveRetirement = false } = {}) {
-  if ((await readdir(directory)).some(name => serviceMaintenanceEntry(name, allowLiveRetirement))) {
+export async function requireNoServiceMaintenance(directory, { allowLiveRetirement = false, allowEntries = null } = {}) {
+  const excused = name => allowEntries?.has(name.toLowerCase()) === true;
+  if ((await readdir(directory)).some(name => !excused(name) && serviceMaintenanceEntry(name, allowLiveRetirement))) {
     throw new Error('Service or task maintenance evidence requires explicit runtime recovery before this operation.');
   }
 }
