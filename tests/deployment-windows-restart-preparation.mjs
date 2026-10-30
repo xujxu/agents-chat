@@ -441,14 +441,16 @@ export async function assertRestartPreparation({
       });
       await assert.rejects(assertWindowsInactiveTaskSnapshotStage({ ...snapshotOptions, context: { ...transaction } }));
       // The handoff-aware transaction snapshots, rotates and prepares activation with its own operation bundle.
-      const { prepareWindowsConfigurationFixture } = await import('./deployment-windows-configuration.mjs');
+      const { inspectWindowsInactiveConfiguration } = await load('windows-configuration.mjs');
       const { createWindowsInactiveTaskSnapshot } = await load('windows-task-snapshot.mjs');
       const { verifySnapshot } = await load('snapshot.mjs');
       const { saveRecoveryEngine } = await load('saved-recovery-engine.mjs');
       const { rotateWindowsInactiveTaskSnapshot, prepareWindowsInactiveTaskActivation } =
         await load('windows-inactive-task-transaction.mjs');
       const recovery = await saveRecoveryEngine({ source, control, allowVersionChange: true });
-      const configuration = await prepareWindowsConfigurationFixture({ scope, pwsh, inactive: true });
+      // The archived project keeps its configured sources; inspect them through the handoff scope.
+      await assert.rejects(inspectWindowsInactiveConfiguration({ scope: { ...scope }, pwsh, profile: 'agents-chat-auth-638c553' }));
+      const configuration = await inspectWindowsInactiveConfiguration({ scope, pwsh, profile: 'agents-chat-auth-638c553' });
       try {
         const manifest = await createWindowsInactiveTaskSnapshot({
           context: transaction, control, lock: owner, pwsh, destination: path.join(control, 'staging'),
