@@ -121,3 +121,10 @@ refusal is therefore unreachable after a released rollback, and gate 62 must ins
   bare PID: Windows reused a dead publisher's PID and refused a valid restart commitment (run 40968336566, release).
 - The inactive scope retains its published admission handle until it closes, so the contract removes the admission
   only after `scope.close()` (run 40968336566, commitment EBUSY).
+
+## Acceptance (2026-10-29)
+
+Production at `gate62-prod10` (`95432378`).
+
+- Stopped-history run `40972124688` succeeded on all ten shards: commitment `123791165054`, postintent `123791165289`, completion `123791165291`, takeover `123791165297`, restart `123791165298`, successor `123791165317`, release `123791165319`, postwrite `123791165324`, state `123791165392` and baseline `123791165417`. The aggregate job `Stopped-history acceptance (all boundaries)` (`123801700825`) verified all 68 required receipts.
+- Same-SHA Contracts run `40975736443` / `Contracts (windows-2022)` `123803190237` succeeded.
