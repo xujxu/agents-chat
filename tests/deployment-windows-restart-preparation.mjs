@@ -376,6 +376,7 @@ export async function assertRestartPreparation({
     let activationPrepared;
     let replacedDefinition;
     let activatedRuntime;
+    let healthMode;
     try {
       await assert.rejects(captureWindowsInactiveTaskHandoffAdmission({
         scope, control, lock: { ...owner, token: randomUUID() }, admission, handoff,
@@ -505,6 +506,8 @@ export async function assertRestartPreparation({
         // The replaced handoff transaction starts one distinct guarded runtime from its operation bundle.
         const { startWindowsInactiveTask } = await load('windows-inactive-task-transaction.mjs');
         await assert.rejects(startWindowsInactiveTask({ ...replacementOptions, context: { ...transaction } }));
+        const listenerFile = path.join(original.project, 'listener.json');
+        const previousListener = JSON.parse(await readFile(listenerFile, 'utf8'));
         const active = await startWindowsInactiveTask(replacementOptions);
         activatedRuntime = active.runtime;
         assert.equal(active.status, 'guarded-running');
@@ -518,6 +521,32 @@ export async function assertRestartPreparation({
         assert.equal(running.preparationSha256, preparation.sha256);
         assert.equal(running.configuration, bundle.configuration);
         assert.deepEqual(running.runtime, active.runtime);
+        // Readiness verifies HTTP providers only through the handoff transaction's retained Job listener.
+        await assert.rejects(transaction.listener({ port: 0 }));
+        let listener;
+        const listenerDeadline = Date.now() + 30000;
+        do {
+          listener = JSON.parse(await readFile(listenerFile, 'utf8'));
+          if (listener.pid !== previousListener.pid) break;
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } while (Date.now() < listenerDeadline);
+        assert.notEqual(listener.pid, previousListener.pid);
+        const healthFile = path.join(original.project, 'health-mode');
+        healthMode = { file: healthFile, bytes: await readFile(healthFile).catch(error => {
+          if (error.code === 'ENOENT') return null;
+          throw error;
+        }) };
+        await writeFile(healthFile, 'ready');
+        const { waitWindowsReadiness } = await load('windows-readiness.mjs');
+        const ready = await waitWindowsReadiness({
+          context: transaction, port: listener.port, providers: configuration.providers, waitSeconds: 30,
+        });
+        assert.equal(ready.status, 'ready');
+        assert.equal(ready.generation, active.runtime.generation);
+        const owned = await transaction.listener({ port: listener.port });
+        assert.equal(owned.pid, listener.pid);
+        assert.equal(owned.generation, active.runtime.generation);
+        await assert.rejects(transaction.listener({ port: listener.port === 65535 ? 65534 : listener.port + 1 }));
       } finally { await configuration.close(); }
       await transaction.close();
       if (activatedRuntime) {
@@ -527,6 +556,10 @@ export async function assertRestartPreparation({
           await new Promise(resolve => setTimeout(resolve, 100));
         }
         assert.notEqual(await processIdentity(activatedRuntime.pid), activatedRuntime.identity);
+      }
+      if (healthMode) {
+        if (healthMode.bytes) await writeFile(healthMode.file, healthMode.bytes);
+        else await unlink(healthMode.file);
       }
       writtenState = Object.freeze({
         ...writtenState, bytes: await readFile(stateFile), identity: await lstat(stateFile, { bigint: true }),
@@ -618,6 +651,7 @@ export async function assertRestartPreparation({
     console.log('PASS: handoff-aware inactive transaction snapshots rotates and prepares activation with its distinct operation bundle and proved task definition while copied contexts and duplicate preparation remain refused');
     console.log('PASS: handoff-aware inactive transaction replaces the inhibited task with its operation bundle and records the proved original definition while copied contexts and duplicate replacement remain refused');
     console.log('PASS: handoff-aware inactive transaction starts one distinct guarded runtime from its operation bundle and settles it on close while copied contexts and duplicate startup remain refused');
+    console.log('PASS: handoff-aware inactive startup readiness verifies HTTP providers only through its retained original Job listener while premature and foreign ports remain refused');
   }
   console.log(releaseRestart && writeState
     ? 'PASS: native live restart owner releases only its exact committed lock after its acknowledged state write while nine records and written state remain exact without authority'
