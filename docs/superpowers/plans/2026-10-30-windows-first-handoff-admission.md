@@ -29,7 +29,7 @@ The remaining checks are unchanged:
 - Modify: `tests/deployment-windows-history-handoff-commit.ps1`
   - New switch `-WriteState` (non-held). After `-PrepareState` publishes the intent, it calls `Write-AgentsChatStoppedHistoryHandoffState`.
   - The output adds the `state` descriptor; the bridge then exits.
-- Modify: `tests/deployment-windows-lost-runtime-session.mjs`, non-held commit path (~line 1447). Pass `-WriteState`, then:
+- Modify: `tests/deployment-windows-lost-runtime-session.mjs`, non-held commit path (~line 1447). Only in `resume-lock-state-admitted-history`, after the gate 72 cleanup, commit again with `-PrepareState -WriteState`, then:
   1. Ordinary `inspectWindowsInactiveTask` admission without the handoff is refused, and nothing is published under `task-maintenance`.
   2. `captureWindowsInactiveTaskHandoffAdmission` is refused for each of these shapes:
      - copied (mixed restart and first-attempt fields);
@@ -41,7 +41,11 @@ The remaining checks are unchanged:
      - `rmdir` `task-maintenance`;
      - restore the original state bytes;
      - remove the handoff evidence and the lock.
+- Modify: `tests/deployment-windows-inactive-task.ps1`
+  - Add the last boundary `lock-state-admitted-history` in a new shard `firstadmit`. Its crash mode is `crash-completed-history` and its resume mode is `resume-lock-state-admitted-history`.
+  - The actual state write replaces the shared original `state.json` inode, so this boundary must end its shard. The `resume-completed-history` baseline stays unchanged.
 - Modify: `.github/workflows/deployment-lifecycle.yml`
+  - Add `firstadmit` to the matrix and the aggregation list.
   - Receipt 80: `PASS: handoff-aware inactive admission publishes only the exact live first-attempt owner written preflight binding through the shared native verifier while copied foreign ordinary and duplicate admission remain refused`.
 
 - [ ] Commit, tag `gate74-contract`, dispatch the stopped-history run. Expect red: the handoff shape is refused by `captureHandoff`.
