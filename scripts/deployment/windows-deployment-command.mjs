@@ -63,7 +63,10 @@ export async function runWindowsDeploymentCommand({
     });
   }
   if (!['idle', 'already-current', 'preflight-refused', 'prior-runtime-restored'].includes(status.status)) {
-    throw refused('DEPLOYMENT_RECOVERY_REQUIRED', 'Existing operation needs inspection or recovery before another deployment.');
+    throw Object.assign(refused('DEPLOYMENT_RECOVERY_REQUIRED',
+      'Existing operation needs inspection or recovery before another deployment.'), {
+      status: status.status, ...(status.handoff ? { handoff: status.handoff } : {}), entries: [...names].sort(),
+    });
   }
   if (options.firstInstall) {
     if (originalState || names.length) {
