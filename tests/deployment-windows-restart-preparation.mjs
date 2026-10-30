@@ -374,6 +374,7 @@ export async function assertRestartPreparation({
     const scope = await open();
     let published;
     let activationPrepared;
+    let replacedDefinition;
     try {
       await assert.rejects(captureWindowsInactiveTaskHandoffAdmission({
         scope, control, lock: { ...owner, token: randomUUID() }, admission, handoff,
@@ -478,6 +479,23 @@ export async function assertRestartPreparation({
         await assert.rejects(prepareWindowsInactiveTaskActivation(preparationOptions));
         assert.deepEqual(await readdir(maintenance), ['admission.json', 'inactive-activation-prepared.json']);
         activationPrepared = preparation.file;
+        // The prepared handoff transaction replaces the inhibited task with its operation bundle.
+        const { replaceWindowsInactiveTask } = await load('windows-inactive-task-transaction.mjs');
+        const replacementOptions = { context: transaction, control, lock: owner };
+        await assert.rejects(replaceWindowsInactiveTask({ ...replacementOptions, context: { ...transaction } }));
+        replacedDefinition = original.observation.definition;
+        const replacement = await replaceWindowsInactiveTask(replacementOptions);
+        assert.equal(replacement.replaced, true);
+        assert.equal(replacement.inhibited, true);
+        const replaced = JSON.parse(await readFile(replacement.file));
+        assert.equal(replaced.phase, 'replacement-complete');
+        assert.equal(replaced.preparationSha256, preparation.sha256);
+        assert.equal(replaced.originalDefinition, original.observation.definition);
+        assert.equal(replaced.configuration, bundle.configuration);
+        assert.ok(replacement.definition.includes(bundle.configuration));
+        await assert.rejects(replaceWindowsInactiveTask(replacementOptions));
+        assert.deepEqual((await readdir(maintenance)).sort(), ['admission.json', 'inactive-activation-prepared.json',
+          'inactive-replacement-complete.json', 'inactive-replacement-requested.json']);
       } finally { await configuration.close(); }
       await transaction.close();
       writtenState = Object.freeze({
@@ -487,7 +505,22 @@ export async function assertRestartPreparation({
     // The inactive scope retains its published admission handle until it closes.
     await unlink(published);
     await unlink(activationPrepared);
+    for (const name of ['inactive-replacement-requested.json', 'inactive-replacement-complete.json']) {
+      await unlink(path.join(maintenance, name));
+    }
     await rmdir(maintenance);
+    // Re-register the original inhibited definition so later fixture steps observe the archived task.
+    const restore = await promisify(execFile)(pwsh, ['-NoProfile', '-NonInteractive', '-Command', [
+      '$ErrorActionPreference = "Stop"',
+      '$service = New-Object -ComObject Schedule.Service; $service.Connect()',
+      '$folder = $service.GetFolder("\\"); $task = $folder.GetTask($env:AGENTS_CHAT_TASK_NAME)',
+      '$principal = $task.Definition.Principal',
+      '$null = $folder.RegisterTask($env:AGENTS_CHAT_TASK_NAME, $env:AGENTS_CHAT_TASK_XML, (4 -bor 16 -bor 32), [string]$principal.UserId, $null, [int]$principal.LogonType, $null)',
+      'if ($folder.GetTask($env:AGENTS_CHAT_TASK_NAME).Enabled) { throw "Restored task is enabled." }',
+    ].join('; ')], { timeout: 45000, maxBuffer: 131072, windowsHide: true, env: {
+      ...process.env, AGENTS_CHAT_TASK_NAME: original.observation.taskName, AGENTS_CHAT_TASK_XML: replacedDefinition,
+    } });
+    assert.equal(restore.stderr, '');
   }
   if (publish && !held) {
     await assert.rejects(promisify(execFile)(pwsh,
@@ -552,6 +585,7 @@ export async function assertRestartPreparation({
     console.log('PASS: handoff-aware inactive admission publishes only the exact live restart owner written preflight binding through the shared native verifier while copied foreign ordinary and duplicate admission remain refused');
     console.log('PASS: handoff-aware inactive admission begins the existing inactive transaction for the exact live restart owner and reaches its copying snapshot stage while copied scopes and duplicate consumers remain refused');
     console.log('PASS: handoff-aware inactive transaction snapshots rotates and prepares activation with its distinct operation bundle and proved task definition while copied contexts and duplicate preparation remain refused');
+    console.log('PASS: handoff-aware inactive transaction replaces the inhibited task with its operation bundle and records the proved original definition while copied contexts and duplicate replacement remain refused');
   }
   console.log(releaseRestart && writeState
     ? 'PASS: native live restart owner releases only its exact committed lock after its acknowledged state write while nine records and written state remain exact without authority'
