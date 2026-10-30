@@ -36,7 +36,7 @@ No new authority is introduced. Lock release stays refused while handoff evidenc
   - Add `firstroute` to the matrix and aggregation lists.
   - Receipt 81: `'PASS: production stopped-history update admission composes preparation commit state intent preflight write and handoff-aware admission for one live owner while lock release with handoff evidence remains refused'`.
 
-- [ ] Commit, tag `gate75-contract`, dispatch stopped-history. Expect `firstroute` to fail on the missing module, with every other shard green.
+- [x] Commit, tag `gate75-contract`, dispatch stopped-history. Expect `firstroute` to fail on the missing module, with every other shard green.
 
 ### Task 2: Production
 
@@ -49,4 +49,6 @@ No new authority is introduced. Lock release stays refused while handoff evidenc
   - Refusal code: `DEPLOYMENT_WINDOWS_HANDOFF_ADMISSION_REFUSED`, with `recoveryAllowed: false`. All evidence is retained.
 - Modify: `scripts/deployment/saved-worker-engine.mjs` and `tests/deployment-saved-worker.test.mjs`: add both files to the saved helper list.
 
-- [ ] Commit, tag `gate75-production`. Run a green stopped-history run (81 receipts) plus a same-SHA Contracts run, and record acceptance here.
+- [x] Commit, tag `gate75-production`. Run a green stopped-history run (81 receipts) plus a same-SHA Contracts run, and record acceptance here.
+  - Red: run `41014976295` (tag `gate75-contract2`, `4cb2ca10`) failed only in `firstroute`.
+  - **Accepted**: stopped-history run `41014979196` (acceptance job `123940031797`) and same-SHA Contracts run `41014982736`, both green at `a7154557` (tag `gate75-production2`).

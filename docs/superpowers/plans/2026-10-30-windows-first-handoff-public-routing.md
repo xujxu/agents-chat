@@ -55,3 +55,4 @@
 Each gate gets its own plan file, written when its predecessor is accepted. That way the contract reflects the code as it actually landed. Each follows the same steps: contract first (expect red) → shared production change → green stopped-history run → same-SHA Contracts → acceptance.
 
 - Gate 73 **accepted** at `779e7fd2` (`gate73-production3`): stopped-history run `41013265676` and Contracts run `41013268657`. Details are in `2026-10-30-windows-first-handoff-state-write.md`.
+- Gates 74 and 75 **accepted** at `a7154557` (`gate75-production2`): stopped-history run `41014979196` (acceptance job `123940031797`) and same-SHA Contracts run `41014982736`, both green at `a7154557` (tag `gate75-production2`). Details are in `2026-10-30-windows-first-handoff-admission.md` and `...-update-admission.md`.

@@ -48,7 +48,7 @@ The remaining checks are unchanged:
   - Add `firstadmit` to the matrix and the aggregation list.
   - Receipt 80: `PASS: handoff-aware inactive admission publishes only the exact live first-attempt owner written preflight binding through the shared native verifier while copied foreign ordinary and duplicate admission remain refused`.
 
-- [ ] Commit, tag `gate74-contract`, dispatch the stopped-history run. Expect red: the handoff shape is refused by `captureHandoff`.
+- [x] Commit, tag `gate74-contract`, dispatch the stopped-history run. Expect red: the handoff shape is refused by `captureHandoff`.
 
 ### Task 2: Production
 
@@ -68,8 +68,11 @@ The remaining checks are unchanged:
   - `captureTaskAdmission` checks the `state` descriptor's sha256 (first attempt) or `restartState` (restart) against `state.json`.
   - `windowsInactiveTaskHandoffEntries` returns the entries for the captured shape.
 
-- [ ] Commit, tag `gate74-production`, dispatch the stopped-history and Contracts runs on the same SHA. Both must be green, and acceptance must require all 80 receipts.
+- [x] Commit, tag `gate74-production`, dispatch the stopped-history and Contracts runs on the same SHA. Both must be green, and acceptance must require all 80 receipts.
 
 ### Task 3: Acceptance
 
-- [ ] Record the red, green and Contracts run IDs and the SHA here, and tick gate 74 in `2026-10-30-windows-first-handoff-public-routing.md`.
+- [x] Record the red, green and Contracts run IDs and the SHA here, and tick gate 74 in `2026-10-30-windows-first-handoff-public-routing.md`.
+  - Red: run `41014092971` failed only in `firstadmit` ("Invalid owned worker handoff-aware admission"); every other shard was green.
+  - First production run `41014666946` failed: the saved recovery-engine copy lacked `windows-stopped-history-handoff-commit.ps1`, which `state-intent.ps1` dot-sources, so discovery closed the native worker transport. Fixed by adding it to `scripts/deployment/saved-worker-engine.mjs` and its test.
+  - **Accepted** together with gate 75: stopped-history run `41014979196` (acceptance job `123940031797`) and same-SHA Contracts run `41014982736`, both green at `a7154557` (tag `gate75-production2`).
