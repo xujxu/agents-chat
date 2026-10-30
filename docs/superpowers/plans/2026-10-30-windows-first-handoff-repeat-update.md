@@ -59,7 +59,7 @@
 
 ### Task 3: Regression matrix and documentation
 
-- [ ] Dispatch the latest same-SHA Linux and Windows regression matrix (default workflow inputs) and record the run IDs.
+- [x] Dispatch the latest same-SHA Linux and Windows regression matrix (default workflow inputs) and record the run IDs: regression `41107542413` (all 56 jobs) and stopped-history `41107548527` (all 17 jobs, acceptance job `124270550103`), both at `fd33552a`.
 - [x] Update the user-facing deployment docs: public `update` of archived stopped history, its receipt and closeout, and that rollback is a public `update -Revision <older>`.
 - [x] Record acceptance here and in the block 3 routing plan.
 
@@ -117,4 +117,7 @@ working directory beside (not inside) the control used as actor `TEMP`.
   run `41061371234` passed all 17 jobs (acceptance job `124112029158`). `Actual Windows live deployment` reached its
   300-minute budget during the actual application update after passing every earlier step. The stopped restore evidence
   and unacknowledged cold launch steps now run in their own `Actual Windows stopped restore evidence` job.
+- **Final regression accepted** at `fd33552a` (tag `block4-regression5`): default-input regression run `41107542413`
+  passed all 56 jobs, including live deployment, every actual restore scenario and the split stopped restore evidence
+  job; same-SHA stopped-history run `41107548527` passed all 17 jobs (acceptance job `124270550103`).
 - Not yet covered: the inactive runner's `publish-receipt` stage (needs a real-application public stopped-history run).
