@@ -34,7 +34,10 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
     $scope = Open-AgentsChatInactiveTask $TaskName $Project
     try { $null = Assert-AgentsChatInactiveTask $scope }
     finally { Close-AgentsChatTaskCompletionProof $scope }
-    $control = "$Project-inactive-control"
+    # The public entry resolves only the canonical sibling control, so the public repeat shard uses it.
+    $control = if ($env:DEPLOYMENT_TEST_HISTORY_SHARD -ceq 'firstrepeat') {
+        Join-Path (Split-Path -Parent $Project) ".$(Split-Path -Leaf $Project).deployment"
+    } else { "$Project-inactive-control" }
     [Deployment.WindowsPrivateFile]::CreateDirectory($control).Dispose()
     $controller = $null
     $copyRecovered = $false

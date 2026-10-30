@@ -62,3 +62,11 @@
 - [ ] Dispatch the latest same-SHA Linux and Windows regression matrix (default workflow inputs) and record the run IDs.
 - [ ] Update the user-facing deployment docs: public `update` of archived stopped history, its receipt and closeout, and that rollback is a public `update -Revision <older>`.
 - [ ] Record acceptance here and in the block 3 routing plan.
+
+## Red run finding (41027478918)
+
+The first public `update.ps1` returned `DEPLOYMENT_WINDOWS_MANAGED_TASK_REFUSED` before any handoff evidence existed.
+The public context always resolves the canonical sibling control `.<project>.deployment`, while the history harness used
+`<project>-inactive-control`; the public command therefore saw an empty control and took the running-task path. The
+`firstrepeat` shard now creates its fixture control at the canonical location, and the test keeps its context file and
+working directory beside (not inside) the control used as actor `TEMP`.

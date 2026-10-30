@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, readdir, realpath, rm, unlink, writeFile } from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
@@ -12,7 +11,8 @@ const archiveNames = names => names.filter(name => /^retired-.+-inactive-rollbac
 
 // The owner actor names the archived fixture; a distinct actor without Windows admission drives the public entry.
 function firstHandoffRepeatContext(control) {
-  return path.join(os.tmpdir(), `agents-chat-first-repeat-${digest(control).slice(0, 16)}.json`);
+  // Actors use the control as TEMP; keep test artifacts beside it so the public update sees only control evidence.
+  return path.join(path.dirname(control), `agents-chat-first-repeat-${digest(control).slice(0, 16)}.json`);
 }
 
 export async function writeFirstHandoffRepeatContext(control, { project, taskName }) {
@@ -67,8 +67,9 @@ export async function assertPublicHandoffRepeatUpdate({ source, control, pwsh })
     throw error;
   });
   const publicEntry = path.join(source, '..', 'update.ps1');
-  const directory = await mkdtemp(path.join(os.tmpdir(), 'agents-chat-first-repeat-'));
+  const directory = await mkdtemp(path.join(path.dirname(control), 'agents-chat-first-repeat-'));
   const controllerParent = path.join(path.dirname(project), `.${path.basename(project)}.deployment-controllers`);
+  assert.equal(control, path.join(path.dirname(project), `.${path.basename(project)}.deployment`));
   const update = async revision => {
     let output;
     try {

@@ -66,5 +66,9 @@
 - Modify: `scripts/deployment/windows-task-completion-controller.ps1` and `windows-task-completion-proof.mjs`
   - New same-bridge transfer `begin-inactive-retirement` (`beginWindowsInactiveTaskRetirement`), mirroring the active `begin-retirement`.
   - Run `41024351479` (`1947baff`) accepted the update, but the closeout then closed its proof and reopened retirement from the same controller. The native creator check correctly refused, because the intent's creator controller was still alive. Only a distinct resumer reopens a published checkpoint.
+- Modify: `tests/deployment-windows-lost-runtime-session.mjs`
+  - Run `41026540956` (`135b2686`) printed the closeout PASS.
+  - The same distinct actor then reran the generic identity-pinned archive closeout and got "Original retirement evidence was replaced". The closeout had already replaced the original `state.json` inode.
+  - Distinct first-attempt actors now skip that rerun. Their later checks already assert that the archive opener refuses.
 
 - [ ] Green stopped-history run plus a same-SHA Contracts run; record acceptance here.
