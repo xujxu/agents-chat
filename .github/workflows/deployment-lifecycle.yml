@@ -283,6 +283,7 @@ jobs:
             'PASS: production retained native preparation bridge publishes descriptor-only evidence under original admission without lock authority',
             'PASS: controlled preparation reopen retains exact evidence for its original live owner and rejects a fresh actor',
             'PASS: native handoff commit publishes exact new owner lock and immutable receipt while preserving old state and ordinary refusal gates',
+            'PASS: first-attempt committed handoff publishes its exact state-transition intent for the live committed owner while copied foreign duplicate and write authority remain refused',
             'PASS: actual handoff directory publisher death preserves an empty exact lock and ordinary refusal',
             'PASS: actual handoff owner publisher death preserves exact prepared owner evidence without committed authority',
             'PASS: actual committed handoff publisher death preserves exact receipt and blocks ordinary continuation',

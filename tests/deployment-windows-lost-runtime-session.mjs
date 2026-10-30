@@ -1438,10 +1438,12 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       error => error.message.includes('Handoff lock commit failed; retain evidence.'));
       assert.equal((await readdir(control)).includes('lock'), false);
       const committedPublication = await promisify(execFile)(pwsh,
-        [...commitArgs, '-Token', handoffOptions.token],
+        [...commitArgs, '-Token', handoffOptions.token, '-PrepareState'],
         { timeout: 45000, maxBuffer: 131072, windowsHide: true });
       assert.equal(committedPublication.stderr, '');
-      const committedDescriptor = JSON.parse(committedPublication.stdout);
+      const committedOutput = JSON.parse(committedPublication.stdout);
+      assert.deepEqual(Object.keys(committedOutput).sort(), ['committed', 'refusals', 'stateIntent']);
+      const committedDescriptor = committedOutput.committed;
       assert.equal(committedDescriptor.path, `inactive-handoff-${handoffOptions.attemptId}-committed.json`);
       const committedFile = path.join(control, committedDescriptor.path);
       const committedBytes = await readFile(committedFile);
@@ -1485,6 +1487,59 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       });
       const actualOwner = JSON.parse(lockBytes);
       assert.deepEqual(actualOwner, retainedRecord.newOwner);
+      assert.deepEqual(Object.keys(committedOutput.refusals).sort(),
+        ['copied', 'duplicate', 'foreign', 'uncommitted', 'write']);
+      assert.match(committedOutput.refusals.copied, /requires its independent native role/);
+      for (const name of ['uncommitted', 'foreign', 'duplicate']) {
+        assert.equal(committedOutput.refusals[name], 'Handoff state intent failed; retain evidence.');
+      }
+      const intentDescriptor = committedOutput.stateIntent;
+      assert.deepEqual(Object.keys(intentDescriptor).sort(), ['bytes', 'dev', 'ino', 'path', 'sha256']);
+      assert.equal(intentDescriptor.path, `inactive-handoff-${handoffOptions.attemptId}-state-intent.json`);
+      const intentFile = path.join(control, intentDescriptor.path);
+      const intentBytes = await readFile(intentFile);
+      const intentIdentity = await lstat(intentFile, { bigint: true });
+      assert.equal(intentDescriptor.bytes, intentBytes.length);
+      assert.equal(intentDescriptor.sha256, createHash('sha256').update(intentBytes).digest('hex'));
+      assert.equal(intentDescriptor.dev, intentIdentity.dev.toString());
+      assert.equal(intentDescriptor.ino, intentIdentity.ino.toString());
+      const stateIntent = JSON.parse(intentBytes);
+      assert.deepEqual(Object.keys(stateIntent).sort(), [
+        'version', 'phase', 'attemptId', 'control', 'project', 'controlIdentity', 'previousOperationId',
+        'prepared', 'committed', 'newOwner', 'lockIdentity', 'lock', 'state', 'oldState', 'nextState',
+        'creator', 'createdAt',
+      ].sort());
+      assert.equal(stateIntent.version, 1);
+      assert.equal(stateIntent.phase, 'stopped-history-handoff-state-intent');
+      assert.equal(stateIntent.attemptId, handoffOptions.attemptId);
+      assert.equal(stateIntent.control, control);
+      assert.equal(stateIntent.project, retainedRecord.project);
+      assert.deepEqual(stateIntent.controlIdentity, retainedRecord.controlIdentity);
+      assert.equal(stateIntent.previousOperationId, retainedRecord.previousOperationId);
+      assert.deepEqual(stateIntent.prepared, retainedDescriptor);
+      assert.deepEqual(stateIntent.committed, committedDescriptor);
+      assert.deepEqual(stateIntent.newOwner, retainedRecord.newOwner);
+      assert.deepEqual(stateIntent.lockIdentity, committed.lockIdentity);
+      assert.deepEqual(stateIntent.lock, committed.lock);
+      assert.deepEqual(stateIntent.state, retainedRecord.state);
+      assert.equal(stateIntent.oldState, retainedRecord.oldState);
+      assert.equal(stateIntent.oldState, state.toString('utf8'));
+      assert.deepEqual(Object.keys(stateIntent.creator).sort(),
+        ['pid', 'processIdentity', 'bridgePid', 'bridgeIdentity'].sort());
+      assert.equal(stateIntent.creator.pid, process.pid);
+      assert.equal(stateIntent.creator.processIdentity, await processIdentity(process.pid));
+      assert.equal(stateIntent.creator.bridgePid, committed.creator.bridgePid);
+      assert.equal(stateIntent.creator.bridgeIdentity, committed.creator.bridgeIdentity);
+      assert.match(stateIntent.createdAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      assert.ok(Date.parse(stateIntent.createdAt) >= Date.parse(committed.committedAt));
+      assert.deepEqual(stateIntent.nextState, {
+        version: 1, operationId: retainedRecord.newOwner.operationId, project: retainedRecord.project,
+        operation: 'update', phase: 'preflight', previousPhase: null, sourceCommit: null, targetCommit: null,
+        backupId: null, priorRuntime: 'stopped', runtimeIdentity: retainedRecord.observation.retiredRuntime.generation,
+        startedAt: retainedRecord.newOwner.createdAt, updatedAt: stateIntent.createdAt, errorCode: null,
+      });
+      assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
+      assert.equal((await readdir(control)).some(name => name.startsWith('state.json.lock')), false);
       await assert.rejects(api.openWindowsInactiveRollbackHistoryArchive(options));
       const { releaseLock } = await load('state.mjs');
       await assert.rejects(releaseLock(control, actualOwner, { pwsh, admission }));
@@ -1507,10 +1562,16 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.equal(preparedAfterCommit.dev, retainedFileIdentity.dev);
       assert.equal(preparedAfterCommit.ino, retainedFileIdentity.ino);
       assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
+      assert.deepEqual(await readFile(intentFile), intentBytes);
+      const intentAfter = await lstat(intentFile, { bigint: true });
+      assert.equal(intentAfter.dev, intentIdentity.dev);
+      assert.equal(intentAfter.ino, intentIdentity.ino);
+      await unlink(intentFile);
       await unlink(committedFile);
       await unlink(lockFile);
       await rmdir(lockDirectory);
       console.log('PASS: native handoff commit publishes exact new owner lock and immutable receipt while preserving old state and ordinary refusal gates');
+      console.log('PASS: first-attempt committed handoff publishes its exact state-transition intent for the live committed owner while copied foreign duplicate and write authority remain refused');
       assert.deepEqual(await readFile(retainedFile), retainedBytes);
       const afterClose = await lstat(retainedFile, { bigint: true });
       assert.equal(afterClose.dev, retainedFileIdentity.dev);

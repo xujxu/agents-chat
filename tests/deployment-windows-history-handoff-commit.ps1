@@ -11,7 +11,8 @@ param(
     [Parameter(Mandatory)][string]$PreparedIno,
     [Parameter(Mandatory)][int]$PreparedBytes,
     [Parameter(Mandatory)][string]$PreparedSha256,
-    [ValidateSet('Directory', 'Owner', 'Committed')][string]$HoldAt
+    [ValidateSet('Directory', 'Owner', 'Committed')][string]$HoldAt,
+    [switch]$PrepareState
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -69,7 +70,45 @@ try {
             throw 'Committed receipt does not identify its actual native bridge.'
         }
     } finally { $document.Dispose() }
-    [Console]::Out.WriteLine(($published | ConvertTo-Json -Compress))
+    if (-not $PrepareState) {
+        [Console]::Out.WriteLine(($published | ConvertTo-Json -Compress))
+    } else {
+        . (Join-Path $Source 'windows-stopped-history-handoff-state-intent.ps1')
+        . (Join-Path $Source 'windows-stopped-history-handoff-restart-state-write.ps1')
+        $refusals = [ordered]@{}
+        $copy = $scope.Clone()
+        $null = $copy.Remove('HistoryHandoffLockPublisher')
+        try {
+            $null = Publish-AgentsChatStoppedHistoryHandoffStateIntent $copy $ControllerPid $ControllerIdentity
+        } catch { $refusals.copied = $_.Exception.Message }
+        $copy = $scope.Clone()
+        $null = $copy.Remove('HistoryHandoffCommit')
+        try {
+            $null = Publish-AgentsChatStoppedHistoryHandoffStateIntent $copy $ControllerPid $ControllerIdentity
+        } catch { $refusals.uncommitted = $_.Exception.Message }
+        $copy = $scope.Clone()
+        try {
+            $null = Publish-AgentsChatStoppedHistoryHandoffStateIntent $copy $PID `
+                ([Deployment.WindowsWorkerJob]::ProcessIdentity($PID))
+        } catch { $refusals.foreign = $_.Exception.Message }
+        if ($refusals.Count -ne 3 -or $copy.ContainsKey('HistoryHandoffStateIntent')) {
+            throw 'First-attempt state intent accepted a copied, uncommitted or foreign scope.'
+        }
+        $intent = Publish-AgentsChatStoppedHistoryHandoffStateIntent $scope $ControllerPid $ControllerIdentity
+        $duplicate = $scope.Clone()
+        try {
+            $null = Publish-AgentsChatStoppedHistoryHandoffStateIntent $duplicate $ControllerPid $ControllerIdentity
+        } catch { $refusals.duplicate = $_.Exception.Message }
+        $writer = $scope.Clone()
+        $writer.Poisoned = $false
+        $writer.HistoryHandoffRestartStateWriter = $true
+        try {
+            $null = Write-AgentsChatStoppedHistoryHandoffRestartState $writer $ControllerPid $ControllerIdentity
+        } catch { $refusals.write = $_.Exception.Message }
+        if ($refusals.Count -ne 5) { throw 'First-attempt state intent accepted a duplicate or write authority.' }
+        [Console]::Out.WriteLine((@{ committed=$published; stateIntent=$intent; refusals=$refusals } |
+            ConvertTo-Json -Depth 6 -Compress))
+    }
 } catch {
     $failure = $_.Exception
     [Console]::Error.WriteLine("Native handoff commit fixture failed: $($failure.Message) $($failure.GetBaseException().Message)")
