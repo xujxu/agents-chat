@@ -13,6 +13,7 @@ import { holdSuccessorAbandoned, assertSuccessorAbandonedAfterDeath } from './de
 import { assertRestartPreparation } from './deployment-windows-restart-preparation.mjs';
 import { assertRestartHandoffCloseout } from './deployment-windows-restart-handoff-closeout.mjs';
 import { holdRestartRetirement } from './deployment-windows-restart-retirement-death.mjs';
+import { assertFirstStateWrittenAfterDeath, firstStateWrittenOriginalState } from './deployment-windows-first-state-written.mjs';
 
 const [source, control, pwsh, mode = 'complete', crashStep = 'task-restored', terminalCrashStep = ''] = process.argv.slice(2);
 const load = name => import(pathToFileURL(path.join(source, name)).href);
@@ -34,7 +35,9 @@ let deferredHandoffCloseout = handoffCloseoutStage === 'proof';
 const state = ['resume-restart-state-dead-history', 'resume-restart-state-released-dead-history',
   'resume-restart-state-release-intent-dead-history'].includes(mode)
   ? Buffer.from(JSON.parse(await readFile(path.join(control, JSON.parse(crashStep).restartStateIntent.path))).oldState)
-  : await readFile(path.join(control, 'state.json'));
+  : mode === 'resume-lock-state-written-history'
+    ? await firstStateWrittenOriginalState(control, JSON.parse(crashStep))
+    : await readFile(path.join(control, 'state.json'));
 let expectedFinalState = state;
 const progress = phase => console.error(`INACTIVE_ROLLBACK_PHASE ${JSON.stringify({
   mode, phase, elapsedMs: Math.round(performance.now()),
@@ -545,6 +548,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     'crash-lock-directory-history': 'Directory', 'resume-lock-directory-history': 'Directory',
     'crash-lock-owner-history': 'Owner', 'resume-lock-owner-history': 'Owner',
     'crash-lock-committed-history': 'Committed', 'resume-lock-committed-history': 'Committed',
+    'crash-lock-state-written-history': 'StateWritten', 'resume-lock-state-written-history': 'StateWritten',
     'crash-lock-retirement-history': 'Committed', 'resume-lock-retirement-history': 'Committed',
     'crash-lock-owner-retired-history': 'Committed', 'resume-lock-owner-retired-history': 'Committed',
     'check-lock-owner-retired-history': 'Committed',
@@ -890,6 +894,10 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         stage: ownerRetirementCheck ? 'owner-proof' : ownerRetirementResume ? 'directory-removal' : 'complete',
       });
       if (ownerRetirementCheck) return;
+    } else if (lockResume && lockStage === 'StateWritten') {
+      await assertFirstStateWrittenAfterDeath({
+        source, control, pwsh, admission, api, options, previous: JSON.parse(crashStep), state, completionFile,
+      });
     } else if (lockResume) {
       const previous = JSON.parse(crashStep);
       assert.equal(previous.stage, lockStage);

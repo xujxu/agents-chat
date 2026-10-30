@@ -11,7 +11,7 @@ param(
     [Parameter(Mandatory)][string]$PreparedIno,
     [Parameter(Mandatory)][int]$PreparedBytes,
     [Parameter(Mandatory)][string]$PreparedSha256,
-    [ValidateSet('Directory', 'Owner', 'Committed')][string]$HoldAt,
+    [ValidateSet('Directory', 'Owner', 'Committed', 'StateWritten')][string]$HoldAt,
     [switch]$PrepareState
 )
 $ErrorActionPreference = 'Stop'
@@ -46,14 +46,24 @@ try {
             $ControllerPid $ControllerIdentity $AttemptId $OperationId $Token $CreatedAt
         $owner = $committed = $null
         if ($HoldAt -cne 'Directory') { $owner = Publish-AgentsChatStoppedHistoryHandoffLockOwner $scope }
-        if ($HoldAt -ceq 'Committed') { $committed = Complete-AgentsChatStoppedHistoryHandoffCommit $scope }
-        $null = Assert-AgentsChatStoppedWorkerCleanup $scope
+        $stateIntent = $written = $null
+        if ($HoldAt -cin @('Committed', 'StateWritten')) {
+            $committed = Complete-AgentsChatStoppedHistoryHandoffCommit $scope
+        }
+        if ($HoldAt -ceq 'StateWritten') {
+            . (Join-Path $Source 'windows-stopped-history-handoff-state-intent.ps1')
+            $stateIntent = Publish-AgentsChatStoppedHistoryHandoffStateIntent $scope $ControllerPid $ControllerIdentity
+            $written = Write-AgentsChatStoppedHistoryHandoffState $scope $ControllerPid $ControllerIdentity
+        } else {
+            $null = Assert-AgentsChatStoppedWorkerCleanup $scope
+        }
         Assert-AgentsChatStoppedHistoryHandoffLock $scope
         [Console]::Out.WriteLine((@{
             type='ready'; pid=$PID; processIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID)
             control=$Control; controllerIdentity=$ControllerIdentity
             value=@{ stage=$HoldAt; attemptId=$AttemptId; prepared=$descriptor
-                lockIdentity=$directory; owner=$owner; committed=$committed }
+                lockIdentity=$directory; owner=$owner; committed=$committed
+                stateIntent=$stateIntent; state=$written }
         } | ConvertTo-Json -Depth 8 -Compress))
         [Console]::Out.Flush()
         $null = [Console]::In.ReadLine()

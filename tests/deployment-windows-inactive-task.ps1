@@ -480,10 +480,10 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     $historyHash = (Get-FileHash -LiteralPath $historyIntent -Algorithm SHA256).Hash
                     $historyStateHash = (Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash
                     $historyBoundaries = @('history', 'finalized-history', 'saved-history', 'completed-history', 'prepared-history', 'abandoned-history',
-                        'lock-directory-history', 'lock-owner-history', 'lock-committed-history', 'lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history', 'restart-directory-history', 'restart-directory-dead-history', 'restart-owner-history', 'restart-owner-dead-history', 'restart-committed-history', 'restart-committed-dead-history', 'restart-state-intent-history', 'restart-state-written-history', 'restart-state-dead-history', 'restart-released-history', 'restart-released-dead-history', 'restart-retirement-dead-history', 'restart-release-intent-dead-history', 'restart-state-released-history', 'restart-state-released-dead-history', 'restart-state-release-intent-dead-history')
+                        'lock-directory-history', 'lock-owner-history', 'lock-committed-history', 'lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history', 'restart-directory-history', 'restart-directory-dead-history', 'restart-owner-history', 'restart-owner-dead-history', 'restart-committed-history', 'restart-committed-dead-history', 'restart-state-intent-history', 'restart-state-written-history', 'restart-state-dead-history', 'restart-released-history', 'restart-released-dead-history', 'restart-retirement-dead-history', 'restart-release-intent-dead-history', 'restart-state-released-history', 'restart-state-released-dead-history', 'restart-state-release-intent-dead-history', 'lock-state-written-history')
                     $historyShard = $env:DEPLOYMENT_TEST_HISTORY_SHARD
                     if ([string]::IsNullOrEmpty($historyShard)) { $historyShard = 'all' }
-                    if ($historyShard -cnotin @('all', 'baseline', 'successor', 'restart', 'commitment', 'state', 'release', 'takeover', 'completion', 'postwrite', 'postintent')) { throw 'Unknown stopped-history test shard.' }
+                    if ($historyShard -cnotin @('all', 'baseline', 'successor', 'restart', 'commitment', 'state', 'release', 'takeover', 'completion', 'postwrite', 'postintent', 'firstwrite')) { throw 'Unknown stopped-history test shard.' }
                     $successorIndex = [Array]::IndexOf($historyBoundaries, 'successor-prepared-history')
                     $restartIndex = [Array]::IndexOf($historyBoundaries, 'restart-directory-history')
                     $commitmentIndex = [Array]::IndexOf($historyBoundaries, 'restart-committed-history')
@@ -494,11 +494,12 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     $completionIndex = [Array]::IndexOf($historyBoundaries, 'restart-state-released-history')
                     $postwriteIndex = [Array]::IndexOf($historyBoundaries, 'restart-state-released-dead-history')
                     $postintentIndex = [Array]::IndexOf($historyBoundaries, 'restart-state-release-intent-dead-history')
+                    $firstwriteIndex = [Array]::IndexOf($historyBoundaries, 'lock-state-written-history')
                     if ($successorIndex -le 0 -or $restartIndex -le $successorIndex -or $commitmentIndex -le $restartIndex -or
-                        $stateIndex -ne $historyBoundaries.Count - 8 -or $releaseIndex -ne $historyBoundaries.Count - 7 -or
-                        $takeoverIndex -ne $historyBoundaries.Count - 4 -or
-                        $completionIndex -ne $historyBoundaries.Count - 3 -or $postwriteIndex -ne $historyBoundaries.Count - 2 -or
-                        $postintentIndex -ne $historyBoundaries.Count - 1 -or
+                        $stateIndex -ne $historyBoundaries.Count - 9 -or $releaseIndex -ne $historyBoundaries.Count - 8 -or
+                        $takeoverIndex -ne $historyBoundaries.Count - 5 -or
+                        $completionIndex -ne $historyBoundaries.Count - 4 -or $postwriteIndex -ne $historyBoundaries.Count - 3 -or
+                        $postintentIndex -ne $historyBoundaries.Count - 2 -or $firstwriteIndex -ne $historyBoundaries.Count - 1 -or
                         $historyBoundaries[$releaseIndex + 1] -cne 'restart-released-dead-history' -or
                         $historyBoundaries[$releaseIndex + 2] -cne 'restart-retirement-dead-history' -or
                         $historyBoundaries[$stateIndex - 1] -cne 'restart-state-written-history') {
@@ -516,9 +517,10 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                         'completion' { @($historyBoundaries[$completionIndex]) }
                         'postwrite' { @($historyBoundaries[$postwriteIndex]) }
                         'postintent' { @($historyBoundaries[$postintentIndex]) }
+                        'firstwrite' { @($historyBoundaries[$firstwriteIndex]) }
                     }
                     foreach ($historyBoundary in $selectedBoundaries) {
-                        $lockBoundary = $historyBoundary -cin @('lock-directory-history', 'lock-owner-history', 'lock-committed-history', 'lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history', 'restart-directory-history', 'restart-directory-dead-history', 'restart-owner-history', 'restart-owner-dead-history', 'restart-committed-history', 'restart-committed-dead-history', 'restart-state-intent-history', 'restart-state-written-history', 'restart-state-released-history', 'restart-state-dead-history', 'restart-state-released-dead-history', 'restart-state-release-intent-dead-history', 'restart-released-history', 'restart-released-dead-history', 'restart-retirement-dead-history', 'restart-release-intent-dead-history')
+                        $lockBoundary = $historyBoundary -cin @('lock-directory-history', 'lock-owner-history', 'lock-committed-history', 'lock-state-written-history', 'lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history', 'restart-directory-history', 'restart-directory-dead-history', 'restart-owner-history', 'restart-owner-dead-history', 'restart-committed-history', 'restart-committed-dead-history', 'restart-state-intent-history', 'restart-state-written-history', 'restart-state-released-history', 'restart-state-dead-history', 'restart-state-released-dead-history', 'restart-state-release-intent-dead-history', 'restart-released-history', 'restart-released-dead-history', 'restart-retirement-dead-history', 'restart-release-intent-dead-history')
                         $crashMode = switch ($historyBoundary) {
                             'finalized-history' { 'crash-finalized-history' }
                             'completed-history' { 'crash-completed-history' }
