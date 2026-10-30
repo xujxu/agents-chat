@@ -253,7 +253,12 @@ try {
         await import(pathToFileURL(path.join(source, 'windows-inactive-task-transaction.mjs')).href);
       assert.equal(typeof startWindowsInactiveTask, 'function', 'Missing native inactive guarded startup');
       await assert.rejects(startWindowsInactiveTask({ ...replacementOptions, context: { ...transaction } }));
-      const previousListener = JSON.parse(await readFile(path.join(project, 'listener.json'), 'utf8'));
+      // The stopped original runtime may not have published a listener before it was inhibited.
+      const readListener = async () => {
+        try { return JSON.parse(await readFile(path.join(project, 'listener.json'), 'utf8')); }
+        catch (error) { if (error.code === 'ENOENT' || error instanceof SyntaxError) return null; throw error; }
+      };
+      const previousListener = await readListener();
       const active = await startWindowsInactiveTask(replacementOptions);
       assert.equal(active.status, 'guarded-running');
       assert.equal(active.taskName, taskName);
@@ -270,11 +275,12 @@ try {
       let listener;
       const listenerDeadline = Date.now() + 30000;
       do {
-        listener = JSON.parse(await readFile(path.join(project, 'listener.json'), 'utf8'));
-        if (listener.pid !== previousListener.pid) break;
+        listener = await readListener();
+        if (listener && listener.pid !== previousListener?.pid) break;
         await new Promise(resolve => setTimeout(resolve, 100));
       } while (Date.now() < listenerDeadline);
-      assert.notEqual(listener.pid, previousListener.pid);
+      assert.ok(listener);
+      assert.notEqual(listener.pid, previousListener?.pid);
       await writeFile(path.join(project, 'health-mode'), 'ready');
       const { waitWindowsReadiness } = await import(pathToFileURL(path.join(source, 'windows-readiness.mjs')).href);
       const ready = await waitWindowsReadiness({
