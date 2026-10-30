@@ -377,6 +377,7 @@ export async function assertRestartPreparation({
     let replacedDefinition;
     let activatedRuntime;
     let healthMode;
+    let completedRuntime = false;
     try {
       await assert.rejects(captureWindowsInactiveTaskHandoffAdmission({
         scope, control, lock: { ...owner, token: randomUUID() }, admission, handoff,
@@ -547,8 +548,39 @@ export async function assertRestartPreparation({
         assert.equal(owned.pid, listener.pid);
         assert.equal(owned.generation, active.runtime.generation);
         await assert.rejects(transaction.listener({ port: listener.port === 65535 ? 65534 : listener.port + 1 }));
+        // The ready handoff transaction completes with its accepted state and permanent task policy.
+        const { completeWindowsTaskActivation } = await load('windows-task-completion.mjs');
+        await assert.rejects(transaction.complete({ stateSha256: '0'.repeat(64) }));
+        const completion = await completeWindowsTaskActivation({
+          context: transaction, port: listener.port, providers: configuration.providers, waitSeconds: 30,
+          async recordAcceptance() {
+            await writeDeploymentState(control, {
+              ...rotating, phase: 'accepted', previousPhase: 'activating', updatedAt: new Date().toISOString(),
+            });
+            return createHash('sha256').update(await readFile(stateFile)).digest('hex');
+          },
+        });
+        assert.equal(completion.status, 'completed');
+        assert.equal((await transaction.check()).phase, 'accepted');
+        await assert.rejects(transaction.complete({ stateSha256: completion.stateSha256 }));
+        const completeReceipt = JSON.parse(await readFile(path.join(maintenance, 'inactive-complete-complete.json')));
+        assert.equal(completeReceipt.preparationSha256, preparation.sha256);
+        assert.equal(completeReceipt.stateSha256, completion.stateSha256);
+        completedRuntime = true;
       } finally { await configuration.close(); }
       await transaction.close();
+      if (completedRuntime) {
+        // A completed runtime stays under its permanent task; the fixture stops it before restoring the archive.
+        assert.equal(await processIdentity(activatedRuntime.pid), activatedRuntime.identity);
+        const stop = await promisify(execFile)(pwsh, ['-NoProfile', '-NonInteractive', '-Command', [
+          '$ErrorActionPreference = "Stop"',
+          '$service = New-Object -ComObject Schedule.Service; $service.Connect()',
+          '$task = $service.GetFolder("\\").GetTask($env:AGENTS_CHAT_TASK_NAME); $task.Enabled = $false; $task.Stop(0)',
+        ].join('; ')], { timeout: 45000, maxBuffer: 131072, windowsHide: true, env: {
+          ...process.env, AGENTS_CHAT_TASK_NAME: original.observation.taskName,
+        } });
+        assert.equal(stop.stderr, '');
+      }
       if (activatedRuntime) {
         // Closing the unfinished transaction settles its guarded runtime.
         const deadline = Date.now() + 30000;
@@ -569,7 +601,7 @@ export async function assertRestartPreparation({
     await unlink(published);
     await unlink(activationPrepared);
     for (const name of await readdir(maintenance)) {
-      assert.match(name, /^inactive-(replacement|start)-[a-z-]+\.json$/);
+      assert.match(name, /^inactive-(replacement|start|complete)-[a-z-]+\.json$/);
       await unlink(path.join(maintenance, name));
     }
     await rmdir(maintenance);
@@ -580,6 +612,7 @@ export async function assertRestartPreparation({
       '$folder = $service.GetFolder("\\"); $task = $folder.GetTask($env:AGENTS_CHAT_TASK_NAME)',
       '$principal = $task.Definition.Principal',
       '$null = $folder.RegisterTask($env:AGENTS_CHAT_TASK_NAME, $env:AGENTS_CHAT_TASK_XML, (4 -bor 16 -bor 32), [string]$principal.UserId, $null, [int]$principal.LogonType, $null)',
+      '$restored = $folder.GetTask($env:AGENTS_CHAT_TASK_NAME); $restored.Enabled = $false',
       'if ($folder.GetTask($env:AGENTS_CHAT_TASK_NAME).Enabled) { throw "Restored task is enabled." }',
     ].join('; ')], { timeout: 45000, maxBuffer: 131072, windowsHide: true, env: {
       ...process.env, AGENTS_CHAT_TASK_NAME: original.observation.taskName, AGENTS_CHAT_TASK_XML: replacedDefinition,
@@ -652,6 +685,7 @@ export async function assertRestartPreparation({
     console.log('PASS: handoff-aware inactive transaction replaces the inhibited task with its operation bundle and records the proved original definition while copied contexts and duplicate replacement remain refused');
     console.log('PASS: handoff-aware inactive transaction starts one distinct guarded runtime from its operation bundle and settles it on close while copied contexts and duplicate startup remain refused');
     console.log('PASS: handoff-aware inactive startup readiness verifies HTTP providers only through its retained original Job listener while premature and foreign ports remain refused');
+    console.log('PASS: handoff-aware inactive transaction completes with accepted state and permanent task policy through its original guarded lease while forged and duplicate completion remain refused');
   }
   console.log(releaseRestart && writeState
     ? 'PASS: native live restart owner releases only its exact committed lock after its acknowledged state write while nine records and written state remain exact without authority'
