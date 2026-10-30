@@ -6,7 +6,8 @@ import { runWindowsInactiveDeployment } from './windows-inactive-deployment.mjs'
 import { journalUncertain } from './evidence-journal.mjs';
 
 const archivedHistory = /^retired-.+-inactive-rollback-history-(?:intent|complete)\.json$/;
-const inFlight = /^(?:lock|recovery-lock|task-maintenance|task-retirement(?:-checkpoint)?\.json|live-retirement\.json|worker-retirement\.json|service-.*|inactive-rollback-.*|inactive-handoff-.*)$/;
+// The archived rollback keeps its relocated runtime and runtime-evidence directories; neither is in-flight evidence.
+const inFlight = /^(?:lock|recovery-lock|task-maintenance|task-retirement(?:-checkpoint)?\.json|live-retirement\.json|worker-retirement\.json|service-.*|inactive-rollback-(?!runtime$|runtime-evidence$).*|inactive-handoff-.*)$/;
 
 // Archived stopped history is the only blocked control a public update may continue: its completed archive
 // receipts remain, and nothing else holds task, lock, recovery or worker-retirement evidence.
