@@ -12,6 +12,8 @@
 
 ### Task 1: Test contract
 
+Revision: run `40997802478` passed gates 69–70 but refused `openWindowsInactiveTaskRetirement` while the checkpoint preparer (the proof actor) was still alive. Inactive retirement can only be reopened, so the proof/checkpoint actor (`handoff-closeout-proof`) now exits first and a further distinct actor (`handoff-closeout`) retires the receipts and restores the archived fixture.
+
 - [x] `openWindowsTaskRetirement` is refused. `openWindowsInactiveTaskRetirement` starts with `retiredFiles: 0`, and its total equals the `task-maintenance` inventory.
 - [x] `beginWindowsDeploymentRetirement` and a copied retirement handle are refused.
 - [x] Each `retireNextWindowsTaskFile` advances `retiredFiles` by one, `check()` matches, and the inventory shrinks by one. A further retirement is refused.

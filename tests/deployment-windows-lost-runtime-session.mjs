@@ -23,11 +23,14 @@ assert.equal(typeof api.openWindowsInactiveLostRuntimeAuthority, 'function',
   'Missing owned inactive lost-runtime transport');
 // After the dead writer's actual write, the original state is resolvable only through its ninth record.
 // The completed handoff owner has exited; this distinct actor closes it out and restores the archived fixture.
-const handoffCloseout = mode === 'resume-restart-state-written-history' && terminalCrashStep === 'handoff-closeout';
+const handoffCloseoutStage = mode === 'resume-restart-state-written-history'
+  && { 'handoff-closeout-proof': 'proof', 'handoff-closeout': 'retire' }[terminalCrashStep];
+const handoffCloseout = handoffCloseoutStage === 'retire';
 if (handoffCloseout) {
-  await withWindowsAdmission(control, { pwsh }, admission => assertRestartHandoffCloseout({ source, control, pwsh, admission }));
+  await withWindowsAdmission(control, { pwsh }, admission =>
+    assertRestartHandoffCloseout({ source, control, pwsh, admission, stage: 'retire' }));
 }
-let deferredHandoffCloseout = false;
+let deferredHandoffCloseout = handoffCloseoutStage === 'proof';
 const state = ['resume-restart-state-dead-history', 'resume-restart-state-released-dead-history',
   'resume-restart-state-release-intent-dead-history'].includes(mode)
   ? Buffer.from(JSON.parse(await readFile(path.join(control, JSON.parse(crashStep).restartStateIntent.path))).oldState)
@@ -486,6 +489,10 @@ if (mode === 'resume-history-saved') {
 }
 await withWindowsAdmission(control, { pwsh }, async admission => {
   const options = { control, pwsh, admission };
+  if (handoffCloseoutStage === 'proof') {
+    await assertRestartHandoffCloseout({ source, control, pwsh, admission, stage: 'proof' });
+    return;
+  }
   const retirementCrash = mode === 'crash-lock-retirement-history';
   const retirementResume = mode === 'resume-lock-retirement-history';
   const ownerRetirementCrash = mode === 'crash-lock-owner-retired-history';

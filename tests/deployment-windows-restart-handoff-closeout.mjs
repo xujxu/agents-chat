@@ -30,7 +30,7 @@ async function runPwsh(pwsh, commands, env) {
   assert.equal(result.stderr, '');
 }
 
-export async function assertRestartHandoffCloseout({ source, control, pwsh, admission }) {
+export async function assertRestartHandoffCloseout({ source, control, pwsh, admission, stage }) {
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
   const contextFile = restartHandoffCloseoutContext(control);
@@ -49,7 +49,7 @@ export async function assertRestartHandoffCloseout({ source, control, pwsh, admi
   assert.equal(await processIdentity(context.runtime.pid), context.runtime.identity);
   assert.equal(createHash('sha256').update(await readFile(stateFile)).digest('hex'), context.stateSha256);
   const evidence = await handoffEvidence();
-  try {
+  if (stage === 'proof') {
     // After its owner exits, the completed handoff operation is observable through the inactive completion proof.
     await assert.rejects(openWindowsTaskCompletionProof({ control, pwsh, admission }), /Completed-task proof unavailable/);
     const proof = await openWindowsInactiveTaskCompletionProof({ control, pwsh, admission });
@@ -81,6 +81,16 @@ export async function assertRestartHandoffCloseout({ source, control, pwsh, admi
       assert.deepEqual(await proof.check(), proof.observation);
     } finally { await proof.close(); }
     await assert.rejects(proof.check(), /Completed-task proof unavailable/);
+    assert.deepEqual(await handoffEvidence(), evidence);
+    // The checkpoint preparer exits; a further distinct actor retires the receipts.
+    await writeFile(contextFile, JSON.stringify({ ...context, evidence }));
+    console.log('PASS: handoff-aware completed operation is observable through the read-only inactive completion proof after its owner exits while the active proof remains refused');
+    console.log('PASS: handoff-aware completed operation prepares its exact inactive retirement intent and checkpoint with the archived retired runtime while copied proofs remain refused');
+    return;
+  }
+  assert.equal(stage, 'retire');
+  assert.deepEqual(evidence, context.evidence);
+  try {
     // A distinct inactive retirement authority retires each exact task receipt while the handoff evidence stays.
     await assert.rejects(openWindowsTaskRetirement({ control, pwsh, admission }), /Completed-task proof unavailable/);
     const task = await openWindowsInactiveTaskRetirement({ control, pwsh, admission });
@@ -135,7 +145,5 @@ export async function assertRestartHandoffCloseout({ source, control, pwsh, admi
     await writeFile(stateFile, Buffer.from(context.originalState, 'base64'));
     await unlink(contextFile);
   }
-  console.log('PASS: handoff-aware completed operation is observable through the read-only inactive completion proof after its owner exits while the active proof remains refused');
-  console.log('PASS: handoff-aware completed operation prepares its exact inactive retirement intent and checkpoint with the archived retired runtime while copied proofs remain refused');
   console.log('PASS: handoff-aware completed operation retires each exact task receipt through its distinct inactive retirement authority while handoff evidence and accepted state remain exact');
 }
