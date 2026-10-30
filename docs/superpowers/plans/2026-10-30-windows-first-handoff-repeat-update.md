@@ -108,4 +108,8 @@ working directory beside (not inside) the control used as actor `TEMP`.
   boundary in one fixture and failed after the first actual state write ("Original retirement evidence was replaced").
   Run `41036638710` had already failed `restore cancellation` the same way. The live step now runs only the `baseline`
   shard, the harness refuses a missing shard, and the sharded stopped-history job is re-run at the same SHA.
+- Regression run `41051060264` at `d35725b6`: the released-prefix `release-requested` recovery step also reaches the
+  history boundaries and had relied on the removed unsharded default, so it now refused. The `baseline` shard is set
+  for the whole live/restore job. Stopped-history run `41051063751` at the same SHA passed every shard except
+  `takeover`, which tripped on Windows reusing the dead retirer's PID (`settler.bridgePid` equal to `retirer.pid`).
 - Not yet covered: the inactive runner's `publish-receipt` stage (needs a real-application public stopped-history run).
