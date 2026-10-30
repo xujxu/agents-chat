@@ -43,7 +43,11 @@
   - The first-attempt wrapper. It requires `HistoryHandoffLockPublisher` and a published `HistoryHandoffCommit.Committed`, and publishes through `[Deployment.WindowsPrivateFile]::Publish`.
 - Modify: `scripts/deployment/saved-worker-engine.mjs`, adding the new file to the saved helper list.
 
-- [ ] Green stopped-history run (78 receipts) plus a same-SHA Contracts run; record acceptance here.
+- [x] Green stopped-history run (78 receipts) plus a same-SHA Contracts run; record acceptance here.
+  - **Accepted** at `9f9daf14` (tag `gate72-production2`).
+    - Red: run `41006686134` failed as expected; the baseline shard could not find `windows-stopped-history-handoff-state-intent.ps1`.
+    - Stopped-history run `41008918518` passed on all ten shards. The acceptance job `123918523535` required all 78 receipts.
+    - Same-SHA Contracts run `41008905588` passed. The saved-engine helper order is pinned in both lists.
 
 ### Tasks 3–7 (gates 73–77)
 
