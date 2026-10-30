@@ -12,6 +12,7 @@ import { assertRestartCommitPublication } from './deployment-windows-restart-com
 import { assertRestartStateIntentPublication } from './deployment-windows-restart-state-intent-publication.mjs';
 import { assertRestartStateWritePublication } from './deployment-windows-restart-state-write-publication.mjs';
 import { assertRestartReleasePublication } from './deployment-windows-restart-release-publication.mjs';
+import { publishRestartHandoffCloseout } from './deployment-windows-restart-handoff-closeout.mjs';
 
 export async function assertRestartPreparation({
   source, control, pwsh, admission, previous, state, completionBytes, publish = false, hold = false,
@@ -108,6 +109,7 @@ export async function assertRestartPreparation({
   let controllerWire;
   let ownerSnapshot;
   let writtenState;
+  let deferredCloseout;
   let restartHandoff;
   transport.child.stderr.on('data', bytes => { diagnostic = `${diagnostic}${bytes.toString('utf8')}`.slice(-4096); });
   try {
@@ -379,7 +381,6 @@ export async function assertRestartPreparation({
     let healthMode;
     let completedRuntime = false;
     let completedStateSha256;
-    let retirementPrepared = false;
     try {
       await assert.rejects(captureWindowsInactiveTaskHandoffAdmission({
         scope, control, lock: { ...owner, token: randomUUID() }, admission, handoff,
@@ -585,7 +586,7 @@ export async function assertRestartPreparation({
         }
         assert.notEqual(await processIdentity(activatedRuntime.pid), activatedRuntime.identity);
       }
-      if (healthMode) {
+      if (healthMode && !completedRuntime) {
         if (healthMode.bytes) await writeFile(healthMode.file, healthMode.bytes);
         else await unlink(healthMode.file);
       }
@@ -593,70 +594,18 @@ export async function assertRestartPreparation({
         ...writtenState, bytes: await readFile(stateFile), identity: await lstat(stateFile, { bigint: true }),
       });
     } finally { await scope.close(); }
-    if (completedRuntime) {
-      // After its lease is released, the completed handoff operation is observable through the inactive completion proof.
-      const {
-        openWindowsInactiveTaskCompletionProof, openWindowsTaskCompletionProof,
-        prepareWindowsInactiveTaskRetirement, prepareWindowsInactiveTaskRetirementCheckpoint,
-      } = await load('windows-task-completion-proof.mjs');
-      await assert.rejects(openWindowsTaskCompletionProof({ control, pwsh, admission }), /Completed-task proof unavailable/);
-      const proof = await openWindowsInactiveTaskCompletionProof({ control, pwsh, admission });
-      try {
-        assert.equal(proof.observation.status, 'observed');
-        assert.equal(proof.observation.mutationAuthority, false);
-        assert.equal(proof.observation.lease, 'released');
-        assert.equal(proof.observation.operationId, owner.operationId);
-        assert.equal(proof.observation.taskName, original.observation.taskName);
-        assert.equal(proof.observation.stateSha256, completedStateSha256);
-        assert.equal(proof.observation.runtime.identity, activatedRuntime.identity);
-        assert.deepEqual(await proof.check(), proof.observation);
-        // The completed handoff operation prepares its exact inactive retirement intent and checkpoint.
-        await assert.rejects(prepareWindowsInactiveTaskRetirement(control, { ...proof }, admission));
-        retirementPrepared = true;
-        const retirement = await prepareWindowsInactiveTaskRetirement(control, proof, admission);
-        assert.equal(retirement.intent.version, 2);
-        assert.deepEqual(retirement.intent.completion, proof.observation);
-        assert.deepEqual(retirement.intent.files.map(file => file.path).sort(),
-          (await readdir(maintenance)).map(name => `task-maintenance\\${name}`).sort());
-        assert.equal(retirement.intent.files[0].path, 'task-maintenance\\admission.json');
-        assert.equal(retirement.intent.files.at(-1).path, 'task-maintenance\\inactive-complete-complete.json');
-        assert.deepEqual(await prepareWindowsInactiveTaskRetirement(control, proof, admission), retirement);
-        const checkpoint = await prepareWindowsInactiveTaskRetirementCheckpoint(control, proof, admission);
-        assert.equal(checkpoint.checkpoint.version, 2);
-        assert.deepEqual(checkpoint.intent, retirement);
-        assert.equal(checkpoint.checkpoint.priorRuntime.runtime.identity, original.observation.retiredRuntime.identity);
-        assert.notEqual(checkpoint.checkpoint.priorRuntime.runtime.generation, activatedRuntime.generation);
-        assert.deepEqual(await prepareWindowsInactiveTaskRetirementCheckpoint(control, proof, admission), checkpoint);
-        assert.deepEqual(await proof.check(), proof.observation);
-      } finally { await proof.close(); }
-      await assert.rejects(proof.check(), /Completed-task proof unavailable/);
-    }
-    if (completedRuntime) {
-      // A completed runtime stays under its permanent task; the fixture stops it before restoring the archive.
-      assert.equal(await processIdentity(activatedRuntime.pid), activatedRuntime.identity);
-      const stop = await promisify(execFile)(pwsh, ['-NoProfile', '-NonInteractive', '-Command', [
-        '$ErrorActionPreference = "Stop"',
-        '$service = New-Object -ComObject Schedule.Service; $service.Connect()',
-        '$task = $service.GetFolder("\\").GetTask($env:AGENTS_CHAT_TASK_NAME); $task.Enabled = $false; $task.Stop(0)',
-      ].join('; ')], { timeout: 45000, maxBuffer: 131072, windowsHide: true, env: {
-        ...process.env, AGENTS_CHAT_TASK_NAME: original.observation.taskName,
-      } });
-      assert.equal(stop.stderr, '');
-      const deadline = Date.now() + 30000;
-      while (await processIdentity(activatedRuntime.pid) === activatedRuntime.identity && Date.now() < deadline) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-      assert.notEqual(await processIdentity(activatedRuntime.pid), activatedRuntime.identity);
-    }
     // The inactive scope retains its published admission handle until it closes.
+    if (completedRuntime) {
+      // The completed owner exits; a distinct closeout actor retires its receipts and restores the archive.
+      deferredCloseout = {
+        owner, taskName: original.observation.taskName, stateSha256: completedStateSha256,
+        runtime: activatedRuntime, retiredRuntime: original.observation.retiredRuntime,
+        definition: replacedDefinition,
+        healthMode: healthMode ? { file: healthMode.file, bytes: healthMode.bytes ? healthMode.bytes.toString('base64') : null } : null,
+      };
+    } else {
     await unlink(published);
     await unlink(activationPrepared);
-    if (retirementPrepared) {
-      for (const name of ['task-retirement-checkpoint.json', 'task-retirement.json']) {
-        try { await unlink(path.join(control, name)); }
-        catch (error) { if (error.code !== 'ENOENT') throw error; }
-      }
-    }
     for (const name of await readdir(maintenance)) {
       assert.match(name, /^inactive-(replacement|start|complete)-[a-z-]+\.json$/);
       await unlink(path.join(maintenance, name));
@@ -675,6 +624,7 @@ export async function assertRestartPreparation({
       ...process.env, AGENTS_CHAT_TASK_NAME: original.observation.taskName, AGENTS_CHAT_TASK_XML: replacedDefinition,
     } });
     assert.equal(restore.stderr, '');
+    }
   }
   if (publish && !held) {
     await assert.rejects(promisify(execFile)(pwsh,
@@ -718,8 +668,8 @@ export async function assertRestartPreparation({
     assert.equal(current.dev.toString(), directoryIdentity.dev);
     assert.equal(current.ino.toString(), directoryIdentity.ino);
     assert.deepEqual(await readdir(directory), publishOwner ? ['owner.json'] : []);
-    if (ownerSnapshot && !held) { await unlink(ownerSnapshot.file); }
-    if (!held) { await rmdir(directory); }
+    if (ownerSnapshot && !held && !deferredCloseout) { await unlink(ownerSnapshot.file); }
+    if (!held && !deferredCloseout) { await rmdir(directory); }
   } else { await assert.rejects(lstat(directory), { code: 'ENOENT' }); }
   if (held) {
     const marker = holdReleaseIntent ? 'INACTIVE_HISTORY_RESTART_RELEASE_INTENT_HELD'
@@ -732,8 +682,15 @@ export async function assertRestartPreparation({
     const timer = setInterval(() => {}, 1000);
     try { await new Promise(() => {}); } finally { clearInterval(timer); }
   }
-  for (const snapshot of snapshots.reverse()) await unlink(snapshot.file);
-  if (writtenState) { await writeFile(stateFile, state); }
+  if (deferredCloseout) {
+    await publishRestartHandoffCloseout(control, {
+      ...deferredCloseout, handoffRecords: snapshots.map(snapshot => snapshot.file).reverse(),
+      ownerFile: ownerSnapshot.file, lockDirectory: directory, originalState: Buffer.from(state).toString('base64'),
+    });
+  } else {
+    for (const snapshot of snapshots.reverse()) await unlink(snapshot.file);
+    if (writtenState) { await writeFile(stateFile, state); }
+  }
   if (refuseAdmission) {
     console.log('PASS: ordinary inactive task admission refuses the exact live restart owner written preflight while handoff evidence remains without publishing maintenance');
     console.log('PASS: handoff-aware inactive admission publishes only the exact live restart owner written preflight binding through the shared native verifier while copied foreign ordinary and duplicate admission remain refused');
@@ -743,8 +700,6 @@ export async function assertRestartPreparation({
     console.log('PASS: handoff-aware inactive transaction starts one distinct guarded runtime from its operation bundle and settles it on close while copied contexts and duplicate startup remain refused');
     console.log('PASS: handoff-aware inactive startup readiness verifies HTTP providers only through its retained original Job listener while premature and foreign ports remain refused');
     console.log('PASS: handoff-aware inactive transaction completes with accepted state and permanent task policy through its original guarded lease while forged and foreign-digest completion remain refused and same-digest completion replays idempotently');
-    console.log('PASS: handoff-aware completed operation is observable through the read-only inactive completion proof after its lease is released while the active proof remains refused');
-    console.log('PASS: handoff-aware completed operation prepares its exact inactive retirement intent and checkpoint with the archived retired runtime while copied proofs remain refused');
   }
   console.log(releaseRestart && writeState
     ? 'PASS: native live restart owner releases only its exact committed lock after its acknowledged state write while nine records and written state remain exact without authority'

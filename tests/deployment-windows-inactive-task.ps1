@@ -1132,6 +1132,26 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                             if ($errors) { [Console]::Error.WriteLine($errors) }
                             Assert ($historyResumer.ExitCode -eq 0) 'Fresh actor could not resume actual history archival'
                         } finally { $historyResumer.Dispose() }
+                        if ($historyBoundary -ceq 'restart-state-written-history') {
+                            # The completed handoff owner has exited; a distinct actor performs its closeout.
+                            $closeoutActor = [Deployment.WindowsControllerProcess]::Start($node,
+                                @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
+                                    $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
+                                    $resumeMode, $historyActor, 'handoff-closeout'), $control, $environment)
+                            try {
+                                $output = $closeoutActor.StandardOutput.ReadToEndAsync()
+                                $diagnostic = $closeoutActor.StandardError.ReadToEndAsync()
+                                if (-not $closeoutActor.WaitForExit(600000)) {
+                                    $closeoutActor.Kill()
+                                    $null = $closeoutActor.WaitForExit(15000)
+                                    throw 'Fresh handoff closeout actor timed out'
+                                }
+                                Write-Output $output.GetAwaiter().GetResult()
+                                $errors = $diagnostic.GetAwaiter().GetResult()
+                                if ($errors) { [Console]::Error.WriteLine($errors) }
+                                Assert ($closeoutActor.ExitCode -eq 0) 'Fresh handoff closeout actor failed'
+                            } finally { $closeoutActor.Dispose() }
+                        }
                         Assert ((Get-FileHash -LiteralPath $historyIntent -Algorithm SHA256).Hash -ceq $historyHash -and
                             (Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash -ceq $historyStateHash) `
                             'History actor takeover changed prepared intent or original state'

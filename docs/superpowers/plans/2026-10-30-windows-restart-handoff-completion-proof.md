@@ -12,9 +12,13 @@
 
 ### Task 1: Test contract
 
-- [x] After `scope.close()`, `openWindowsTaskCompletionProof` is refused. `openWindowsInactiveTaskCompletionProof` observes `status: observed`, `mutationAuthority: false`, `lease: released`, the owner's operation id, the archived task name, the accepted state digest and the activated runtime identity. `check()` returns the same observation, and after `close()` it is refused.
-- [x] The fixture then disables and stops the completed task and waits for the runtime identity to disappear.
-- [x] Receipt `PASS: handoff-aware completed operation is observable through the read-only inactive completion proof after its lease is released while the active proof remains refused`.
+Revision: the first in-process contract (`gate69-contract`) failed in run `40994368192`. The proof refuses while the original completion controller is alive, and that controller is the lock owner, which is the fixture process itself. Production behaves the same way: the deploy process exits and a distinct actor closes out. So closeout now runs in a fresh actor.
+
+- [x] After `scope.close()`, the completed owner (`resume-restart-state-written-history`) skips its local cleanup. It publishes a closeout context outside the control directory (`os.tmpdir()/agents-chat-handoff-closeout-<sha16(control)>.json`, flag `wx`) and exits without the final state assertion.
+- [x] The harness then starts a distinct actor with the same mode, the same previous actor and the extra argument `handoff-closeout` (`tests/deployment-windows-restart-handoff-closeout.mjs`). That actor asserts the owner is dead, the runtime is alive and the state digest matches.
+- [x] `openWindowsTaskCompletionProof` stays refused. `openWindowsInactiveTaskCompletionProof` observes `status: observed`, `mutationAuthority: false`, `lease: released`, the owner's operation id, the archived task name, the accepted state digest and the activated runtime identity. `check()` returns the same observation, and after `close()` it is refused.
+- [x] The closeout actor restores the archived fixture: it stops the task, re-registers the original definition, and removes the owner, lock, handoff records and state. It then continues the existing archive assertions.
+- [x] Receipt `PASS: handoff-aware completed operation is observable through the read-only inactive completion proof after its owner exits while the active proof remains refused`.
 
 ### Task 2: Production
 

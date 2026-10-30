@@ -11,6 +11,7 @@ import { holdLockRetirementSettlement, assertLockRetirementSettlementAfterDeath 
 import { holdSuccessorPrepared, assertSuccessorAfterDeath } from './deployment-windows-successor-observation.mjs';
 import { holdSuccessorAbandoned, assertSuccessorAbandonedAfterDeath } from './deployment-windows-successor-abandoned-observation.mjs';
 import { assertRestartPreparation } from './deployment-windows-restart-preparation.mjs';
+import { assertRestartHandoffCloseout } from './deployment-windows-restart-handoff-closeout.mjs';
 import { holdRestartRetirement } from './deployment-windows-restart-retirement-death.mjs';
 
 const [source, control, pwsh, mode = 'complete', crashStep = 'task-restored', terminalCrashStep = ''] = process.argv.slice(2);
@@ -21,6 +22,12 @@ const { processIdentity } = await load('process-identity.mjs');
 assert.equal(typeof api.openWindowsInactiveLostRuntimeAuthority, 'function',
   'Missing owned inactive lost-runtime transport');
 // After the dead writer's actual write, the original state is resolvable only through its ninth record.
+// The completed handoff owner has exited; this distinct actor closes it out and restores the archived fixture.
+const handoffCloseout = mode === 'resume-restart-state-written-history' && terminalCrashStep === 'handoff-closeout';
+if (handoffCloseout) {
+  await withWindowsAdmission(control, { pwsh }, admission => assertRestartHandoffCloseout({ source, control, pwsh, admission }));
+}
+let deferredHandoffCloseout = false;
 const state = ['resume-restart-state-dead-history', 'resume-restart-state-released-dead-history',
   'resume-restart-state-release-intent-dead-history'].includes(mode)
   ? Buffer.from(JSON.parse(await readFile(path.join(control, JSON.parse(crashStep).restartStateIntent.path))).oldState)
@@ -825,6 +832,8 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
       });
       return;
+    } else if (handoffCloseout) {
+      // The archived fixture was restored by the closeout; continue with the exact archive assertions.
     } else if (successorAbandonedResume || restartPublishedResume || restartDirectoryResume || restartOwnerResume || restartCommittedResume || restartStateIntentResume) {
       await assertRestartPreparation({
         source, control, pwsh, admission, previous: JSON.parse(crashStep), state, completionBytes,
@@ -835,6 +844,10 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         writeState: restartStateWrittenResume, releaseRestart: restartReleasedResume,
         refuseAdmission: mode === 'resume-restart-state-written-history',
       });
+      if (mode === 'resume-restart-state-written-history') {
+        deferredHandoffCloseout = true;
+        return;
+      }
     } else if (successorCrash) {
       await holdSuccessorPrepared({ source, control, pwsh, previous: JSON.parse(crashStep) });
       throw new Error('Held successor preparation publisher unexpectedly returned.');
@@ -2243,5 +2256,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     assert.notEqual(await processIdentity(next.identity.pid), next.identity.processIdentity);
   }
 });
-assert.deepEqual(await readFile(path.join(control, 'state.json')), expectedFinalState);
-console.log('PASS: owned lost-runtime rollback rejects foreign authority and preserves only its authorized state outcome');
+if (!deferredHandoffCloseout) {
+  assert.deepEqual(await readFile(path.join(control, 'state.json')), expectedFinalState);
+  console.log('PASS: owned lost-runtime rollback rejects foreign authority and preserves only its authorized state outcome');
+}
