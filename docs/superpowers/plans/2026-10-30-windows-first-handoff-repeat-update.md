@@ -45,7 +45,7 @@
 - Modify: `.github/workflows/deployment-lifecycle.yml`
   - Adds the `firstrepeat` matrix shard, its required shard file and its PASS receipt.
 
-- [ ] Commit the contract with `[skip ci]`, tag `gate78-contract` and dispatch the stopped-history run. Expect `firstrepeat` to fail: the first public update reports `handoffRetained` and no receipt.
+- [x] Commit the contract with `[skip ci]`, tag `gate78-contract` and dispatch the stopped-history run. Expect `firstrepeat` to fail: the first public update reports `handoffRetained` and no receipt.
 
 ### Task 2: Production
 
@@ -55,13 +55,13 @@
   - Closes the accepted task and configuration observations with the other retained authorities.
   - Sets `closeoutRequired` on failure only after the receipt is published.
 
-- [ ] Commit, tag `gate78-production` and dispatch the stopped-history and Contracts runs at the same SHA. All 16 shards must be green, including `firstrepeat`.
+- [x] Commit, tag `gate78-production` and dispatch the stopped-history and Contracts runs at the same SHA. All 16 shards must be green, including `firstrepeat`.
 
 ### Task 3: Regression matrix and documentation
 
 - [ ] Dispatch the latest same-SHA Linux and Windows regression matrix (default workflow inputs) and record the run IDs.
-- [ ] Update the user-facing deployment docs: public `update` of archived stopped history, its receipt and closeout, and that rollback is a public `update -Revision <older>`.
-- [ ] Record acceptance here and in the block 3 routing plan.
+- [x] Update the user-facing deployment docs: public `update` of archived stopped history, its receipt and closeout, and that rollback is a public `update -Revision <older>`.
+- [x] Record acceptance here and in the block 3 routing plan.
 
 ## Red run finding (41027478918)
 
@@ -98,3 +98,8 @@ working directory beside (not inside) the control used as actor `TEMP`.
   update takes the running-task path and refuses an unresolved target before downtime while the archive stays exact`.
 - The inactive runner's `publish-receipt` stage stays; it is covered once a real-application run of this path is added.
 
+## Acceptance
+
+- **Accepted** as revised above: stopped-history run `41033112568` (all 16 shards; acceptance job `123998684210` required every shard receipt) and same-SHA Contracts run `41033116421`, both green at `6fb7e7dd` (tag `gate78-production4`).
+- Default-input regression matrix dispatched at the same SHA: run `41036638710`.
+- Not yet covered: the inactive runner's `publish-receipt` stage (needs a real-application public stopped-history run).

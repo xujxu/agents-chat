@@ -71,4 +71,5 @@
   - The same distinct actor then reran the generic identity-pinned archive closeout and got "Original retirement evidence was replaced". The closeout had already replaced the original `state.json` inode.
   - Distinct first-attempt actors now skip that rerun. Their later checks already assert that the archive opener refuses.
 
-- [ ] Green stopped-history run plus a same-SHA Contracts run; record acceptance here.
+- [x] Green stopped-history run plus a same-SHA Contracts run; record acceptance here.
+  - **Accepted** with gate 78: stopped-history run `41033112568` (all 16 shards; acceptance job `123998684210` required every shard receipt) and same-SHA Contracts run `41033116421`, both green at `6fb7e7dd` (tag `gate78-production4`).

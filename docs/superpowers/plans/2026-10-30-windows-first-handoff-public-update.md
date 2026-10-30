@@ -56,4 +56,5 @@
 - First production `8c47a550` (`gate76-production`) still refused in `firstupdate`. Its Contracts run `41017095647` passed.
   - Diagnostic `5b5021b6` (`gate76-diag`) made the refusal report its blocked status and control entries. Run `41020454114` showed that the archived rollback keeps its relocated `inactive-rollback-runtime` and `inactive-rollback-runtime-evidence` directories. The routing predicate treated them as in-flight evidence.
   - Fix `b5f21c60` (`gate76-production2`) excludes exactly those two names from the in-flight pattern.
-- [ ] Green stopped-history run (82 receipts) plus a same-SHA Contracts run; record acceptance here.
+- [x] Green stopped-history run plus a same-SHA Contracts run; record acceptance here.
+  - **Accepted** with gates 77 and 78: stopped-history run `41033112568` (all 16 shards; acceptance job `123998684210` required every shard receipt) and same-SHA Contracts run `41033116421`, both green at `6fb7e7dd` (tag `gate78-production4`). `firstupdate` was already green at `b5f21c60`.
