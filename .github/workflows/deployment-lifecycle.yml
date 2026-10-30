@@ -218,7 +218,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        history_shard: [baseline, successor, restart, commitment, state, release, takeover, completion, postwrite, postintent, firstwrite, firstadmit, firstroute, firstupdate, firstcloseout]
+        history_shard: [baseline, successor, restart, commitment, state, release, takeover, completion, postwrite, postintent, firstwrite, firstadmit, firstroute, firstupdate, firstcloseout, firstrepeat]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -263,7 +263,7 @@ jobs:
       - name: Require every actual stopped-history receipt across all native shards
         shell: pwsh
         run: |
-          $historyOutput = foreach ($shard in @('baseline', 'successor', 'restart', 'commitment', 'state', 'release', 'takeover', 'completion', 'postwrite', 'postintent', 'firstwrite', 'firstadmit', 'firstroute', 'firstupdate', 'firstcloseout')) {
+          $historyOutput = foreach ($shard in @('baseline', 'successor', 'restart', 'commitment', 'state', 'release', 'takeover', 'completion', 'postwrite', 'postintent', 'firstwrite', 'firstadmit', 'firstroute', 'firstupdate', 'firstcloseout', 'firstrepeat')) {
             $file = "history-receipts/history-$shard.json"
             if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing stopped-history shard: $shard" }
             Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
@@ -293,6 +293,7 @@ jobs:
             'PASS: public update routes archived stopped history through the first-attempt handoff into the inactive runner which refuses an unresolved target before downtime while retaining the handoff lock and admission and deploy stays refused',
             'PASS: first-attempt routed update of archived stopped history reaches its accepted inactive transaction with sealed worker evidence and retained handoff for a distinct closeout',
             'PASS: public closeout of an accepted first-attempt stopped-history update retires its task receipts workers handoff records and lock through the inactive authority while accepted state and runtime remain exact',
+            'PASS: public update of archived stopped history accepts, publishes its receipt and finalizes, then public rollback and repeat updates of the running task accept with fresh receipts while the history archive stays exact',
             'PASS: native dead committed handoff observation pins exact lock and original archive under a distinct actor without authority',
             'PASS: native lock retirement intent binds exact dead committed lock without deleting evidence or granting continuation',
             'PASS: actual lock retirement intent publisher death preserves exact evidence for a distinct third actor without cleanup authority',

@@ -15,6 +15,7 @@ import { assertRestartHandoffCloseout } from './deployment-windows-restart-hando
 import { holdRestartRetirement } from './deployment-windows-restart-retirement-death.mjs';
 import { assertFirstStateWrittenAfterDeath, firstStateWrittenOriginalState } from './deployment-windows-first-state-written.mjs';
 import { acceptFirstHandoffUpdate, assertFirstHandoffCloseout } from './deployment-windows-first-handoff-closeout.mjs';
+import { assertPublicHandoffRepeatUpdate, writeFirstHandoffRepeatContext } from './deployment-windows-first-handoff-repeat.mjs';
 
 const [source, control, pwsh, mode = 'complete', crashStep = 'task-restored', terminalCrashStep = ''] = process.argv.slice(2);
 const load = name => import(pathToFileURL(path.join(source, name)).href);
@@ -39,6 +40,9 @@ if (firstCloseout) {
   await withWindowsAdmission(control, { pwsh }, admission =>
     assertFirstHandoffCloseout({ source, control, pwsh, admission }));
 }
+// The public entry admits its own controllers, so this distinct actor holds no Windows admission while it runs.
+const firstRepeat = mode === 'resume-lock-state-repeated-history' && terminalCrashStep === 'first-repeat';
+if (firstRepeat) await assertPublicHandoffRepeatUpdate({ source, control, pwsh });
 const state = ['resume-restart-state-dead-history', 'resume-restart-state-released-dead-history',
   'resume-restart-state-release-intent-dead-history'].includes(mode)
   ? Buffer.from(JSON.parse(await readFile(path.join(control, JSON.parse(crashStep).restartStateIntent.path))).oldState)
@@ -591,11 +595,11 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
   if (['crash-history', 'resume-history', 'crash-finalized-history', 'resume-finalized-history',
     'resume-history-saved', 'crash-completed-history', 'resume-completed-history',
     'resume-lock-state-admitted-history', 'resume-lock-state-routed-history', 'resume-lock-state-updated-history',
-    'resume-lock-state-closed-history', 'crash-prepared-history', 'resume-prepared-history',
+    'resume-lock-state-closed-history', 'resume-lock-state-repeated-history', 'crash-prepared-history', 'resume-prepared-history',
     'crash-abandoned-history', 'resume-abandoned-history'].includes(mode) || lockStage) {
     const finalizedResume = ['resume-finalized-history', 'resume-history-saved',
       'resume-completed-history', 'resume-lock-state-admitted-history', 'resume-lock-state-routed-history',
-      'resume-lock-state-updated-history', 'resume-lock-state-closed-history',
+      'resume-lock-state-updated-history', 'resume-lock-state-closed-history', 'resume-lock-state-repeated-history',
       'resume-prepared-history', 'crash-abandoned-history', 'resume-abandoned-history'].includes(mode) || lockResume;
     if (!finalizedResume) await retainOriginalRuntimeAbsence();
     const intentFile = path.join(control, 'inactive-rollback-history-intent.json');
@@ -606,6 +610,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     const completionFile = path.join(control, `retired-${intent.operationId}-inactive-rollback-history-complete.json`);
     const retainedCompletion = ['resume-completed-history', 'resume-lock-state-admitted-history',
       'resume-lock-state-routed-history', 'resume-lock-state-updated-history', 'resume-lock-state-closed-history',
+      'resume-lock-state-repeated-history',
       'resume-prepared-history',
       'crash-abandoned-history', 'resume-abandoned-history'].includes(mode) || lockResume ? {
       bytes: await readFile(completionFile), identity: await lstat(completionFile, { bigint: true }),
@@ -1324,9 +1329,10 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     const firstRouteResume = mode === 'resume-lock-state-routed-history';
     const firstUpdateResume = mode === 'resume-lock-state-updated-history';
     const firstCloseoutResume = mode === 'resume-lock-state-closed-history';
+    const firstRepeatResume = mode === 'resume-lock-state-repeated-history';
     let firstStateAdmitted = false;
     if (mode === 'resume-completed-history' || firstAdmitResume || firstRouteResume || firstUpdateResume
-      || firstCloseoutResume) {
+      || firstCloseoutResume || firstRepeatResume) {
       const attemptId = randomUUID();
       const operationId = randomUUID();
       const token = randomUUID();
@@ -1840,6 +1846,18 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
           return;
         }
         // The closeout restored only the original state bytes after the accepted write replaced its inode.
+        firstStateAdmitted = true;
+      }
+      if (firstRepeatResume) {
+        if (!firstRepeat) {
+          // The owner only names the archived fixture; the harness starts a distinct public update actor.
+          await writeFirstHandoffRepeatContext(control, {
+            project: prepared.project, taskName: prepared.observation.taskName,
+          });
+          deferredHandoffCloseout = true;
+          return;
+        }
+        // The public updates restored only the original state bytes after their writes replaced its inode.
         firstStateAdmitted = true;
       }
     }
