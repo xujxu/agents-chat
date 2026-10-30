@@ -171,7 +171,8 @@ function Open-AgentsChatStoppedWorkerCleanup(
         }
         $context.Files.Add([Deployment.WindowsPrivateFile]::OpenDirectory($Control))
         if ($null -ne $HistoryHandoffObservation -and
-            ($HistoryHandoffObservation.Contains('restartStateIntent') -or $HistoryHandoffObservation.Contains('restartState'))) {
+            ($HistoryHandoffObservation.Contains('restartStateIntent') -or $HistoryHandoffObservation.Contains('restartState') -or
+             $HistoryHandoffObservation.Contains('stateIntent') -or $HistoryHandoffObservation.Contains('state'))) {
             Initialize-AgentsChatStoppedHistoryStateTransition $context $HistoryHandoffObservation
         }
         if ($HistoryArchive) { Initialize-AgentsChatStoppedHistoryRecovery $context }

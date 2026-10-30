@@ -1,5 +1,6 @@
 . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-commit.ps1')
 . (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-restart-state-intent.ps1')
+. (Join-Path $PSScriptRoot 'windows-stopped-history-handoff-restart-state-write.ps1')
 
 function Get-AgentsChatStoppedHistoryHandoffStateIntentRecord([hashtable]$Context, $Creator, [string]$CreatedAt) {
     $commit = $Context.HistoryHandoffCommit
@@ -124,5 +125,91 @@ function Publish-AgentsChatStoppedHistoryHandoffStateIntent(
     } catch {
         $Context.Poisoned = $true
         throw [InvalidOperationException]::new('Handoff state intent failed; retain evidence.', $_.Exception)
+    }
+}
+
+function Get-AgentsChatStoppedHistoryHandoffStateText([hashtable]$Context) {
+    Assert-AgentsChatStoppedHistoryHandoffStateIntent $Context
+    $document = [Text.Json.JsonDocument]::Parse($Context.HistoryHandoffStateIntent.File.ReadText())
+    try { $text = $document.RootElement.GetProperty('nextState').GetRawText() + "`n" }
+    finally { $document.Dispose() }
+    if ([Text.Encoding]::UTF8.GetByteCount($text) -gt 65536) { throw 'Handoff next state is oversized.' }
+    return $text
+}
+
+function Write-AgentsChatStoppedHistoryHandoffState(
+    [hashtable]$Context, [int]$ControllerPid, [string]$ControllerIdentity
+) {
+    if (-not $Context.ContainsKey('HistoryHandoffLockPublisher') -or
+        $Context.HistoryHandoffLockPublisher -ne $true -or
+        $Context.ContainsKey('HistoryHandoffLockObserver')) {
+        throw 'Handoff state write requires its independent native role.'
+    }
+    try {
+        if ($Context.Poisoned) { throw 'Handoff state write scope is poisoned.' }
+        if ($Context.ContainsKey('HistoryHandoffState') -or $Context.ContainsKey('HistoryStateTransition')) {
+            throw 'Handoff state already written.'
+        }
+        if (-not $Context.ContainsKey('HistoryHandoffCommit') -or -not $Context.ContainsKey('HistoryHandoffStateIntent')) {
+            throw 'Handoff state write requires its retained state intent.'
+        }
+        $commit = $Context.HistoryHandoffCommit
+        if ($ControllerPid -ne $commit.Request.ControllerPid -or
+            $ControllerIdentity -cne $commit.Request.ControllerIdentity) {
+            throw 'Handoff state write controller differs.'
+        }
+        $names = @($commit.PreparedName, $commit.CommittedName, $Context.HistoryHandoffStateIntent.Descriptor.path)
+        foreach ($pattern in @('state.json.lock', 'state.json.lock.pending-*')) {
+            if ([IO.Directory]::GetFileSystemEntries($Context.Control, $pattern).Length) {
+                throw 'Handoff state write found a competing stage.'
+            }
+        }
+        Assert-AgentsChatStoppedHistoryHandoffCommittedRetained $Context $names
+        $text = Get-AgentsChatStoppedHistoryHandoffStateText $Context
+        $stage = [Deployment.WindowsPrivateFile]::Publish((Join-Path $Context.Control 'state.json.lock'), $text)
+        $Context.Files.Add($stage)
+        if ($stage.ReadText() -cne $text) { throw 'Handoff state write stage differs.' }
+        $Context.HistoryHandoffStateStage = $stage
+        Assert-AgentsChatStoppedHistoryHandoffCommittedRetained $Context $names
+        if ((Get-AgentsChatStoppedHistoryHandoffStateText $Context) -cne $text) {
+            throw 'Handoff state write intent changed.'
+        }
+        $record = Read-AgentsChatRetirementJson ($commit.Prepared.ReadText()) -AllowNull
+        $state = Open-AgentsChatRetirementFile $Context $record.state 'state.json'
+        if ($state.ReadText() -cne $record.oldState) { throw 'Handoff state write original state differs.' }
+        $stage.Check()
+        $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData(
+            [Text.Encoding]::UTF8.GetBytes($text))).ToLowerInvariant()
+        $staged = [Deployment.WindowsPrivateFile]::CaptureSourceSecurity($Context.Control, 'state.json.lock', 'file')
+        $before = [Deployment.WindowsPrivateFile]::CaptureSourceSecurity($Context.Control, 'state.json', 'file')
+        $null = $Context.Remove('HistoryHandoffStateStage')
+        Remove-AgentsChatStoppedHistoryHandoffRestartStateHandles $Context $stage.CaptureIdentity()
+        Remove-AgentsChatStoppedHistoryHandoffRestartStateHandles $Context $state.CaptureIdentity()
+        [Deployment.WindowsPrivateFile]::PublishSourceFile(
+            $Context.Control, 'state.json', $staged, $before, $hash, $record.state.sha256)
+        $written = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Control 'state.json') $hash
+        $identity = $written.CaptureIdentity()
+        if ($identity.Dev -cne $staged.Dev -or $identity.Ino -cne $staged.Ino -or $written.ReadText() -cne $text) {
+            throw 'Handoff state write replaced its acknowledged stage.'
+        }
+        foreach ($pattern in @('state.json.lock', 'state.json.lock.pending-*')) {
+            if ([IO.Directory]::GetFileSystemEntries($Context.Control, $pattern).Length) {
+                throw 'Handoff state write retained a stage.'
+            }
+        }
+        $Context.HistoryHandoffState = @{
+            File=$written; Descriptor=(Get-AgentsChatStoppedHandoffDescriptor $written 'state.json')
+        }
+        # The acknowledged write replaced the original state inode; original-state readers resolve it through the intent.
+        Initialize-AgentsChatStoppedHistoryStateTransition $Context ([ordered]@{
+            stateIntent=$Context.HistoryHandoffStateIntent.Descriptor
+            state=$Context.HistoryHandoffState.Descriptor
+        })
+        Assert-AgentsChatStoppedHistoryHandoffCommittedRetained $Context $names
+        Assert-AgentsChatStoppedHistoryHandoffStateIntent $Context
+        return $Context.HistoryHandoffState.Descriptor
+    } catch {
+        $Context.Poisoned = $true
+        throw [InvalidOperationException]::new('Handoff state write failed; retain evidence.', $_.Exception)
     }
 }

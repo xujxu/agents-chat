@@ -10,6 +10,7 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
     $hasRestartCommitted = $Request -is [Collections.IDictionary] -and $Request.Contains('restartCommitted')
     $hasRestartState = $Request -is [Collections.IDictionary] -and
         ($Request.Contains('restartStateIntent') -or $Request.Contains('restartState'))
+    $hasState = $Request -is [Collections.IDictionary] -and ($Request.Contains('stateIntent') -or $Request.Contains('state'))
     $hasRestartRetirement = $Request -is [Collections.IDictionary] -and $Request.Contains('restartRetirement')
     $hasRestartSettlement = $Request -is [Collections.IDictionary] -and $Request.Contains('restartSettlement')
     $hasOwnerAdmission = $Request -is [Collections.IDictionary] -and $Request.Contains('restartOwnerAdmission')
@@ -28,6 +29,9 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
     if ($hasRestartState -and (-not $hasRestartCommitted -or -not $Context.ContainsKey('HistoryStateTransition'))) {
         throw 'Committed handoff restart state requires its commitment transition.'
     }
+    if ($hasState -and ($hasRetirement -or $hasRestart -or -not $Context.ContainsKey('HistoryStateTransition'))) {
+        throw 'Committed handoff state requires its held lock transition.'
+    }
     if ($hasRestartRetirement -and (-not $hasRestartCommitted -or $hasRestartState)) {
         throw 'Committed handoff restart retirement requires its commitment without state.'
     }
@@ -39,6 +43,7 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
     if ($hasRestart) { $fields += 'restart' }
     if ($hasRestartCommitted) { $fields += 'restartCommitted' }
     if ($hasRestartState) { $fields += @('restartStateIntent', 'restartState') }
+    if ($hasState) { $fields += @('stateIntent', 'state') }
     if ($hasRestartRetirement) { $fields += 'restartRetirement' }
     if ($hasRestartSettlement) { $fields += 'restartSettlement' }
     if ($hasOwnerAdmission) { $fields += 'restartOwnerAdmission' }
@@ -90,6 +95,15 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
             throw 'Committed handoff restart state transition attempt differs.'
         }
         $names += $restartIntentName
+    }
+    if ($hasState) {
+        $stateIntentName = "inactive-handoff-$($Request.attemptId)-state-intent.json"
+        if ($Context.HistoryStateTransition.AttemptId -cne $Request.attemptId -or
+            $Context.HistoryStateTransition.FirstAttempt -ne $true -or
+            $Request.stateIntent.path -cne $stateIntentName) {
+            throw 'Committed handoff state transition attempt differs.'
+        }
+        $names += $stateIntentName
     }
     if ($hasRestartRetirement) {
         $restartRetirementName = "inactive-handoff-$restartAttempt-lock-retirement.json"
@@ -204,6 +218,7 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
     if ($hasSuccessorAbandoned) {
         Initialize-AgentsChatStoppedHistoryHandoffSuccessorAbandonedObservation $Context $Request.successorAbandoned
     }
+    if ($hasState) { Initialize-AgentsChatStoppedHistoryHandoffStateObservation $Context }
     if ($hasOwnerAdmission) { $Context.HistoryHandoffRestartOwnerAdmitter = $true }
     if ($hasRestartCommitted) {
         Initialize-AgentsChatStoppedHistoryHandoffRestartObservation $Context $Request.restart $Request.restartCommitted
@@ -222,6 +237,10 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
 function Get-AgentsChatStoppedHistoryHandoffCommittedNamespace([hashtable]$Context) {
     $retained = $Context.HistoryHandoffObservedCommit
     $names = @($retained.PreparedName, $retained.CommittedName)
+    if ($Context.ContainsKey('HistoryHandoffObservedStateIntent')) {
+        Assert-AgentsChatStoppedHistoryHandoffObservedStateIntent $Context
+        $names += $Context.HistoryHandoffObservedStateIntent.Descriptor.path
+    }
     if ($Context.ContainsKey('HistoryHandoffLockRetirementIntent')) {
         Assert-AgentsChatStoppedHistoryHandoffLockRetirementIntent $Context
         $names += $Context.HistoryHandoffLockRetirementIntent.Descriptor.path

@@ -3,10 +3,17 @@ function Initialize-AgentsChatStoppedHistoryStateTransition([hashtable]$Context,
         $Request -isnot [Collections.IDictionary]) {
         throw 'Stopped history state transition bootstrap differs.'
     }
-    foreach ($field in @('restart', 'restartCommitted', 'restartStateIntent', 'restartState')) {
-        if (-not $Request.Contains($field)) { throw 'Stopped history state transition requires its committed restart.' }
+    $first = $Request.Contains('stateIntent') -or $Request.Contains('state')
+    $fields = if ($first) { @('stateIntent', 'state') } else { @('restart', 'restartCommitted', 'restartStateIntent', 'restartState') }
+    foreach ($field in $fields) {
+        if (-not $Request.Contains($field)) { throw 'Stopped history state transition requires its committed handoff.' }
     }
-    $intentDescriptor = $Request.restartStateIntent
+    if ($first -and ($Request.Contains('restartStateIntent') -or $Request.Contains('restartState'))) {
+        throw 'Stopped history state transition mixes first-attempt and restart writes.'
+    }
+    $phase = if ($first) { 'stopped-history-handoff-state-intent' } else { 'stopped-history-handoff-restart-state-intent' }
+    $intentDescriptor = if ($first) { $Request.stateIntent } else { $Request.restartStateIntent }
+    $writtenDescriptor = if ($first) { $Request.state } else { $Request.restartState }
     Assert-AgentsChatRetirementFields $intentDescriptor @('path', 'dev', 'ino', 'bytes', 'sha256')
     if ($intentDescriptor.path -isnot [string] -or
         $intentDescriptor.path -cnotmatch '^inactive-handoff-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-state-intent\.json$') {
@@ -19,7 +26,7 @@ function Initialize-AgentsChatStoppedHistoryStateTransition([hashtable]$Context,
         $root = $document.RootElement
         $attemptId = $root.GetProperty('attemptId').GetString()
         Assert-AgentsChatCompletionGuid $attemptId
-        if ($root.GetProperty('phase').GetString() -cne 'stopped-history-handoff-restart-state-intent' -or
+        if ($root.GetProperty('phase').GetString() -cne $phase -or
             $intentDescriptor.path -cne "inactive-handoff-$attemptId-state-intent.json" -or
             $root.GetProperty('oldState').ValueKind -ne [Text.Json.JsonValueKind]::String -or
             $root.GetProperty('nextState').ValueKind -ne [Text.Json.JsonValueKind]::Object) {
@@ -34,11 +41,11 @@ function Initialize-AgentsChatStoppedHistoryStateTransition([hashtable]$Context,
         (Get-AgentsChatColdTerminalHash $oldState) -cne $original.sha256) {
         throw 'Stopped history state transition original state differs.'
     }
-    Assert-AgentsChatRetirementDescriptor $Request.restartState 'state.json'
-    if ($Request.restartState.dev -ceq $original.dev -and $Request.restartState.ino -ceq $original.ino) {
+    Assert-AgentsChatRetirementDescriptor $writtenDescriptor 'state.json'
+    if ($writtenDescriptor.dev -ceq $original.dev -and $writtenDescriptor.ino -ceq $original.ino) {
         throw 'Stopped history state transition did not replace its original state.'
     }
-    $written = Open-AgentsChatRetirementFile $Context $Request.restartState 'state.json'
+    $written = Open-AgentsChatRetirementFile $Context $writtenDescriptor 'state.json'
     if ($written.ReadText() -cne $nextText) { throw 'Stopped history state transition written state differs.' }
     $snapshot = [pscustomobject]@{
         Sha256=$original.sha256; ByteLength=[int]$original.bytes
@@ -52,7 +59,8 @@ function Initialize-AgentsChatStoppedHistoryStateTransition([hashtable]$Context,
     $snapshot | Add-Member -MemberType ScriptMethod -Name Dispose -Value { }
     $Context.HistoryStateTransition = @{
         AttemptId=$attemptId; Original=$original; OldState=$oldState; NextText=$nextText
-        Intent=$intent; IntentDescriptor=$intentDescriptor; Written=$written; WrittenDescriptor=$Request.restartState
+        Intent=$intent; IntentDescriptor=$intentDescriptor; Written=$written; WrittenDescriptor=$writtenDescriptor
+        FirstAttempt=$first
         Snapshot=$snapshot
     }
     Assert-AgentsChatStoppedHistoryStateTransition $Context

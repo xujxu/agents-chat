@@ -75,6 +75,7 @@ const files = [
   'windows-stopped-history-handoff-restart-state-intent.ps1', 'windows-stopped-history-handoff-restart-state-observation.ps1',
   'windows-stopped-history-handoff-restart-state-write.ps1', 'windows-stopped-history-handoff-restart.ps1',
   'windows-stopped-history-handoff-state-intent.ps1',
+  'windows-stopped-history-handoff-state-observation.ps1',
   'windows-stopped-history-handoff-successor-abandoned-observation.ps1', 'windows-stopped-history-handoff-successor-abandonment.ps1',
   'windows-stopped-history-handoff-successor-observation.ps1', 'windows-stopped-history-handoff-successor-publication.ps1',
   'windows-stopped-history-handoff-successor.ps1',
