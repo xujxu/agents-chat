@@ -39,6 +39,7 @@
 - Modify: `.github/workflows/deployment-lifecycle.yml`, adding the shard `firstupdate` and receipt 82.
 
 - [x] Red: only `firstupdate` fails, because update still refuses with `DEPLOYMENT_RECOVERY_REQUIRED`.
+  - Red run `41016901261` at `e0f8d5fd` (`gate76-contract`).
 
 ### Task 2: Production
 
@@ -52,4 +53,7 @@
   - Route archived stopped-history `update` before the recovery refusal.
 - Modify: `scripts/deployment/saved-worker-engine.mjs` and `tests/deployment-saved-worker.test.mjs`, only if a saved copy needs the new modules.
 
+- First production `8c47a550` (`gate76-production`) still refused in `firstupdate`. Its Contracts run `41017095647` passed.
+  - Diagnostic `5b5021b6` (`gate76-diag`) made the refusal report its blocked status and control entries. Run `41020454114` showed that the archived rollback keeps its relocated `inactive-rollback-runtime` and `inactive-rollback-runtime-evidence` directories. The routing predicate treated them as in-flight evidence.
+  - Fix `b5f21c60` (`gate76-production2`) excludes exactly those two names from the in-flight pattern.
 - [ ] Green stopped-history run (82 receipts) plus a same-SHA Contracts run; record acceptance here.

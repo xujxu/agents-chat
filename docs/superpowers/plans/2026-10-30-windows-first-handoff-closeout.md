@@ -46,7 +46,9 @@
   - After the resume actor exits, start a distinct `first-closeout` actor.
 - Modify: `.github/workflows/deployment-lifecycle.yml`, adding the shard `firstcloseout` and two receipts.
 
-- [ ] Red: only `firstcloseout` fails, because the closeout refuses an accepted stopped-prior update (the active proof is unavailable).
+- [x] Red: `firstcloseout` fails (`firstupdate` also fails, because the contract SHA predates the gate 76 routing fix).
+  - Red run `41021102135` at `8ff0baa3` (`gate77-contract`).
+  - The fixture stopped before closeout: `prepareWindowsInactiveRuntimeBundle` refused, because the routed admission had already published `task-maintenance`. The inactive runner calls it at preflight in the same order, so this is a production defect as well.
 
 ### Task 2: Production
 
@@ -57,5 +59,12 @@
   - Emit manifest version 4 with the handoff triple.
 - Modify: `scripts/deployment/windows-deployment-retirement.ps1` (allow-list, version 4 plan validation and inventory).
 - Modify: `scripts/deployment/windows-deployment-retirement-record.mjs` (version 4 parsing).
+- Modify: `scripts/deployment/windows-runtime-publication.mjs`
+  - Inactive publication accepts the routed `admission` and `sha256`.
+  - It verifies the retained binding and that `task-maintenance` holds only `admission.json`, and excuses only that entry.
+- Modify: `scripts/deployment/windows-inactive-deployment.mjs` to pass the routed admission at preflight.
+- Modify: `scripts/deployment/windows-task-completion-controller.ps1` and `windows-task-completion-proof.mjs`
+  - New same-bridge transfer `begin-inactive-retirement` (`beginWindowsInactiveTaskRetirement`), mirroring the active `begin-retirement`.
+  - Run `41024351479` (`1947baff`) accepted the update, but the closeout then closed its proof and reopened retirement from the same controller. The native creator check correctly refused, because the intent's creator controller was still alive. Only a distinct resumer reopens a published checkpoint.
 
 - [ ] Green stopped-history run plus a same-SHA Contracts run; record acceptance here.

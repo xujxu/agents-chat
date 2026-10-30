@@ -60,7 +60,7 @@ try {
         $method = $request.method.GetString()
         if ($id -ne $sequence + 1 -or $method -cnotin @(
             'check', 'close', 'prepare-retirement', 'prepare-inactive-retirement', 'prepare-retirement-checkpoint', 'begin-retirement', 'retire-next',
-            'prepare-inactive-retirement-checkpoint',
+            'prepare-inactive-retirement-checkpoint', 'begin-inactive-retirement',
             'retain-workers', 'begin-deployment-retirement', 'retire-deployment-next')) {
             throw 'Invalid completed-task proof request.'
         }
@@ -72,9 +72,9 @@ try {
         $stage = $method
         $inactiveMethods = if ($deployment) { @('check', 'close', 'retire-deployment-next') }
             elseif ($scope) { @('check', 'close', 'retire-next', 'retain-workers', 'begin-deployment-retirement') }
-            else { @('check', 'close', 'prepare-inactive-retirement', 'prepare-inactive-retirement-checkpoint') }
+            else { @('check', 'close', 'prepare-inactive-retirement', 'prepare-inactive-retirement-checkpoint', 'begin-inactive-retirement') }
         if (($Inactive -and $method -cnotin $inactiveMethods) -or
-            (-not $Inactive -and $method -cin @('prepare-inactive-retirement', 'prepare-inactive-retirement-checkpoint'))) {
+            (-not $Inactive -and $method -cin @('prepare-inactive-retirement', 'prepare-inactive-retirement-checkpoint', 'begin-inactive-retirement'))) {
             throw 'Request does not match original inactive completion authority.'
         }
         if (($scope -and $method -cnotin @('check', 'close', 'retire-next', 'retain-workers', 'begin-deployment-retirement')) -or
@@ -107,6 +107,16 @@ try {
             $scope = Open-AgentsChatTaskRetirement -Control $Control `
                 -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity
             $null = Assert-AgentsChatTaskCompletionProof $proof
+            Close-AgentsChatTaskCompletionProof $proof
+            $proof = $null
+            $value = Assert-AgentsChatTaskRetirement $scope
+        } elseif ($method -ceq 'begin-inactive-retirement') {
+            # The proof bridge transfers itself to retirement authority; reopening from the same controller is refused.
+            $null = Prepare-AgentsChatTaskRetirementCheckpoint -Context $proof `
+                -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity -Inactive
+            $scope = Open-AgentsChatTaskRetirement -Control $Control `
+                -ControllerPid $ControllerPid -ControllerIdentity $ControllerIdentity -Inactive
+            $null = Assert-AgentsChatInactiveCompletionProof $proof
             Close-AgentsChatTaskCompletionProof $proof
             $proof = $null
             $value = Assert-AgentsChatTaskRetirement $scope

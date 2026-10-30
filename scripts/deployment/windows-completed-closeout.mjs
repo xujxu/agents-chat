@@ -17,7 +17,7 @@ import {
   openWindowsTaskCompletionProof, beginWindowsTaskRetirement, openWindowsTaskRetirement,
   retireNextWindowsTaskFile, beginWindowsDeploymentRetirement, openWindowsDeploymentRetirement,
   retireNextWindowsDeploymentEntry, openWindowsInactiveTaskCompletionProof,
-  prepareWindowsInactiveTaskRetirement, prepareWindowsInactiveTaskRetirementCheckpoint,
+  prepareWindowsInactiveTaskRetirement, beginWindowsInactiveTaskRetirement,
   openWindowsInactiveTaskRetirement, beginWindowsInactiveDeploymentRetirement,
   openWindowsInactiveDeploymentRetirement,
 } from './windows-task-completion-proof.mjs';
@@ -185,11 +185,11 @@ async function closeWindowsDeployment({
               checkProof(scope.observation);
               await checkState();
               await prepareWindowsInactiveTaskRetirement(control, scope, admission, { signal });
-              await prepareWindowsInactiveTaskRetirementCheckpoint(control, scope, admission, { signal });
-              await scope.close();
-              scope = undefined;
+              // The proof bridge transfers itself; a reopened retirement would see its own live creator.
+              scope = await beginWindowsInactiveTaskRetirement(control, scope, admission, { signal });
+            } else {
+              scope = await openWindowsInactiveTaskRetirement({ control, pwsh, admission, signal });
             }
-            scope = await openWindowsInactiveTaskRetirement({ control, pwsh, admission, signal });
             checkProof(scope.observation.checkpoint.intent.intent.completion);
             let task = await scope.check({ signal });
             while (task.retiredFiles < task.checkpoint.intent.intent.files.length) {

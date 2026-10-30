@@ -51,6 +51,10 @@ export async function prepareWindowsInactiveTaskRetirementCheckpoint(control, pr
   return inactiveBindingFor(control, proof, admission).prepareCheckpoint(signal);
 }
 
+export async function beginWindowsInactiveTaskRetirement(control, proof, admission, { signal } = {}) {
+  return inactiveBindingFor(control, proof, admission).begin(signal);
+}
+
 function inactiveBindingFor(control, proof, admission) {
   const binding = inactiveProofs.get(proof);
   if (!binding || binding.control !== control || binding.admission !== admission) {
@@ -234,7 +238,7 @@ async function openWindowsTaskAuthority({ control, pwsh, admission, signal }, mo
             || !candidate || !isDeepStrictEqual(result.manifest.record, candidate)) {
             throw new Error('Deployment retirement handoff differs from verified worker evidence.');
           }
-        } else if (mode === 'task' || method === 'begin-retirement') {
+        } else if (mode === 'task' || method === 'begin-retirement' || method === 'begin-inactive-retirement') {
           result = nextRetirement = captureWindowsTaskRetirementScope(reply.value);
           prepared = result.checkpoint.intent;
           if (retirementObservation) {
@@ -337,6 +341,10 @@ async function openWindowsTaskAuthority({ control, pwsh, admission, signal }, mo
       inactiveProofs.set(proof, { control, admission,
         prepare: requestSignal => prepare('prepare-inactive-retirement', requestSignal),
         prepareCheckpoint: requestSignal => prepare('prepare-inactive-retirement-checkpoint', requestSignal),
+        async begin(requestSignal) {
+          await prepare('begin-inactive-retirement', requestSignal);
+          return retirementContext();
+        },
       });
       return proof;
     }
