@@ -399,7 +399,7 @@ export async function assertSuccessorAbandonedAfterDeath({
       assert.equal(retirer.pid, process.pid);
       assert.equal(retirer.processIdentity, identity);
       assert.ok(Number.isInteger(retirer.bridgePid) && retirer.bridgePid > 0);
-      assert.notEqual(retirer.bridgePid, previous.pid);
+      assert.notEqual(retirer.bridgeIdentity, previous.processIdentity);
       assert.equal(typeof retirer.bridgeIdentity, 'string');
       assert.notEqual(await processIdentity(retirer.bridgePid), retirer.bridgeIdentity);
       assert.deepEqual(intent, {

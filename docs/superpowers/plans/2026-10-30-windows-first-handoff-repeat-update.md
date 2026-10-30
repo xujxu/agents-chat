@@ -112,4 +112,5 @@ working directory beside (not inside) the control used as actor `TEMP`.
   history boundaries and had relied on the removed unsharded default, so it now refused. The `baseline` shard is set
   for the whole live/restore job. Stopped-history run `41051063751` at the same SHA passed every shard except
   `takeover`, which tripped on Windows reusing the dead retirer's PID (`settler.bridgePid` equal to `retirer.pid`).
+  Dead-actor distinctness assertions now compare process identity (PID plus creation time) instead of bare PIDs.
 - Not yet covered: the inactive runner's `publish-receipt` stage (needs a real-application public stopped-history run).

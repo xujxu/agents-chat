@@ -90,7 +90,8 @@ export async function assertDeadRestartRetirement({
   assert.notEqual(identity, retirer.actorIdentity);
   if (!release) {
     assert.notEqual(retirer.actorIdentity, previous.actorIdentity);
-    assert.notEqual(retirer.pid, previous.pid);
+    // Windows reuses dead PIDs, so distinct actors are proven by identity (PID plus creation time).
+    assert.notEqual(retirer.processIdentity, previous.processIdentity);
   }
   assert.notEqual(await processIdentity(retirer.actorPid), retirer.actorIdentity);
   assert.notEqual(await processIdentity(retirer.pid), retirer.processIdentity);
@@ -195,7 +196,6 @@ export async function assertDeadRestartRetirement({
     ['pid', 'processIdentity', 'bridgePid', 'bridgeIdentity'], 'restart lock settler');
   assert.equal(settler.pid, process.pid);
   assert.equal(settler.processIdentity, identity);
-  assert.notEqual(settler.bridgePid, retirer.pid);
   assert.notEqual(settler.bridgeIdentity, retirer.processIdentity);
   assert.deepEqual(record, {
     version: 1, phase: 'stopped-history-handoff-restart-lock-retired',
