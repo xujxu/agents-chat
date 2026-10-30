@@ -101,5 +101,7 @@ working directory beside (not inside) the control used as actor `TEMP`.
 ## Acceptance
 
 - **Accepted** as revised above: stopped-history run `41033112568` (all 16 shards; acceptance job `123998684210` required every shard receipt) and same-SHA Contracts run `41033116421`, both green at `6fb7e7dd` (tag `gate78-production4`).
-- Default-input regression matrix dispatched at the same SHA: run `41036638710`.
+- Default-input regression run `41036638710` at `6fb7e7dd`: `Native Windows first deployment (cold-receipts)` passed
+  eight of its nine cold first-install cases but hit the 2400 s private-test budget during the ninth. The
+  `cold-first-saved-*` cases now run in their own `cold-saved` shard; the full matrix is re-run at the new SHA.
 - Not yet covered: the inactive runner's `publish-receipt` stage (needs a real-application public stopped-history run).

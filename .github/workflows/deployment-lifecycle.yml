@@ -525,7 +525,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [foundations, cold-receipts]
+        shard: [foundations, cold-receipts, cold-saved]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -551,13 +551,18 @@ jobs:
             $tests = @('tests/deployment-windows-first-completion.test.mjs', 'tests/deployment-windows-first-crash.test.mjs', 'tests/deployment-retirement-recovery.test.mjs')
           }
           $coldReceipts = '\((?:cold-receipt-proof|cold-first-[^)]*)\)$'
+          $coldSaved = '\(cold-first-saved-[^)]*\)$'
           $pattern = if ($env:DEPLOYMENT_TEST_FIRST_SHARD -eq 'cold-receipts') {
-            "^(?=.*$coldReceipts)(?:$pattern)"
+            "^(?=.*$coldReceipts)(?!.*$coldSaved)(?:$pattern)"
+          } elseif ($env:DEPLOYMENT_TEST_FIRST_SHARD -eq 'cold-saved') {
+            "^(?=.*$coldSaved)(?:$pattern)"
           } else {
             "^(?!.*$coldReceipts)(?:$pattern)"
           }
           $requiredName = if ($env:DEPLOYMENT_TEST_FIRST_SHARD -eq 'cold-receipts') {
             'Windows first-install abrupt actor death preserves the exact original lease boundary (cold-first-retirement-actor-loss)'
+          } elseif ($env:DEPLOYMENT_TEST_FIRST_SHARD -eq 'cold-saved') {
+            'Windows first-install abrupt actor death preserves the exact original lease boundary (cold-first-saved-closeout)'
           } else {
             'Windows first-install completion preserves original-runtime handoff or settles its exact interrupted instance (deployment-receipt)'
           }
