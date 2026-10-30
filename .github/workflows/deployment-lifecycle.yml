@@ -321,6 +321,7 @@ jobs:
             'PASS: handoff-aware inactive transaction starts one distinct guarded runtime from its operation bundle and settles it on close while copied contexts and duplicate startup remain refused',
             'PASS: handoff-aware inactive startup readiness verifies HTTP providers only through its retained original Job listener while premature and foreign ports remain refused',
             'PASS: handoff-aware inactive transaction completes with accepted state and permanent task policy through its original guarded lease while forged and foreign-digest completion remain refused and same-digest completion replays idempotently',
+            'PASS: handoff-aware completed operation is observable through the read-only inactive completion proof after its lease is released while the active proof remains refused',
             'PASS: actual restart state writer death preserves its written state nine records owner and directory for a distinct observer without authority',
             'PASS: distinct restart committed observer proves eight records dead owner and directory without state lock or task authority',
             'PASS: distinct restart state observer resolves original state only through its ninth record and proves the exact written state without lock or task authority',

@@ -12,7 +12,7 @@
 
 ### Task 1: Test contract
 
-- [x] A forged `complete` before preparation is refused. `completeWindowsTaskActivation` with the inspected providers writes `accepted` (previous phase `activating`) and returns `completed`. The transaction then checks `accepted`, A same-digest `complete` retry succeeds without changing the completion receipt, and a foreign digest is refused.
+- [x] A forged `complete` before preparation is refused. `completeWindowsTaskActivation` with the inspected providers writes `accepted` (previous phase `activating`) and returns `completed`. The transaction then checks `accepted`. A same-digest `complete` retry succeeds without changing the completion receipt, and a foreign digest is refused.
 - [x] `inactive-complete-complete.json` binds the preparation digest and the accepted state digest.
 - [x] Cleanup asserts the completed runtime is still alive, disables and stops the task, waits for the runtime identity to disappear, removes every replacement, startup and completion receipt, and re-registers the archived definition disabled.
 - [x] Receipt `PASS: handoff-aware inactive transaction completes with accepted state and permanent task policy through its original guarded lease while forged and foreign-digest completion remain refused and same-digest completion replays idempotently`.
