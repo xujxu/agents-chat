@@ -562,8 +562,13 @@ export async function assertRestartPreparation({
         });
         assert.equal(completion.status, 'completed');
         assert.equal((await transaction.check()).phase, 'accepted');
-        await assert.rejects(transaction.complete({ stateSha256: completion.stateSha256 }));
-        const completeReceipt = JSON.parse(await readFile(path.join(maintenance, 'inactive-complete-complete.json')));
+        const completeFile = path.join(maintenance, 'inactive-complete-complete.json');
+        const completeBytes = await readFile(completeFile);
+        await transaction.complete({ stateSha256: completion.stateSha256 });
+        assert.deepEqual(await readFile(completeFile), completeBytes);
+        await assert.rejects(transaction.complete({ stateSha256: '1'.repeat(64) }));
+        assert.deepEqual(await readFile(completeFile), completeBytes);
+        const completeReceipt = JSON.parse(completeBytes);
         assert.equal(completeReceipt.preparationSha256, preparation.sha256);
         assert.equal(completeReceipt.stateSha256, completion.stateSha256);
         completedRuntime = true;
@@ -685,7 +690,7 @@ export async function assertRestartPreparation({
     console.log('PASS: handoff-aware inactive transaction replaces the inhibited task with its operation bundle and records the proved original definition while copied contexts and duplicate replacement remain refused');
     console.log('PASS: handoff-aware inactive transaction starts one distinct guarded runtime from its operation bundle and settles it on close while copied contexts and duplicate startup remain refused');
     console.log('PASS: handoff-aware inactive startup readiness verifies HTTP providers only through its retained original Job listener while premature and foreign ports remain refused');
-    console.log('PASS: handoff-aware inactive transaction completes with accepted state and permanent task policy through its original guarded lease while forged and duplicate completion remain refused');
+    console.log('PASS: handoff-aware inactive transaction completes with accepted state and permanent task policy through its original guarded lease while forged and foreign-digest completion remain refused and same-digest completion replays idempotently');
   }
   console.log(releaseRestart && writeState
     ? 'PASS: native live restart owner releases only its exact committed lock after its acknowledged state write while nine records and written state remain exact without authority'
