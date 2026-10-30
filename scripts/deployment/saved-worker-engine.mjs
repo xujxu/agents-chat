@@ -74,6 +74,7 @@ export const workerEngineFiles = Object.freeze([
   'windows-stopped-history-handoff-successor-abandoned-observation.ps1', 'windows-stopped-history-handoff-successor-abandonment.ps1',
   'windows-stopped-history-handoff-successor-observation.ps1', 'windows-stopped-history-handoff-successor-publication.ps1',
   'windows-stopped-history-handoff-successor.ps1',
+  'windows-stopped-history-handoff-commit-controller.ps1', 'windows-stopped-history-update-admission.mjs',
   'windows-cold-terminal-state.ps1',
   'snapshot.mjs', 'snapshot-files.mjs', 'snapshot-copy.mjs', 'snapshot-scope.mjs',
   'snapshot-external.mjs', 'snapshot-rotation.mjs', 'snapshot-git.mjs',
