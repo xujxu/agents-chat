@@ -218,7 +218,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        history_shard: [baseline, successor, restart, commitment, state, release, takeover, completion, postwrite, postintent, firstwrite, firstadmit, firstroute]
+        history_shard: [baseline, successor, restart, commitment, state, release, takeover, completion, postwrite, postintent, firstwrite, firstadmit, firstroute, firstupdate]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -263,7 +263,7 @@ jobs:
       - name: Require every actual stopped-history receipt across all native shards
         shell: pwsh
         run: |
-          $historyOutput = foreach ($shard in @('baseline', 'successor', 'restart', 'commitment', 'state', 'release', 'takeover', 'completion', 'postwrite', 'postintent', 'firstwrite', 'firstadmit', 'firstroute')) {
+          $historyOutput = foreach ($shard in @('baseline', 'successor', 'restart', 'commitment', 'state', 'release', 'takeover', 'completion', 'postwrite', 'postintent', 'firstwrite', 'firstadmit', 'firstroute', 'firstupdate')) {
             $file = "history-receipts/history-$shard.json"
             if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing stopped-history shard: $shard" }
             Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
@@ -290,6 +290,7 @@ jobs:
             'PASS: actual first-attempt state writer death preserves the exact written preflight transition for a distinct observer without lock runtime or admission authority',
             'PASS: handoff-aware inactive admission publishes only the exact live first-attempt owner written preflight binding through the shared native verifier while copied foreign ordinary and duplicate admission remain refused',
             'PASS: production stopped-history update admission composes preparation commit state intent preflight write and handoff-aware admission for one live owner while lock release with handoff evidence remains refused',
+            'PASS: public update routes archived stopped history through the first-attempt handoff into the inactive runner which refuses an unresolved target before downtime while retaining the handoff lock and admission and deploy stays refused',
             'PASS: native dead committed handoff observation pins exact lock and original archive under a distinct actor without authority',
             'PASS: native lock retirement intent binds exact dead committed lock without deleting evidence or granting continuation',
             'PASS: actual lock retirement intent publisher death preserves exact evidence for a distinct third actor without cleanup authority',

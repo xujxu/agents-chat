@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { readFile, readdir, writeFile, unlink, lstat, rename, mkdir, rmdir } from 'node:fs/promises';
+import { readFile, readdir, writeFile, unlink, lstat, rename, mkdir, rmdir, rm, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
@@ -583,10 +583,12 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     (mode.startsWith('resume-') || retirementCrash || ownerRetirementCrash || directoryRetirementCrash || ownerRetirementCheck || settlementCrash || settlementCheck || successorCrash || successorCheck || successorAbandonedCrash || successorAbandonedCheck || restartCrash || restartDirectoryCrash || restartOwnerCrash || restartCommittedCrash || restartStateCrash || restartReleasedCrash || restartRetirementCrash || restartReleaseIntentCrash));
   if (['crash-history', 'resume-history', 'crash-finalized-history', 'resume-finalized-history',
     'resume-history-saved', 'crash-completed-history', 'resume-completed-history',
-    'resume-lock-state-admitted-history', 'resume-lock-state-routed-history', 'crash-prepared-history', 'resume-prepared-history',
+    'resume-lock-state-admitted-history', 'resume-lock-state-routed-history', 'resume-lock-state-updated-history',
+    'crash-prepared-history', 'resume-prepared-history',
     'crash-abandoned-history', 'resume-abandoned-history'].includes(mode) || lockStage) {
     const finalizedResume = ['resume-finalized-history', 'resume-history-saved',
       'resume-completed-history', 'resume-lock-state-admitted-history', 'resume-lock-state-routed-history',
+      'resume-lock-state-updated-history',
       'resume-prepared-history', 'crash-abandoned-history', 'resume-abandoned-history'].includes(mode) || lockResume;
     if (!finalizedResume) await retainOriginalRuntimeAbsence();
     const intentFile = path.join(control, 'inactive-rollback-history-intent.json');
@@ -596,7 +598,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     const intent = JSON.parse(originalIntent);
     const completionFile = path.join(control, `retired-${intent.operationId}-inactive-rollback-history-complete.json`);
     const retainedCompletion = ['resume-completed-history', 'resume-lock-state-admitted-history',
-      'resume-lock-state-routed-history', 'resume-prepared-history',
+      'resume-lock-state-routed-history', 'resume-lock-state-updated-history', 'resume-prepared-history',
       'crash-abandoned-history', 'resume-abandoned-history'].includes(mode) || lockResume ? {
       bytes: await readFile(completionFile), identity: await lstat(completionFile, { bigint: true }),
     } : undefined;
@@ -1312,8 +1314,9 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     // The first-attempt admission writes the shared original state, so it reuses this path only as its shard's last boundary.
     const firstAdmitResume = mode === 'resume-lock-state-admitted-history';
     const firstRouteResume = mode === 'resume-lock-state-routed-history';
+    const firstUpdateResume = mode === 'resume-lock-state-updated-history';
     let firstStateAdmitted = false;
-    if (mode === 'resume-completed-history' || firstAdmitResume || firstRouteResume) {
+    if (mode === 'resume-completed-history' || firstAdmitResume || firstRouteResume || firstUpdateResume) {
       const attemptId = randomUUID();
       const operationId = randomUUID();
       const token = randomUUID();
@@ -1761,6 +1764,63 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
         await writeFile(stateFile, state);
         firstStateAdmitted = true;
         console.log('PASS: production stopped-history update admission composes preparation commit state intent preflight write and handoff-aware admission for one live owner while lock release with handoff evidence remains refused');
+      }
+      if (firstUpdateResume) {
+        // The public update command recognizes archived stopped history and routes it through the first-attempt
+        // handoff into the inactive runner; an unresolvable target refuses before downtime and keeps the handoff.
+        const { runWindowsDeploymentCommand } = await load('windows-deployment-command.mjs');
+        const { releaseLock, reconcileInterruptedOperation } = await load('state.mjs');
+        const stateFile = path.join(control, 'state.json');
+        const before = (await readdir(control)).sort();
+        const where = await promisify(execFile)('where.exe', ['git.exe'], { timeout: 30000 });
+        const command = {
+          project: prepared.project, control, taskName: prepared.observation.taskName, pwsh, admission,
+          node: process.execPath, git: await realpath(where.stdout.split(/\r?\n/)[0].trim()),
+          npmCli: await realpath(path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js')),
+        };
+        const args = ['--revision', 'f'.repeat(40)];
+        await assert.rejects(runWindowsDeploymentCommand({ ...command, operation: 'deploy', args }),
+          { code: 'DEPLOYMENT_RECOVERY_REQUIRED' });
+        assert.deepEqual((await readdir(control)).sort(), before);
+        assert.deepEqual(await readFile(stateFile), state);
+        const routed = await runWindowsDeploymentCommand({ ...command, operation: 'update', args }).then(
+          () => assert.fail('An unresolvable routed update must refuse before downtime.'), error => error);
+        if (routed.handoffRetained !== true) console.error(routed);
+        assert.equal(routed.handoffRetained, true);
+        assert.notEqual(routed.code, 'DEPLOYMENT_RECOVERY_REQUIRED');
+        const ownerBytes = await readFile(path.join(control, 'lock', 'owner.json'));
+        const owner = JSON.parse(ownerBytes);
+        assert.equal(routed.operationId, owner.operationId);
+        assert.equal(owner.pid, process.pid);
+        assert.equal(owner.project, prepared.project);
+        const written = JSON.parse(await readFile(stateFile));
+        assert.equal(written.operationId, owner.operationId);
+        assert.equal(written.operation, 'update');
+        assert.equal(written.phase, 'preflight');
+        assert.equal(written.priorRuntime, 'stopped');
+        const names = await readdir(control);
+        assert.ok(names.includes('task-maintenance'));
+        assert.deepEqual(await readdir(path.join(control, 'task-maintenance')), ['admission.json']);
+        const attempts = names.filter(name => /^inactive-handoff-.+-(prepared|committed|state-intent)\.json$/.test(name));
+        assert.equal(attempts.length, 3);
+        await assert.rejects(releaseLock(control, owner, { pwsh }));
+        assert.deepEqual(await readFile(path.join(control, 'lock', 'owner.json')), ownerBytes);
+        const reconciled = await reconcileInterruptedOperation(control);
+        assert.equal(reconciled.status, 'blocked');
+        assert.deepEqual(reconciled.handoff.attempts.map(attempt => attempt.status), ['state-transition']);
+        // The in-flight handoff is no longer archived history; another public update must not route.
+        const retained = (await readdir(control)).sort();
+        const writtenBytes = await readFile(stateFile);
+        await assert.rejects(runWindowsDeploymentCommand({ ...command, operation: 'update', args }),
+          { code: 'DEPLOYMENT_RECOVERY_REQUIRED' });
+        assert.deepEqual((await readdir(control)).sort(), retained);
+        assert.deepEqual(await readFile(stateFile), writtenBytes);
+        for (const name of retained) {
+          if (!before.includes(name)) await rm(path.join(control, name), { recursive: true });
+        }
+        await writeFile(stateFile, state);
+        firstStateAdmitted = true;
+        console.log('PASS: public update routes archived stopped history through the first-attempt handoff into the inactive runner which refuses an unresolved target before downtime while retaining the handoff lock and admission and deploy stays refused');
       }
     }
     if (retainedCompletion) {
