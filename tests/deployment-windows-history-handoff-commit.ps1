@@ -12,7 +12,8 @@ param(
     [Parameter(Mandatory)][int]$PreparedBytes,
     [Parameter(Mandatory)][string]$PreparedSha256,
     [ValidateSet('Directory', 'Owner', 'Committed', 'StateWritten')][string]$HoldAt,
-    [switch]$PrepareState
+    [switch]$PrepareState,
+    [switch]$WriteState
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -116,8 +117,11 @@ try {
             $null = Write-AgentsChatStoppedHistoryHandoffRestartState $writer $ControllerPid $ControllerIdentity
         } catch { $refusals.write = $_.Exception.Message }
         if ($refusals.Count -ne 5) { throw 'First-attempt state intent accepted a duplicate or write authority.' }
-        [Console]::Out.WriteLine((@{ committed=$published; stateIntent=$intent; refusals=$refusals } |
-            ConvertTo-Json -Depth 6 -Compress))
+        $output = @{ committed=$published; stateIntent=$intent; refusals=$refusals }
+        if ($WriteState) {
+            $output.state = Write-AgentsChatStoppedHistoryHandoffState $scope $ControllerPid $ControllerIdentity
+        }
+        [Console]::Out.WriteLine(($output | ConvertTo-Json -Depth 6 -Compress))
     }
 } catch {
     $failure = $_.Exception

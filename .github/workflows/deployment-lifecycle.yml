@@ -288,6 +288,7 @@ jobs:
             'PASS: actual handoff owner publisher death preserves exact prepared owner evidence without committed authority',
             'PASS: actual committed handoff publisher death preserves exact receipt and blocks ordinary continuation',
             'PASS: actual first-attempt state writer death preserves the exact written preflight transition for a distinct observer without lock runtime or admission authority',
+            'PASS: handoff-aware inactive admission publishes only the exact live first-attempt owner written preflight binding through the shared native verifier while copied foreign ordinary and duplicate admission remain refused',
             'PASS: native dead committed handoff observation pins exact lock and original archive under a distinct actor without authority',
             'PASS: native lock retirement intent binds exact dead committed lock without deleting evidence or granting continuation',
             'PASS: actual lock retirement intent publisher death preserves exact evidence for a distinct third actor without cleanup authority',
