@@ -19,8 +19,15 @@
 
 ### Task 2: Production
 
-- [ ] Only if Actions shows a gap.
+- [x] None required.
 
 ### Task 3: Acceptance
 
-- [ ] Stopped-history run green on all 10 shards with 72 receipts, plus a same-SHA Contracts run.
+- [x] Stopped-history run green on all 10 shards with 72 receipts, plus a same-SHA Contracts run.
+
+## Acceptance (2026-10-30)
+
+Test-only change; no production change was required because native startup derives its guarded definition from the replacement definition.
+
+- Stopped-history run `40987533377` at `1b7c8115` (`gate66-contract2`) succeeded on all ten shards: commitment `123841942778`, completion `123841942898`, successor `123841942930`, release `123841942943`, restart `123841942972`, takeover `123841943036`, state `123841943062`, baseline `123841943093`, postwrite `123841943136` and postintent `123841943267`. The aggregate job (`123849750005`) verified all 72 required receipts, including gates 64, 65 and 66.
+- Same-SHA Contracts run `40990019890` / Contracts (windows-2022) `123849897262` succeeded.
