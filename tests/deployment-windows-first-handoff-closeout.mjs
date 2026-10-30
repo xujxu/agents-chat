@@ -67,6 +67,7 @@ export async function acceptFirstHandoffUpdate({ source, control, pwsh, admissio
     });
     const bundle = await prepareWindowsInactiveRuntimeBundle({
       scope: routed.scope, control, lock: owner, node: process.execPath, pwsh,
+      admission: routed.admission, sha256: routed.sha256,
     });
     const written = JSON.parse(await readFile(stateFile));
     assert.equal(written.operation, 'update');

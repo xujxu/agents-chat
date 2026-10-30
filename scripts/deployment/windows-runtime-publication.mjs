@@ -1,3 +1,4 @@
+import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { processIdentity } from './process-identity.mjs';
@@ -9,7 +10,7 @@ import { windowsControllerTransport } from './windows-controller-transport.mjs';
 import { journalUncertain } from './evidence-journal.mjs';
 import { inspectWindowsSnapshotRuntime } from './windows-snapshot-runtime.mjs';
 import { inspectWindowsRestoreTaskPolicy } from './windows-restore-task-policy.mjs';
-import { windowsInactiveTaskHandoffEntries } from './windows-managed-task.mjs';
+import { windowsInactiveTaskHandoffEntries, assertWindowsInactiveTaskAdmissionBinding } from './windows-managed-task.mjs';
 
 const script = fileURLToPath(new URL('./windows-runtime-publication.ps1', import.meta.url));
 function refused(cause) {
@@ -30,7 +31,9 @@ export function prepareWindowsInactiveRuntimeBundle(options) {
   return prepareRuntimeBundle(options, false, true);
 }
 
-async function prepareRuntimeBundle({ scope, control, lock: suppliedLock, node, pwsh, signal, backup, snapshot }, restore, inactive = false) {
+async function prepareRuntimeBundle({
+  scope, control, lock: suppliedLock, node, pwsh, signal, backup, snapshot, admission, sha256: admissionSha256,
+}, restore, inactive = false) {
   signal?.throwIfAborted();
   try {
     const inspect = inactive ? inspectWindowsInactiveWorkerScope : inspectWindowsWorkerScope;
@@ -65,9 +68,25 @@ async function prepareRuntimeBundle({ scope, control, lock: suppliedLock, node, 
       ? archived.files.find(file => file.name === 'configuration.json').file : observation.configuration;
     const sha256 = archived ? archived.task.configurationSha256 : observation.configurationSha256;
     const handoffEntries = inactive ? await windowsInactiveTaskHandoffEntries(scope, { control: root, signal }) : null;
+    // A routed handoff update publishes its inactive admission before preflight; only that exact retained
+    // admission, alone in task maintenance, may accompany the bundle publication.
+    const admitted = admission !== undefined;
+    if (admitted) {
+      if (!handoffEntries || admission !== path.join(control, 'task-maintenance', 'admission.json')) {
+        throw new Error('Only a handoff-aware inactive admission may accompany runtime publication.');
+      }
+      handoffEntries.add('task-maintenance');
+    }
     const authority = async () => {
       signal?.throwIfAborted();
       await requireNoServiceMaintenance(root, { allowEntries: handoffEntries });
+      if (admitted) {
+        await assertWindowsInactiveTaskAdmissionBinding({ scope, control, lock, admission, sha256: admissionSha256, signal });
+        const members = await readdir(path.join(control, 'task-maintenance'));
+        if (members.length !== 1 || members[0] !== 'admission.json') {
+          throw new Error('Runtime publication requires task maintenance to hold only its inactive admission.');
+        }
+      }
       await check({ signal });
       await archived?.check({ signal });
       if (!(await readWorkerFile(stateFile, 65536, { privateMode: true })).equals(stateBytes)) {

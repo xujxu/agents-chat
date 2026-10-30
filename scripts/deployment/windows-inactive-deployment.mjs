@@ -102,7 +102,9 @@ export async function runWindowsInactiveDeployment({
       if (state !== written) throw journalUncertain(new Error('Inactive preflight was already recorded.'));
       await runStage('prepare-task', async stageSignal => {
         await compatibility.check({ signal: stageSignal });
-        bundle = await prepareWindowsInactiveRuntimeBundle({ scope, control, lock, node, pwsh, signal: stageSignal });
+        bundle = await prepareWindowsInactiveRuntimeBundle({
+          scope, control, lock, node, pwsh, admission, sha256, signal: stageSignal,
+        });
         await compatibility.configuration.checkFiles({ signal: stageSignal });
       }, { timeoutMs, signal });
       return;
