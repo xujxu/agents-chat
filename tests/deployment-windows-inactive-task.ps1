@@ -482,9 +482,10 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     $historyBoundaries = @('history', 'finalized-history', 'saved-history', 'completed-history', 'prepared-history', 'abandoned-history',
                         'lock-directory-history', 'lock-owner-history', 'lock-committed-history', 'lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history', 'restart-directory-history', 'restart-directory-dead-history', 'restart-owner-history', 'restart-owner-dead-history', 'restart-committed-history', 'restart-committed-dead-history', 'restart-state-intent-history', 'restart-state-written-history', 'restart-state-dead-history', 'restart-released-history', 'restart-released-dead-history', 'restart-retirement-dead-history', 'restart-release-intent-dead-history', 'restart-state-released-history', 'restart-state-released-dead-history', 'restart-state-release-intent-dead-history', 'lock-state-written-history', 'lock-state-admitted-history',
                         'lock-state-routed-history', 'lock-state-updated-history', 'lock-state-closed-history', 'lock-state-repeated-history')
+                    # Actual state writes replace the shared original state inode, so the boundaries cannot run in one fixture.
                     $historyShard = $env:DEPLOYMENT_TEST_HISTORY_SHARD
-                    if ([string]::IsNullOrEmpty($historyShard)) { $historyShard = 'all' }
-                    if ($historyShard -cnotin @('all', 'baseline', 'successor', 'restart', 'commitment', 'state', 'release', 'takeover', 'completion', 'postwrite', 'postintent', 'firstwrite', 'firstadmit', 'firstroute', 'firstupdate', 'firstcloseout', 'firstrepeat')) { throw 'Unknown stopped-history test shard.' }
+                    if ([string]::IsNullOrEmpty($historyShard)) { throw 'Stopped-history boundaries require one explicit DEPLOYMENT_TEST_HISTORY_SHARD.' }
+                    if ($historyShard -cnotin @('baseline', 'successor', 'restart', 'commitment', 'state', 'release', 'takeover', 'completion', 'postwrite', 'postintent', 'firstwrite', 'firstadmit', 'firstroute', 'firstupdate', 'firstcloseout', 'firstrepeat')) { throw 'Unknown stopped-history test shard.' }
                     $successorIndex = [Array]::IndexOf($historyBoundaries, 'successor-prepared-history')
                     $restartIndex = [Array]::IndexOf($historyBoundaries, 'restart-directory-history')
                     $commitmentIndex = [Array]::IndexOf($historyBoundaries, 'restart-committed-history')
@@ -514,7 +515,6 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                         throw 'Stopped-history shard boundary is missing.'
                     }
                     $selectedBoundaries = switch -CaseSensitive ($historyShard) {
-                        'all' { $historyBoundaries }
                         'baseline' { $historyBoundaries[0..($successorIndex - 1)] }
                         'successor' { $historyBoundaries[$successorIndex..($restartIndex - 1)] }
                         'restart' { $historyBoundaries[$restartIndex..($commitmentIndex - 1)] }

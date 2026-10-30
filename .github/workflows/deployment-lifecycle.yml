@@ -415,6 +415,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Public Windows command contracts failed.' }
       - name: Verify stopped rollback interruption and actual cleanup
         shell: pwsh
+        env:
+          # The sharded stopped-history job covers the later boundaries; each shard needs a fresh fixture.
+          DEPLOYMENT_TEST_HISTORY_SHARD: baseline
         run: |
           $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
           foreach ($step in @('task-restore-requested', 'task-registered', 'task-restored')) {

@@ -104,4 +104,8 @@ working directory beside (not inside) the control used as actor `TEMP`.
 - Default-input regression run `41036638710` at `6fb7e7dd`: `Native Windows first deployment (cold-receipts)` passed
   eight of its nine cold first-install cases but hit the 2400 s private-test budget during the ninth. The
   `cold-first-saved-*` cases now run in their own `cold-saved` shard; the full matrix is re-run at the new SHA.
+- Regression run `41043645755` at `8d7992c8`: the live jobs' unsharded stopped rollback step ran every history
+  boundary in one fixture and failed after the first actual state write ("Original retirement evidence was replaced").
+  Run `41036638710` had already failed `restore cancellation` the same way. The live step now runs only the `baseline`
+  shard, the harness refuses a missing shard, and the sharded stopped-history job is re-run at the same SHA.
 - Not yet covered: the inactive runner's `publish-receipt` stage (needs a real-application public stopped-history run).
