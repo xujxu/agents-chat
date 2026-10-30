@@ -17,9 +17,10 @@
 | 72 | First-attempt state-transition intent for the exact live committed owner | first-attempt state write |
 | 73 | First-attempt state write plus dead-writer takeover | first-attempt handoff-aware admission |
 | 74 | Handoff-aware admission accepts the first-attempt written preflight (shared verifier) | public routing |
-| 75 | Public `update` routes archived stopped history through the handoff (prepare → lock → commit → intent → write → admission → existing inactive transaction) | lock release with handoff evidence present |
-| 76 | Deployment retirement retires handoff evidence (`inactive-handoff-*`), then the worker evidence and the lock; closeout routing in `closeWindowsDeployment` for inactive accepted updates | — |
-| 77 | Actual application repeat-update and rollback end to end with real workers; same-SHA Linux and Windows matrix; user docs | — |
+| 75 | Production first-attempt admission composition `admitWindowsStoppedHistoryUpdate` (prepare → lock → commit → intent → write → handoff-aware admission) through a one-shot native commit controller | lock release with handoff evidence present; public command routing |
+| 76 | Public `update` routes archived stopped history through gate 75 into the existing inactive transaction (inactive runner beside `runWindowsLiveDeployment`) | lock release with handoff evidence present |
+| 77 | Deployment retirement retires handoff evidence (`inactive-handoff-*`), then the worker evidence and the lock; closeout routing in `closeWindowsDeployment` for inactive accepted updates | — |
+| 78 | Actual application repeat-update and rollback end to end with real workers; same-SHA Linux and Windows matrix; user docs | — |
 
 ### Task 1 (gate 72): First-attempt state intent contract
 
@@ -49,6 +50,6 @@
     - Stopped-history run `41008918518` passed on all ten shards. The acceptance job `123918523535` required all 78 receipts.
     - Same-SHA Contracts run `41008905588` passed. The saved-engine helper order is pinned in both lists.
 
-### Tasks 3–7 (gates 73–77)
+### Tasks 3–8 (gates 73–78)
 
 Each gate gets its own plan file, written when its predecessor is accepted. That way the contract reflects the code as it actually landed. Each follows the same steps: contract first (expect red) → shared production change → green stopped-history run → same-SHA Contracts → acceptance.

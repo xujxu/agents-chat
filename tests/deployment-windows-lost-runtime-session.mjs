@@ -583,11 +583,11 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     (mode.startsWith('resume-') || retirementCrash || ownerRetirementCrash || directoryRetirementCrash || ownerRetirementCheck || settlementCrash || settlementCheck || successorCrash || successorCheck || successorAbandonedCrash || successorAbandonedCheck || restartCrash || restartDirectoryCrash || restartOwnerCrash || restartCommittedCrash || restartStateCrash || restartReleasedCrash || restartRetirementCrash || restartReleaseIntentCrash));
   if (['crash-history', 'resume-history', 'crash-finalized-history', 'resume-finalized-history',
     'resume-history-saved', 'crash-completed-history', 'resume-completed-history',
-    'resume-lock-state-admitted-history', 'crash-prepared-history', 'resume-prepared-history',
+    'resume-lock-state-admitted-history', 'resume-lock-state-routed-history', 'crash-prepared-history', 'resume-prepared-history',
     'crash-abandoned-history', 'resume-abandoned-history'].includes(mode) || lockStage) {
     const finalizedResume = ['resume-finalized-history', 'resume-history-saved',
-      'resume-completed-history', 'resume-lock-state-admitted-history', 'resume-prepared-history',
-      'crash-abandoned-history', 'resume-abandoned-history'].includes(mode) || lockResume;
+      'resume-completed-history', 'resume-lock-state-admitted-history', 'resume-lock-state-routed-history',
+      'resume-prepared-history', 'crash-abandoned-history', 'resume-abandoned-history'].includes(mode) || lockResume;
     if (!finalizedResume) await retainOriginalRuntimeAbsence();
     const intentFile = path.join(control, 'inactive-rollback-history-intent.json');
     const originalIntent = await readFile(finalizedResume
@@ -595,7 +595,8 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       : intentFile);
     const intent = JSON.parse(originalIntent);
     const completionFile = path.join(control, `retired-${intent.operationId}-inactive-rollback-history-complete.json`);
-    const retainedCompletion = ['resume-completed-history', 'resume-lock-state-admitted-history', 'resume-prepared-history',
+    const retainedCompletion = ['resume-completed-history', 'resume-lock-state-admitted-history',
+      'resume-lock-state-routed-history', 'resume-prepared-history',
       'crash-abandoned-history', 'resume-abandoned-history'].includes(mode) || lockResume ? {
       bytes: await readFile(completionFile), identity: await lstat(completionFile, { bigint: true }),
     } : undefined;
@@ -1310,8 +1311,9 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     }
     // The first-attempt admission writes the shared original state, so it reuses this path only as its shard's last boundary.
     const firstAdmitResume = mode === 'resume-lock-state-admitted-history';
+    const firstRouteResume = mode === 'resume-lock-state-routed-history';
     let firstStateAdmitted = false;
-    if (mode === 'resume-completed-history' || firstAdmitResume) {
+    if (mode === 'resume-completed-history' || firstAdmitResume || firstRouteResume) {
       const attemptId = randomUUID();
       const operationId = randomUUID();
       const token = randomUUID();
@@ -1681,6 +1683,85 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       await unlink(retainedFile);
       console.log('PASS: production retained native preparation bridge publishes descriptor-only evidence under original admission without lock authority');
       console.log('PASS: controlled preparation reopen retains exact evidence for its original live owner and rejects a fresh actor');
+      if (firstRouteResume) {
+        // One production call composes the whole first-attempt handoff for a fresh update of archived stopped history.
+        const { admitWindowsStoppedHistoryUpdate } = await load('windows-stopped-history-update-admission.mjs');
+        const { createWindowsInactiveTaskAdmissionRecord } = await load('windows-inactive-task-admission.mjs');
+        const { assertWindowsInactiveTaskAdmissionBinding } = await load('windows-managed-task.mjs');
+        const { validateState, releaseLock, reconcileInterruptedOperation } = await load('state.mjs');
+        const stateFile = path.join(control, 'state.json');
+        const maintenance = path.join(control, 'task-maintenance');
+        const routeInput = { project: prepared.project, control, taskName: prepared.observation.taskName, pwsh, admission };
+        const untouched = async () => {
+          const names = await readdir(control);
+          assert.equal(names.some(name => name.toLowerCase().startsWith('inactive-handoff-')), false);
+          assert.equal(names.includes('lock'), false);
+          assert.equal(names.includes('task-maintenance'), false);
+          assert.deepEqual(await readFile(stateFile), state);
+        };
+        const aborted = new AbortController();
+        aborted.abort(new Error('Route fixture cancelled'));
+        for (const input of [
+          { ...routeInput, admission: { ...admission } },
+          { ...routeInput, signal: aborted.signal },
+          { ...routeInput, project: path.join(prepared.project, 'foreign') },
+        ]) {
+          await assert.rejects(admitWindowsStoppedHistoryUpdate(input));
+          await untouched();
+        }
+        const routed = await admitWindowsStoppedHistoryUpdate(routeInput);
+        let routedHandoff;
+        try {
+          assert.deepEqual(Object.keys(routed).sort(), ['admission', 'handoff', 'lock', 'scope', 'sha256']);
+          const ownerBytes = await readFile(path.join(control, 'lock', 'owner.json'));
+          assert.deepEqual(routed.lock, JSON.parse(ownerBytes));
+          assert.equal(routed.lock.pid, process.pid);
+          assert.equal(routed.lock.processIdentity, await processIdentity(process.pid));
+          assert.equal(routed.lock.project, prepared.project);
+          routedHandoff = routed.handoff;
+          assert.deepEqual(Object.keys(routedHandoff).sort(), ['attemptId', 'committed', 'prepared', 'state', 'stateIntent']);
+          for (const [kind, descriptor] of [['prepared', routedHandoff.prepared], ['committed', routedHandoff.committed],
+            ['state-intent', routedHandoff.stateIntent]]) {
+            assert.equal(descriptor.path, `inactive-handoff-${routedHandoff.attemptId}-${kind}.json`);
+            const bytes = await readFile(path.join(control, descriptor.path));
+            assert.equal(createHash('sha256').update(bytes).digest('hex'), descriptor.sha256);
+          }
+          const writtenBytes = await readFile(stateFile);
+          assert.equal(createHash('sha256').update(writtenBytes).digest('hex'), routedHandoff.state.sha256);
+          const routedIntent = JSON.parse(await readFile(path.join(control, routedHandoff.stateIntent.path)));
+          const written = JSON.parse(writtenBytes);
+          assert.deepEqual(written, routedIntent.nextState);
+          assert.equal(written.operationId, routed.lock.operationId);
+          assert.equal(written.phase, 'preflight');
+          assert.equal(written.priorRuntime, 'stopped');
+          assert.equal(routed.admission, path.join(maintenance, 'admission.json'));
+          const admissionBytes = await readFile(routed.admission);
+          assert.equal(createHash('sha256').update(admissionBytes).digest('hex'), routed.sha256);
+          assert.deepEqual(JSON.parse(admissionBytes), createWindowsInactiveTaskAdmissionRecord({
+            observation: prepared.observation, lock: routed.lock, state: written,
+          }));
+          const binding = await assertWindowsInactiveTaskAdmissionBinding({
+            scope: routed.scope, control, lock: routed.lock, admission: routed.admission, sha256: routed.sha256,
+          });
+          assert.deepEqual(binding.state, { ...validateState(written) });
+          await assert.rejects(releaseLock(control, routed.lock, { pwsh }));
+          assert.deepEqual(await readFile(path.join(control, 'lock', 'owner.json')), ownerBytes);
+          const reconciled = await reconcileInterruptedOperation(control);
+          assert.equal(reconciled.status, 'blocked');
+          assert.deepEqual(reconciled.handoff.attempts.map(attempt => [attempt.attemptId, attempt.status]),
+            [[routedHandoff.attemptId, 'state-transition']]);
+        } finally { await routed.scope.close(); }
+        await unlink(routed.admission);
+        await rmdir(maintenance);
+        for (const descriptor of [routedHandoff.stateIntent, routedHandoff.committed, routedHandoff.prepared]) {
+          await unlink(path.join(control, descriptor.path));
+        }
+        await unlink(path.join(control, 'lock', 'owner.json'));
+        await rmdir(path.join(control, 'lock'));
+        await writeFile(stateFile, state);
+        firstStateAdmitted = true;
+        console.log('PASS: production stopped-history update admission composes preparation commit state intent preflight write and handoff-aware admission for one live owner while lock release with handoff evidence remains refused');
+      }
     }
     if (retainedCompletion) {
       assert.deepEqual(completionBytes, retainedCompletion.bytes);
