@@ -481,10 +481,10 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     $historyStateHash = (Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash
                     $historyBoundaries = @('history', 'finalized-history', 'saved-history', 'completed-history', 'prepared-history', 'abandoned-history',
                         'lock-directory-history', 'lock-owner-history', 'lock-committed-history', 'lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history', 'restart-directory-history', 'restart-directory-dead-history', 'restart-owner-history', 'restart-owner-dead-history', 'restart-committed-history', 'restart-committed-dead-history', 'restart-state-intent-history', 'restart-state-written-history', 'restart-state-dead-history', 'restart-released-history', 'restart-released-dead-history', 'restart-retirement-dead-history', 'restart-release-intent-dead-history', 'restart-state-released-history', 'restart-state-released-dead-history', 'restart-state-release-intent-dead-history', 'lock-state-written-history', 'lock-state-admitted-history',
-                        'lock-state-routed-history', 'lock-state-updated-history')
+                        'lock-state-routed-history', 'lock-state-updated-history', 'lock-state-closed-history')
                     $historyShard = $env:DEPLOYMENT_TEST_HISTORY_SHARD
                     if ([string]::IsNullOrEmpty($historyShard)) { $historyShard = 'all' }
-                    if ($historyShard -cnotin @('all', 'baseline', 'successor', 'restart', 'commitment', 'state', 'release', 'takeover', 'completion', 'postwrite', 'postintent', 'firstwrite', 'firstadmit', 'firstroute', 'firstupdate')) { throw 'Unknown stopped-history test shard.' }
+                    if ($historyShard -cnotin @('all', 'baseline', 'successor', 'restart', 'commitment', 'state', 'release', 'takeover', 'completion', 'postwrite', 'postintent', 'firstwrite', 'firstadmit', 'firstroute', 'firstupdate', 'firstcloseout')) { throw 'Unknown stopped-history test shard.' }
                     $successorIndex = [Array]::IndexOf($historyBoundaries, 'successor-prepared-history')
                     $restartIndex = [Array]::IndexOf($historyBoundaries, 'restart-directory-history')
                     $commitmentIndex = [Array]::IndexOf($historyBoundaries, 'restart-committed-history')
@@ -499,13 +499,14 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                     $firstadmitIndex = [Array]::IndexOf($historyBoundaries, 'lock-state-admitted-history')
                     $firstrouteIndex = [Array]::IndexOf($historyBoundaries, 'lock-state-routed-history')
                     $firstupdateIndex = [Array]::IndexOf($historyBoundaries, 'lock-state-updated-history')
+                    $firstcloseoutIndex = [Array]::IndexOf($historyBoundaries, 'lock-state-closed-history')
                     if ($successorIndex -le 0 -or $restartIndex -le $successorIndex -or $commitmentIndex -le $restartIndex -or
-                        $stateIndex -ne $historyBoundaries.Count - 12 -or $releaseIndex -ne $historyBoundaries.Count - 11 -or
-                        $takeoverIndex -ne $historyBoundaries.Count - 8 -or
-                        $completionIndex -ne $historyBoundaries.Count - 7 -or $postwriteIndex -ne $historyBoundaries.Count - 6 -or
-                        $postintentIndex -ne $historyBoundaries.Count - 5 -or $firstwriteIndex -ne $historyBoundaries.Count - 4 -or
-                        $firstadmitIndex -ne $historyBoundaries.Count - 3 -or $firstrouteIndex -ne $historyBoundaries.Count - 2 -or
-                        $firstupdateIndex -ne $historyBoundaries.Count - 1 -or
+                        $stateIndex -ne $historyBoundaries.Count - 13 -or $releaseIndex -ne $historyBoundaries.Count - 12 -or
+                        $takeoverIndex -ne $historyBoundaries.Count - 9 -or
+                        $completionIndex -ne $historyBoundaries.Count - 8 -or $postwriteIndex -ne $historyBoundaries.Count - 7 -or
+                        $postintentIndex -ne $historyBoundaries.Count - 6 -or $firstwriteIndex -ne $historyBoundaries.Count - 5 -or
+                        $firstadmitIndex -ne $historyBoundaries.Count - 4 -or $firstrouteIndex -ne $historyBoundaries.Count - 3 -or
+                        $firstupdateIndex -ne $historyBoundaries.Count - 2 -or $firstcloseoutIndex -ne $historyBoundaries.Count - 1 -or
                         $historyBoundaries[$releaseIndex + 1] -cne 'restart-released-dead-history' -or
                         $historyBoundaries[$releaseIndex + 2] -cne 'restart-retirement-dead-history' -or
                         $historyBoundaries[$stateIndex - 1] -cne 'restart-state-written-history') {
@@ -527,6 +528,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                         'firstadmit' { @($historyBoundaries[$firstadmitIndex]) }
                         'firstroute' { @($historyBoundaries[$firstrouteIndex]) }
                         'firstupdate' { @($historyBoundaries[$firstupdateIndex]) }
+                        'firstcloseout' { @($historyBoundaries[$firstcloseoutIndex]) }
                     }
                     foreach ($historyBoundary in $selectedBoundaries) {
                         $lockBoundary = $historyBoundary -cin @('lock-directory-history', 'lock-owner-history', 'lock-committed-history', 'lock-state-written-history', 'lock-retirement-history', 'lock-owner-retired-history', 'lock-directory-retired-history', 'lock-settled-history', 'successor-prepared-history', 'successor-abandoned-history', 'restart-published-history', 'restart-prepared-history', 'restart-directory-history', 'restart-directory-dead-history', 'restart-owner-history', 'restart-owner-dead-history', 'restart-committed-history', 'restart-committed-dead-history', 'restart-state-intent-history', 'restart-state-written-history', 'restart-state-released-history', 'restart-state-dead-history', 'restart-state-released-dead-history', 'restart-state-release-intent-dead-history', 'restart-released-history', 'restart-released-dead-history', 'restart-retirement-dead-history', 'restart-release-intent-dead-history')
@@ -536,6 +538,7 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                             'lock-state-admitted-history' { 'crash-completed-history' }
                             'lock-state-routed-history' { 'crash-completed-history' }
                             'lock-state-updated-history' { 'crash-completed-history' }
+                            'lock-state-closed-history' { 'crash-completed-history' }
                             'prepared-history' { 'crash-prepared-history' }
                             'abandoned-history' { 'crash-prepared-history' }
                             'lock-retirement-history' { 'crash-lock-committed-history' }
@@ -600,13 +603,13 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                             'Writer death restored the original history pathname'
                         Assert ((Get-FileHash -LiteralPath (Join-Path $control $entry.destination) -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $entry.sha256) `
                             'Writer death lost the exact archived original'
-                        if ($lockBoundary -or $historyBoundary -cin @('finalized-history', 'completed-history', 'lock-state-admitted-history', 'lock-state-routed-history', 'lock-state-updated-history', 'prepared-history', 'abandoned-history')) {
+                        if ($lockBoundary -or $historyBoundary -cin @('finalized-history', 'completed-history', 'lock-state-admitted-history', 'lock-state-routed-history', 'lock-state-updated-history', 'lock-state-closed-history', 'prepared-history', 'abandoned-history')) {
                             Assert (-not (Test-Path -LiteralPath $historyIntent)) 'Finalized actor death restored active intent'
                             $archivedIntent = Join-Path $control "retired-$($history.operationId)-inactive-rollback-history-intent.json"
                             Assert ((Get-FileHash -LiteralPath $archivedIntent -Algorithm SHA256).Hash -ceq $historyHash) `
                                 'Finalized actor death lost the original archived intent'
                         }
-                        if ($lockBoundary -or $historyBoundary -cin @('completed-history', 'lock-state-admitted-history', 'lock-state-routed-history', 'lock-state-updated-history', 'prepared-history', 'abandoned-history')) {
+                        if ($lockBoundary -or $historyBoundary -cin @('completed-history', 'lock-state-admitted-history', 'lock-state-routed-history', 'lock-state-updated-history', 'lock-state-closed-history', 'prepared-history', 'abandoned-history')) {
                             $completed = Join-Path $control "retired-$($history.operationId)-inactive-rollback-history-complete.json"
                             Assert ((Get-FileHash -LiteralPath $completed -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $held.completionSha256) `
                                 'Completion publisher death changed the original completion receipt'
@@ -1167,6 +1170,26 @@ function Test-AgentsChatInactiveTask([string]$Source, [string]$TaskName, [string
                                     Assert ($closeoutActor.ExitCode -eq 0) "Fresh handoff closeout actor failed at $closeoutStep"
                                 } finally { $closeoutActor.Dispose() }
                             }
+                        }
+                        if ($historyBoundary -ceq 'lock-state-closed-history') {
+                            # The accepted first-attempt owner has exited; a distinct actor closes it out.
+                            $closeoutActor = [Deployment.WindowsControllerProcess]::Start($node,
+                                @((Join-Path $PSScriptRoot 'deployment-windows-lost-runtime-session.mjs'),
+                                    $Source, $control, [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName,
+                                    $resumeMode, $historyActor, 'first-closeout'), $control, $environment)
+                            try {
+                                $output = $closeoutActor.StandardOutput.ReadToEndAsync()
+                                $diagnostic = $closeoutActor.StandardError.ReadToEndAsync()
+                                if (-not $closeoutActor.WaitForExit(600000)) {
+                                    $closeoutActor.Kill()
+                                    $null = $closeoutActor.WaitForExit(15000)
+                                    throw 'Fresh first-attempt closeout actor timed out'
+                                }
+                                Write-Output $output.GetAwaiter().GetResult()
+                                $errors = $diagnostic.GetAwaiter().GetResult()
+                                if ($errors) { [Console]::Error.WriteLine($errors) }
+                                Assert ($closeoutActor.ExitCode -eq 0) 'Fresh first-attempt closeout actor failed'
+                            } finally { $closeoutActor.Dispose() }
                         }
                         Assert ((Get-FileHash -LiteralPath $historyIntent -Algorithm SHA256).Hash -ceq $historyHash -and
                             (Get-FileHash -LiteralPath (Join-Path $control 'state.json') -Algorithm SHA256).Hash -ceq $historyStateHash) `
