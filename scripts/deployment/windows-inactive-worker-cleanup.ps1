@@ -81,6 +81,11 @@ function Assert-AgentsChatStoppedWorkerInventory([hashtable]$Context) {
             $Context.HistoryHandoffRestartStateStage.Check()
             continue
         }
+        if ($handoff -and $item.Name -ceq 'state.json.lock' -and
+            $Context.ContainsKey('HistoryHandoffStateStage')) {
+            $Context.HistoryHandoffStateStage.Check()
+            continue
+        }
         if ($item.Name -match '^(worker-|task-retirement|service-)' -or
             $item.Name -in @('task-maintenance', 'lock', 'recovery-lock', 'state.json.lock') -or
             $item.Name -like 'state.json.lock.pending-*') {
