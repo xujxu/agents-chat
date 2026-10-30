@@ -15,7 +15,7 @@ import { assertRestartHandoffCloseout } from './deployment-windows-restart-hando
 import { holdRestartRetirement } from './deployment-windows-restart-retirement-death.mjs';
 import { assertFirstStateWrittenAfterDeath, firstStateWrittenOriginalState } from './deployment-windows-first-state-written.mjs';
 import { acceptFirstHandoffUpdate, assertFirstHandoffCloseout } from './deployment-windows-first-handoff-closeout.mjs';
-import { assertPublicHandoffRepeatUpdate, writeFirstHandoffRepeatContext } from './deployment-windows-first-handoff-repeat.mjs';
+import { assertSupersededStoppedHistoryUpdate } from './deployment-windows-first-handoff-repeat.mjs';
 
 const [source, control, pwsh, mode = 'complete', crashStep = 'task-restored', terminalCrashStep = ''] = process.argv.slice(2);
 const load = name => import(pathToFileURL(path.join(source, name)).href);
@@ -40,9 +40,14 @@ if (firstCloseout) {
   await withWindowsAdmission(control, { pwsh }, admission =>
     assertFirstHandoffCloseout({ source, control, pwsh, admission }));
 }
-// The public entry admits its own controllers, so this distinct actor holds no Windows admission while it runs.
+// The later update admits its own controllers, so this distinct actor holds Windows admission only for closeout.
 const firstRepeat = mode === 'resume-lock-state-repeated-history' && terminalCrashStep === 'first-repeat';
-if (firstRepeat) await assertPublicHandoffRepeatUpdate({ source, control, pwsh });
+if (firstRepeat) {
+  await assertFirstHandoffCloseout({
+    source, control, pwsh, admit: action => withWindowsAdmission(control, { pwsh }, action),
+    afterCloseout: ({ project, taskName }) => assertSupersededStoppedHistoryUpdate({ source, control, pwsh, project, taskName }),
+  });
+}
 const state = ['resume-restart-state-dead-history', 'resume-restart-state-released-dead-history',
   'resume-restart-state-release-intent-dead-history'].includes(mode)
   ? Buffer.from(JSON.parse(await readFile(path.join(control, JSON.parse(crashStep).restartStateIntent.path))).oldState)
@@ -1333,9 +1338,10 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     const firstUpdateResume = mode === 'resume-lock-state-updated-history';
     const firstCloseoutResume = mode === 'resume-lock-state-closed-history';
     const firstRepeatResume = mode === 'resume-lock-state-repeated-history';
-    let firstStateAdmitted = false;
-    if (mode === 'resume-completed-history' || firstAdmitResume || firstRouteResume || firstUpdateResume
-      || firstCloseoutResume || firstRepeatResume) {
+    // Distinct first-attempt actors already replaced the original state inode; they skip new handoff preparation.
+    let firstStateAdmitted = firstCloseout || firstRepeat;
+    if (!firstStateAdmitted && (mode === 'resume-completed-history' || firstAdmitResume || firstRouteResume
+      || firstUpdateResume || firstCloseoutResume || firstRepeatResume)) {
       const attemptId = randomUUID();
       const operationId = randomUUID();
       const token = randomUUID();
@@ -1853,14 +1859,12 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       }
       if (firstRepeatResume) {
         if (!firstRepeat) {
-          // The owner only names the archived fixture; the harness starts a distinct public update actor.
-          await writeFirstHandoffRepeatContext(control, {
-            project: prepared.project, taskName: prepared.observation.taskName,
-          });
+          // The accepted owner exits here; the distinct actor closes it out and then runs a later update.
+          await acceptFirstHandoffUpdate({ source, control, pwsh, admission, prepared, state });
           deferredHandoffCloseout = true;
           return;
         }
-        // The public updates restored only the original state bytes after their writes replaced its inode.
+        // The closeout and later update restored only the original state bytes after writes replaced its inode.
         firstStateAdmitted = true;
       }
     }

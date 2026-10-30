@@ -954,6 +954,26 @@ These options cannot reconfigure an existing installation or an update.
 Default-tunnel first deployment remains unfinished; do not use the old task
 installer as an automatic recovery fallback.
 
+**Update after a stopped-task rollback (archived stopped history).** When an
+earlier update of a stopped task was rolled back and its history was archived
+(`retired-<operation>-inactive-rollback-history-*.json` in the control
+directory), a plain `update.ps1` is the supported way forward. `deploy.ps1`
+stays refused. The update first verifies the exact archive, then hands the
+retained lock to a new owner through create-only
+`inactive-handoff-<attempt>-*.json` records. It then runs the stopped-task
+update and starts the application only after backup, build and configuration
+checks. An accepted update publishes `deployment.json`. The public supervisor
+then closes out in a separate process, retiring the task receipts, workers,
+handoff records and lock. The archive itself is kept as evidence. Once a
+later operation is accepted, or the task is running again, that older archive
+no longer blocks admission or routing. After this the task is an ordinary
+running managed task. Roll back with `update.ps1 -Revision <older full commit>`,
+and repeat updates the same way. Failed or interrupted updates keep their
+handoff and lock for recovery. No option ignores, deletes or bypasses the
+archive of the current operation. Native contracts cover routing, the accepted
+stopped-task transaction, closeout and the superseded archive. A full
+real-application run of this path in Actions is still pending.
+
 **Windows restore (managed task and supported interrupted recovery).** The public entry and its saved-engine
 invocation passed native contracts at `3497176 / 38187043591` and actual
 egress-denied restoration at `4e1aed1 / 38188828721`, job `114616945668`.

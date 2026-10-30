@@ -14,7 +14,10 @@ const inFlight = /^(?:lock|recovery-lock|task-maintenance|task-retirement(?:-che
 export function isArchivedWindowsStoppedHistory(names, status) {
   if (process.platform !== 'win32' || status?.status !== 'blocked' || status.handoff) return false;
   const entries = names.map(name => String(name).toLowerCase());
-  return entries.some(name => name.endsWith('-inactive-rollback-history-complete.json') && archivedHistory.test(name))
+  // Only the current operation's archive routes; superseded archives remain evidence of earlier history.
+  const current = typeof status.operationId === 'string'
+    ? `retired-${status.operationId.toLowerCase()}-inactive-rollback-history-complete.json` : null;
+  return entries.some(name => name === current && archivedHistory.test(name))
     && !entries.some(name => inFlight.test(name));
 }
 

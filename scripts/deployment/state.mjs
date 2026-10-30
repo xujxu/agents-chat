@@ -376,6 +376,16 @@ function serviceMaintenanceEntry(name, allowLiveRetirement = false) {
     || (!allowLiveRetirement && entry === 'live-retirement.json');
 }
 
+// A retired stopped-task rollback archive stays as evidence once a later operation took over: an accepted
+// update of that stopped history, or any later operation of the running task. Only the archive of the current
+// operation still blocks ordinary admission and routes a public update through the stopped-history handoff.
+function supersededStoppedHistoryEntry(name, state) {
+  if (process.platform !== 'win32' || !state) return false;
+  const match = /^retired-(.+)-inactive-rollback-history-(?:intent|complete)\.json$/.exec(name.toLowerCase());
+  return match !== null && typeof state.operationId === 'string' && match[1] !== state.operationId.toLowerCase()
+    && (state.phase === 'accepted' || state.priorRuntime === 'running');
+}
+
 function workerRetirementEntry(name) {
   return (process.platform === 'win32' ? name.toLowerCase() : name) === 'worker-retirement.json';
 }
@@ -387,8 +397,11 @@ async function requireNoWorkerRetirement(directory) {
 }
 
 export async function requireNoServiceMaintenance(directory, { allowLiveRetirement = false, allowEntries = null } = {}) {
-  const excused = name => allowEntries?.has(name.toLowerCase()) === true;
-  if ((await readdir(directory)).some(name => !excused(name) && serviceMaintenanceEntry(name, allowLiveRetirement))) {
+  const names = await readdir(directory);
+  const state = process.platform === 'win32' && names.some(name => name.toLowerCase().startsWith('retired-'))
+    ? await loadState(directory) : null;
+  const excused = name => allowEntries?.has(name.toLowerCase()) === true || supersededStoppedHistoryEntry(name, state);
+  if (names.some(name => !excused(name) && serviceMaintenanceEntry(name, allowLiveRetirement))) {
     throw new Error('Service or task maintenance evidence requires explicit runtime recovery before this operation.');
   }
 }
@@ -397,7 +410,8 @@ export async function reconcileInterruptedOperation(root) {
   const directory = await ownedDirectory(root);
   const state = await loadState(directory);
   const entries = await readdir(directory);
-  if (entries.some(name => serviceMaintenanceEntry(name) || workerRetirementEntry(name))) {
+  if (entries.some(name => (serviceMaintenanceEntry(name) && !supersededStoppedHistoryEntry(name, state))
+    || workerRetirementEntry(name))) {
     const handoff = process.platform === 'win32' ? describeWindowsStoppedHistoryHandoffEntries(entries) : null;
     return {
       status: 'blocked', operationId: state?.operationId ?? null, phase: state?.phase ?? null,

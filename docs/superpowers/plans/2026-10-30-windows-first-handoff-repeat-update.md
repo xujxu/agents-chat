@@ -70,3 +70,31 @@ The public context always resolves the canonical sibling control `.<project>.dep
 `<project>-inactive-control`; the public command therefore saw an empty control and took the running-task path. The
 `firstrepeat` shard now creates its fixture control at the canonical location, and the test keeps its context file and
 working directory beside (not inside) the control used as actor `TEMP`.
+
+## Revision after run 41030512176 (`cde4c5a6`)
+
+- The canonical-control fix let the public entry route, but it then refused with `DEPLOYMENT_TARGET_UNSUPPORTED`.
+  The history fixture's commits are not reviewed application targets: `package.json`, `package-lock.json` and the
+  store sources must match the reviewed bindings, and building them needs the real application. A real public
+  `update.ps1` run therefore cannot run against the writer/listener fixture. The canonical-control harness change was
+  reverted.
+- The repeat contract exposed a production gap instead. After an accepted stopped-history update is closed out, its
+  `retired-<op>-inactive-rollback-history-*.json` archive still counted as service maintenance. Reconciliation stayed
+  `blocked`, lock acquisition refused, and a public update would route into the stopped-history handoff of a running task.
+- Production (`state.mjs`, `windows-stopped-history-update-command.mjs`):
+  - an archive is superseded when it names another operation and the current state is `accepted` or records
+    `priorRuntime: running`; superseded archives no longer block `reconcileInterruptedOperation` or
+    `requireNoServiceMaintenance`;
+  - only the archive of the current state's operation routes a public update.
+- Contract (`firstrepeat`): the owner actor reaches the accepted transaction as in gate 77 and exits. A distinct actor
+  closes it out, holding admission only for the closeout, then asserts:
+  - reconciliation is `idle` and service maintenance is clear;
+  - an update with an unresolvable revision takes the running-task path (no recovery, handoff or managed-task
+    refusal) and refuses before downtime as `preflight-refused` with `priorRuntime: running`;
+  - no lock, handoff, task maintenance or worker evidence remains, and both archives keep their exact bytes.
+- Distinct first-attempt actors (`firstcloseout`, `firstrepeat`) skip the new handoff preparation block. Their state
+  inode was already replaced, which made the preparation refuse in run `41030512176`.
+- Receipt PASS: `closed-out accepted update of archived stopped history supersedes the retained archive so a later public
+  update takes the running-task path and refuses an unresolved target before downtime while the archive stays exact`.
+- The inactive runner's `publish-receipt` stage stays; it is covered once a real-application run of this path is added.
+

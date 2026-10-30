@@ -157,7 +157,7 @@ export async function acceptFirstHandoffUpdate({ source, control, pwsh, admissio
 
 // A distinct actor closes the accepted first-attempt operation out through the public closeout, which retires its
 // task receipts, workers, handoff records and lock, then restores the archived fixture.
-export async function assertFirstHandoffCloseout({ source, control, pwsh, admission }) {
+export async function assertFirstHandoffCloseout({ source, control, pwsh, admission, admit, afterCloseout }) {
   const load = name => import(pathToFileURL(path.join(source, name)).href);
   const { processIdentity } = await load('process-identity.mjs');
   const { closeCompletedWindowsDeployment } = await load('windows-completed-closeout.mjs');
@@ -171,9 +171,11 @@ export async function assertFirstHandoffCloseout({ source, control, pwsh, admiss
     const acceptedBytes = await readFile(stateFile);
     assert.equal(digest(acceptedBytes), context.stateSha256);
     assert.deepEqual(handoffNames(await readdir(control)), context.handoff);
-    const closed = await closeCompletedWindowsDeployment({
-      control, project: context.owner.project, operationId: context.owner.operationId, pwsh, admission,
+    const close = retained => closeCompletedWindowsDeployment({
+      control, project: context.owner.project, operationId: context.owner.operationId, pwsh, admission: retained,
     });
+    // Callers that run later commands hold admission only for the closeout itself.
+    const closed = admission ? await close(admission) : await admit(close);
     assert.equal(closed.status, 'completed');
     assert.equal(closed.operationId, context.owner.operationId);
     const names = await readdir(control);
@@ -184,6 +186,7 @@ export async function assertFirstHandoffCloseout({ source, control, pwsh, admiss
     }
     assert.deepEqual(await readFile(stateFile), acceptedBytes);
     assert.equal(await processIdentity(context.runtime.pid), context.runtime.identity);
+    await afterCloseout?.({ project: context.owner.project, taskName: context.taskName });
   } finally {
     // Restore the archived fixture: stop the accepted runtime and re-register the inhibited original definition.
     await runPwsh(pwsh, [
