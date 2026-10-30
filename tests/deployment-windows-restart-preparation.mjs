@@ -417,7 +417,10 @@ export async function assertRestartPreparation({
       const transactionOptions = { scope, control, lock: owner, ...result };
       await assert.rejects(beginWindowsInactiveTaskTransaction(transactionOptions), /stopped-phase transaction/);
       const written = JSON.parse(writtenState.bytes);
-      const sourceCommit = written.sourceCommit ?? 'a'.repeat(40);
+      // The snapshot binds the archived project's actual Git HEAD as its observed source.
+      const head = await promisify(execFile)('git', ['-C', original.project, 'rev-parse', 'HEAD'], { timeout: 30000 });
+      const sourceCommit = written.sourceCommit ?? head.stdout.trim();
+      assert.match(sourceCommit, /^[a-f0-9]{40}$/);
       const stopped = {
         ...written, phase: 'stopped', previousPhase: 'preflight', sourceCommit,
         targetCommit: written.targetCommit ?? 'b'.repeat(40),
