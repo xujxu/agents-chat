@@ -73,6 +73,47 @@ function Get-AgentsChatCompletedWorkerEvidence([hashtable]$Context, $Lock) {
     return [ordered]@{ entries=$entries.ToArray(); manifestSha256=$manifest.Sha256 }
 }
 
+# A completed first-attempt stopped-history handoff leaves exactly its prepared, committed and state-intent records;
+# they retire after the workers and before the task receipts and lock that their committed owner binds.
+function Get-AgentsChatDeploymentHandoffEvidence([hashtable]$Context) {
+    $Context.Stage = 'handoff-evidence'
+    $names = @(Get-ChildItem -LiteralPath $Context.Control -Force | Where-Object {
+        $_.Name.StartsWith('inactive-handoff-', [StringComparison]::OrdinalIgnoreCase)
+    } | ForEach-Object { $_.Name })
+    if ($names.Count -eq 0) { return @() }
+    if (-not $Context.Inactive -or $names.Count -ne 3) { throw 'Unsupported stopped-history handoff cleanup inventory.' }
+    $committedName = @($names | Where-Object {
+        $_ -cmatch '^inactive-handoff-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}-committed\.json$'
+    })
+    if ($committedName.Count -ne 1) { throw 'Unsupported stopped-history handoff cleanup inventory.' }
+    $attemptId = $committedName[0].Substring(17, 36)
+    $ordered = @('state-intent', 'committed', 'prepared') | ForEach-Object { "inactive-handoff-$attemptId-$_.json" }
+    foreach ($name in $names) {
+        if ($name -cnotin $ordered) { throw 'Unsupported stopped-history handoff cleanup inventory.' }
+    }
+    $committed = Open-AgentsChatCompletionFile $Context (Join-Path $Context.Control $committedName[0]) ''
+    $record = Read-AgentsChatRetirementJson ($committed.ReadText()) -AllowNull
+    if ($record -isnot [Collections.IDictionary] -or $record.phase -cne 'stopped-history-handoff-committed' -or
+        $record.attemptId -cne $attemptId -or $record.control -cne $Context.Control -or
+        $record.newOwner -isnot [Collections.IDictionary] -or
+        $record.newOwner.operationId -cne $Context.Intent.lock.operationId -or
+        $record.newOwner.token -cne $Context.Intent.lock.token -or
+        $record.lockIdentity -isnot [Collections.IDictionary] -or $record.lock -isnot [Collections.IDictionary]) {
+        throw 'Stopped-history handoff differs from the completed owner.'
+    }
+    foreach ($name in @('dev', 'ino')) {
+        if ([string]$record.lockIdentity[$name] -cne [string]$Context.Intent.lockIdentity[$name]) {
+            throw 'Stopped-history handoff lock directory differs.'
+        }
+    }
+    foreach ($name in @('path', 'dev', 'ino', 'bytes', 'sha256')) {
+        if ([string]$record.lock[$name] -cne [string]$Context.Intent.lockFile[$name]) {
+            throw 'Stopped-history handoff lock owner differs.'
+        }
+    }
+    return @($ordered | ForEach-Object { Get-AgentsChatDeploymentRetirementFile $Context $_ })
+}
+
 function Retain-AgentsChatDeploymentWorkers([hashtable]$Context) {
     $null = Assert-AgentsChatTaskRetirement $Context
     if ($Context.Prefix -ne $Context.Intent.files.Count) { throw 'Task receipts have not finished retiring.' }
@@ -81,12 +122,14 @@ function Retain-AgentsChatDeploymentWorkers([hashtable]$Context) {
     $entries.Add((Get-AgentsChatDeploymentRetirementDirectory $Context 'task-maintenance'))
     $workers = Get-AgentsChatCompletedWorkerEvidence $Context $Context.Intent.lock
     foreach ($entry in $workers.entries) { $entries.Add($entry) }
+    $handoff = @(Get-AgentsChatDeploymentHandoffEvidence $Context)
+    foreach ($entry in $handoff) { $entries.Add($entry) }
     foreach ($relative in @('task-retirement.json', 'task-retirement-checkpoint.json', 'lock\owner.json')) {
         $entries.Add((Get-AgentsChatDeploymentRetirementFile $Context $relative))
     }
     $entries.Add((Get-AgentsChatDeploymentRetirementDirectory $Context 'lock'))
     $Context.DeploymentCandidate = [ordered]@{
-        version=3; control=$Context.Control; task=$Context.Prepared
+        version=$(if ($handoff.Count) { 4 } else { 3 }); control=$Context.Control; task=$Context.Prepared
         workerManifestSha256=$workers.manifestSha256; entries=$entries.ToArray()
         creator=[ordered]@{ pid=$Context.ControllerPid; processIdentity=$Context.ControllerIdentity
             bridgePid=$PID; bridgeIdentity=[Deployment.WindowsWorkerJob]::ProcessIdentity($PID) }

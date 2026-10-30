@@ -19,6 +19,7 @@ const file = (value, expected) => {
   captureRetirementFile(descriptor, expected);
   return entry;
 };
+const handoffIntent = /^inactive-handoff-([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})-state-intent\.json$/;
 const identity = entry => ({ dev: entry.dev, ino: entry.ino });
 const descriptor = ({ kind, ...entry }) => entry;
 
@@ -27,10 +28,10 @@ export function captureWindowsDeploymentRetirementRecord(value) {
     ['version', 'control', 'task', 'workerManifestSha256', 'entries', 'creator'], 'deployment retirement');
   const task = captureWindowsTaskRetirementCheckpoint(record.task);
   const intent = task.intent.intent;
-  if (record.version !== 3 || record.control !== intent.control
+  if (![3, 4].includes(record.version) || record.control !== intent.control
     || typeof record.workerManifestSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(record.workerManifestSha256)
     || !Array.isArray(record.entries) || record.entries.length < workerEngineFiles.length + 8
-    || record.entries.length > workerEngineFiles.length + 40) {
+    || record.entries.length > workerEngineFiles.length + 43) {
     throw new Error('Invalid deployment retirement scope.');
   }
   const entries = [directory(record.entries[0], 'task-maintenance')];
@@ -49,6 +50,14 @@ export function captureWindowsDeploymentRetirementRecord(value) {
   if (entries.at(-1).sha256 !== record.workerManifestSha256) throw new Error('Worker manifest digest differs.');
   entries.push(directory(record.entries[index++], 'worker-engine'));
   entries.push(file(record.entries[index++], 'worker-operation.ndjson'));
+  if (record.version === 4) {
+    // A completed first-attempt stopped-history handoff retires its records before the receipts and lock they bind.
+    const attempt = handoffIntent.exec(record.entries[index]?.path ?? '')?.[1];
+    if (!attempt) throw new Error('Invalid stopped-history handoff cleanup order.');
+    for (const kind of ['state-intent', 'committed', 'prepared']) {
+      entries.push(file(record.entries[index++], `inactive-handoff-${attempt}-${kind}.json`));
+    }
+  }
   for (const original of [task.intent.descriptor, task.descriptor, intent.lockFile]) {
     const entry = file(record.entries[index++], original.path);
     if (!isDeepStrictEqual(descriptor(entry), original)) throw new Error('Original task cleanup descriptor differs.');

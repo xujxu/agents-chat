@@ -16,7 +16,10 @@ import {
 import {
   openWindowsTaskCompletionProof, beginWindowsTaskRetirement, openWindowsTaskRetirement,
   retireNextWindowsTaskFile, beginWindowsDeploymentRetirement, openWindowsDeploymentRetirement,
-  retireNextWindowsDeploymentEntry,
+  retireNextWindowsDeploymentEntry, openWindowsInactiveTaskCompletionProof,
+  prepareWindowsInactiveTaskRetirement, prepareWindowsInactiveTaskRetirementCheckpoint,
+  openWindowsInactiveTaskRetirement, beginWindowsInactiveDeploymentRetirement,
+  openWindowsInactiveDeploymentRetirement,
 } from './windows-task-completion-proof.mjs';
 
 async function hasMarker(control, name) {
@@ -167,7 +170,36 @@ async function closeWindowsDeployment({
           await checkState();
           return Object.freeze({ status: 'completed', operationId, phase: state.phase });
         }
-        if (await hasMarker(control, 'worker-retirement.json')) {
+        if (state.priorRuntime === 'stopped' && state.phase === 'accepted') {
+          // An accepted update of a stopped task (including a first-attempt stopped-history handoff) closes out
+          // through the inactive proof, task receipts and deployment retirement, which also retires the handoff.
+          if (state.operation !== 'update' || state.previousPhase !== 'activating' || state.errorCode !== null) {
+            throw new Error('Inactive closeout requires its exact accepted stopped-prior update.');
+          }
+          if (await hasMarker(control, 'worker-retirement.json')) {
+            scope = await openWindowsInactiveDeploymentRetirement({ control, pwsh, admission, signal });
+            checkProof(scope.observation.manifest.record.task.intent.intent.completion);
+          } else {
+            if (!await hasMarker(control, 'task-retirement-checkpoint.json')) {
+              scope = await openWindowsInactiveTaskCompletionProof({ control, pwsh, admission, signal });
+              checkProof(scope.observation);
+              await checkState();
+              await prepareWindowsInactiveTaskRetirement(control, scope, admission, { signal });
+              await prepareWindowsInactiveTaskRetirementCheckpoint(control, scope, admission, { signal });
+              await scope.close();
+              scope = undefined;
+            }
+            scope = await openWindowsInactiveTaskRetirement({ control, pwsh, admission, signal });
+            checkProof(scope.observation.checkpoint.intent.intent.completion);
+            let task = await scope.check({ signal });
+            while (task.retiredFiles < task.checkpoint.intent.intent.files.length) {
+              await checkState();
+              task = await retireNextWindowsTaskFile(control, scope, admission, { signal });
+            }
+            await checkState();
+            scope = await beginWindowsInactiveDeploymentRetirement(control, scope, admission, { signal });
+          }
+        } else if (await hasMarker(control, 'worker-retirement.json')) {
           const marker = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(
             await readWorkerFile(path.join(control, 'worker-retirement.json'), 1048576, { privateMode: true })));
           if (marker.version === 5) {

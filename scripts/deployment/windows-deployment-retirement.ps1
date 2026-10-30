@@ -14,6 +14,7 @@ function Assert-AgentsChatDeploymentEntry($Entry) {
         Assert-AgentsChatRetirementDescriptor $descriptor $Entry.path
         if ($Entry.path -cnotmatch '^worker-[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}\.ndjson$' -and
             $Entry.path -cnotmatch '^worker-engine\\[A-Za-z0-9][A-Za-z0-9_.-]{0,180}$' -and
+            $Entry.path -cnotmatch '^inactive-handoff-[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}-(state-intent|committed|prepared)\.json$' -and
             $Entry.path -cnotin @('worker-operation.ndjson', 'task-retirement.json',
                 'task-retirement-checkpoint.json', 'lock\owner.json')) {
             throw 'Unexpected retirement file.'
@@ -23,9 +24,9 @@ function Assert-AgentsChatDeploymentEntry($Entry) {
 
 function Assert-AgentsChatDeploymentPlan([hashtable]$Context, $Record) {
     Assert-AgentsChatRetirementFields $Record @('version', 'control', 'task', 'workerManifestSha256', 'entries', 'creator')
-    if ($Record.version -isnot [int] -or $Record.version -ne 3 -or $Record.control -cne $Context.Control -or
+    if ($Record.version -isnot [int] -or $Record.version -notin @(3, 4) -or $Record.control -cne $Context.Control -or
         $Record.workerManifestSha256 -isnot [string] -or $Record.workerManifestSha256 -cnotmatch '^[a-f0-9]{64}$' -or
-        $Record.entries -isnot [array] -or $Record.entries.Count -lt 9 -or $Record.entries.Count -gt 296) {
+        $Record.entries -isnot [array] -or $Record.entries.Count -lt 9 -or $Record.entries.Count -gt 299) {
         throw 'Invalid deployment retirement manifest.'
     }
     Assert-AgentsChatRetirementCreator $Record.creator $Context.ControllerPid $Context.ControllerIdentity
@@ -49,8 +50,16 @@ function Assert-AgentsChatDeploymentPlan([hashtable]$Context, $Record) {
         $index++
         $helpers++
     }
-    $tail = @('worker-engine', 'worker-operation.ndjson', 'task-retirement.json',
-        'task-retirement-checkpoint.json', 'lock\owner.json', 'lock')
+    $handoff = @()
+    if ($Record.version -eq 4) {
+        $first = if ($index + 2 -lt $entries.Count) { [string]$entries[$index + 2].path } else { '' }
+        $attempt = [regex]::Match($first, '^inactive-handoff-([a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})-state-intent\.json$')
+        if (-not $Context.Inactive -or -not $attempt.Success) { throw 'Invalid stopped-history handoff cleanup order.' }
+        $attemptId = $attempt.Groups[1].Value
+        $handoff = @('state-intent', 'committed', 'prepared') | ForEach-Object { "inactive-handoff-$attemptId-$_.json" }
+    }
+    $tail = @(@('worker-engine', 'worker-operation.ndjson') + $handoff + @('task-retirement.json',
+        'task-retirement-checkpoint.json', 'lock\owner.json', 'lock'))
     if ($helpers -lt 2 -or $helpers -gt 257 -or $entries.Count - $index -ne $tail.Count -or
         $entries[0].kind -cne 'directory' -or $entries[0].path -cne 'task-maintenance' -or
         $entries[$index - 1].path -cne 'worker-engine\manifest.json' -or
@@ -59,7 +68,7 @@ function Assert-AgentsChatDeploymentPlan([hashtable]$Context, $Record) {
     }
     for ($offset = 0; $offset -lt $tail.Count; $offset++) {
         $entry = $entries[$index + $offset]
-        $kind = if ($offset -eq 0 -or $offset -eq 5) { 'directory' } else { 'file' }
+        $kind = if ($offset -eq 0 -or $offset -eq $tail.Count - 1) { 'directory' } else { 'file' }
         if ($entry.path -cne $tail[$offset] -or $entry.kind -cne $kind) { throw 'Invalid deployment retirement suffix.' }
     }
     foreach ($pair in @(
@@ -83,7 +92,7 @@ function Assert-AgentsChatDeploymentInventory([hashtable]$Context) {
     }
     $null = $expected.Add('worker-retirement.json')
     foreach ($item in Get-ChildItem -LiteralPath $Context.Control -Force) {
-        if ($item.Name -match '^(worker-|task-retirement|service-)' -or
+        if ($item.Name -match '^(worker-|task-retirement|service-|inactive-handoff-)' -or
             $item.Name -in @('task-maintenance', 'lock', 'recovery-lock')) {
             if (-not $expected.Remove($item.Name)) { throw 'Unexpected deployment retirement inventory.' }
         }
