@@ -17,7 +17,10 @@ import { prepareGitObjects } from './git-objects.mjs';
 import { createWindowsInactiveTaskSnapshot } from './windows-task-snapshot.mjs';
 import { verifySnapshot } from './snapshot.mjs';
 import { reconcileSnapshotSlots } from './snapshot-rotation.mjs';
-import { assertWindowsInactiveTaskScope } from './windows-managed-task.mjs';
+import { assertWindowsInactiveTaskScope, inspectWindowsManagedTask } from './windows-managed-task.mjs';
+import { inspectWindowsConfiguration } from './windows-configuration.mjs';
+import { captureWindowsDeploymentAcceptance } from './windows-deployment-acceptance.mjs';
+import { publishDeploymentReceipt } from './deployment-receipt.mjs';
 import { prepareWindowsInactiveRuntimeBundle } from './windows-runtime-publication.mjs';
 import {
   beginWindowsInactiveTaskTransaction, rotateWindowsInactiveTaskSnapshot, prepareWindowsInactiveTaskActivation,
@@ -69,6 +72,9 @@ export async function runWindowsInactiveDeployment({
   let sealed = false;
   let activationAttempted = false;
   let completed = false;
+  let receiptPublished = false;
+  let active;
+  let activeConfiguration;
   let result;
   const errors = [];
   const authority = async () => {
@@ -259,11 +265,29 @@ export async function runWindowsInactiveDeployment({
       },
     });
     await seal();
+    if (completed && state.phase === 'accepted') {
+      // The accepted runtime is now an ordinary running managed task; publish its receipt like a live update.
+      await runStage('publish-receipt', async stageSignal => {
+        await authority();
+        active = await inspectWindowsManagedTask({
+          project, taskName: original.taskName, pwsh, signal: stageSignal,
+        });
+        activeConfiguration = await inspectWindowsConfiguration({
+          scope: active, pwsh, profile: compatibility.configuration.profile, signal: stageSignal,
+        });
+        const accepted = await captureWindowsDeploymentAcceptance({
+          scope: active, configuration: activeConfiguration, source: built.source, artifacts: built.artifacts,
+          port, waitSeconds, signal: stageSignal,
+        });
+        await publishDeploymentReceipt({ control, lock, ...accepted, signal: stageSignal });
+        receiptPublished = true;
+      }, { timeoutMs, signal });
+    }
   } catch (error) {
     errors.push(error);
   }
   const closed = await Promise.allSettled([
-    compatibility?.configuration.close(), transaction ? transaction.close() : scope.close(), workers?.close(),
+    activeConfiguration?.close(), active?.close(), compatibility?.configuration.close(), transaction ? transaction.close() : scope.close(), workers?.close(),
   ]);
   errors.push(...closed.filter(value => value.status === 'rejected').map(value => journalUncertain(value.reason)));
   if (errors.length) {
@@ -271,7 +295,8 @@ export async function runWindowsInactiveDeployment({
       : journalUncertain(new AggregateError(errors, 'Inactive Windows update and retained authority cleanup failed.'));
     throw Object.assign(error, {
       handoffRetained: true, operationId: lock.operationId,
-      ...(completed && !errors.some(hasUnsettledWorker) ? { closeoutRequired: true, recoveryEngine: recovery.manifestSha256 } : {}),
+      ...(completed && receiptPublished && !errors.some(hasUnsettledWorker)
+        ? { closeoutRequired: true, recoveryEngine: recovery.manifestSha256 } : {}),
     });
   }
   return Object.freeze({
