@@ -75,7 +75,9 @@ try {
             'inactive-listener', 'prepare-inactive-completion', 'complete-inactive')
         if ($id -ne $sequence + 1 -or $method -cnotin (@('check', 'close', 'capture-admission', 'listener') + $inactiveMethods)) { throw 'Invalid managed task observation request.' }
         if ($Inactive -and $method -ceq 'listener') { throw 'Inactive observation grants no original runtime listener authority.' }
-        if ($null -ne $handoffText -and $method -cnotin @('check', 'close', 'capture-handoff-admission')) {
+        # After its own handoff admission, the scope continues through the existing inactive transaction methods.
+        if ($null -ne $handoffText -and $method -cnotin @('check', 'close', 'capture-handoff-admission') -and
+            ($null -eq $scope -or -not $scope.ContainsKey('AdmissionSha256'))) {
             throw 'Handoff-aware inspection grants only its handoff-aware admission.'
         }
         if ($null -eq $handoffText -and $method -ceq 'capture-handoff-admission') {

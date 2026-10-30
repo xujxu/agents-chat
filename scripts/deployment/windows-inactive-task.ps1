@@ -39,7 +39,8 @@ function New-AgentsChatInactiveActivationPreparation([hashtable]$Context, [strin
             version=1; kind='inactive'; phase='activation-prepared'; operationId=$original.operationId
             admissionSha256=$Context.AdmissionSha256; stateSha256=$StateSha256
             sourceCommit=$state.sourceCommit; targetCommit=$state.targetCommit; backupId=$state.backupId
-            taskName=$Context.TaskName; definition=$Context.NativeDefinition
+            taskName=$Context.TaskName
+            definition=$(if ($Context.ContainsKey('ProvedDefinition')) { $Context.ProvedDefinition } else { $Context.NativeDefinition })
             securityDescriptor=$Context.SecurityDescriptor
             configuration=$configuration; configurationSha256=$Context.ConfigurationSha256
         }
