@@ -7,7 +7,8 @@ function Write-AgentsChatInactiveReplacementReceipt([hashtable]$Context, [string
         version=1; kind='inactive'; phase=$Phase; operationId=$prepared.operationId
         preparationSha256=$Context.ActivationPreparationSha256
         previousSha256=$PreviousSha256; stateSha256=$prepared.stateSha256
-        taskName=$Context.TaskName; originalDefinition=$Context.NativeDefinition
+        taskName=$Context.TaskName
+        originalDefinition=$(if ($Context.ContainsKey('ProvedDefinition')) { $Context.ProvedDefinition } else { $Context.NativeDefinition })
         definition=$Definition; securityDescriptor=$Context.SecurityDescriptor
         configuration=$prepared.configuration; configurationSha256=$prepared.configurationSha256
     }
