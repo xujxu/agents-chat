@@ -373,11 +373,22 @@ export async function assertRestartPreparation({
     }
     const scope = await open();
     let published;
+    let activationPrepared;
     try {
       await assert.rejects(captureWindowsInactiveTaskHandoffAdmission({
         scope, control, lock: { ...owner, token: randomUUID() }, admission, handoff,
       }));
       await assert.rejects(lstat(maintenance), { code: 'ENOENT' });
+      // The restart operation publishes its distinct runtime bundle at preflight through the handoff-aware scope.
+      const { prepareWindowsInactiveRuntimeBundle } = await load('windows-runtime-publication.mjs');
+      const bundleInput = { scope, control, lock: owner, node: process.execPath, pwsh };
+      await assert.rejects(prepareWindowsInactiveRuntimeBundle({ ...bundleInput, scope: { ...scope } }));
+      const bundle = await prepareWindowsInactiveRuntimeBundle(bundleInput);
+      assert.deepEqual(bundle, {
+        directory: path.join(control, `runtime-${owner.operationId}`),
+        configuration: path.join(control, `runtime-${owner.operationId}`, 'configuration.json'),
+        sha256: original.observation.configurationSha256,
+      });
       const result = await captureWindowsInactiveTaskHandoffAdmission({ scope, control, lock: owner, admission, handoff });
       assert.deepEqual(Object.keys(result).sort(), ['admission', 'sha256']);
       assert.equal(result.admission, path.join(maintenance, 'admission.json'));
@@ -428,6 +439,46 @@ export async function assertRestartPreparation({
         },
       });
       await assert.rejects(assertWindowsInactiveTaskSnapshotStage({ ...snapshotOptions, context: { ...transaction } }));
+      // The handoff-aware transaction snapshots, rotates and prepares activation with its own operation bundle.
+      const { prepareWindowsConfigurationFixture } = await import('./deployment-windows-configuration.mjs');
+      const { createWindowsInactiveTaskSnapshot } = await load('windows-task-snapshot.mjs');
+      const { verifySnapshot } = await load('snapshot.mjs');
+      const { saveRecoveryEngine } = await load('saved-recovery-engine.mjs');
+      const { rotateWindowsInactiveTaskSnapshot, prepareWindowsInactiveTaskActivation } =
+        await load('windows-inactive-task-transaction.mjs');
+      const recovery = await saveRecoveryEngine({ source, control, allowVersionChange: true });
+      const configuration = await prepareWindowsConfigurationFixture({ scope, pwsh, inactive: true });
+      try {
+        const manifest = await createWindowsInactiveTaskSnapshot({
+          context: transaction, control, lock: owner, pwsh, destination: path.join(control, 'staging'),
+          id: 'handoff-transaction-snapshot', source: { commit: sourceCommit, provenance: 'observed' },
+          recoveryEngine: recovery.manifestSha256, configuration,
+        });
+        assert.deepEqual(manifest.runtime, { platform: 'win32', state: 'stopped', task: metadata.task });
+        const rotating = { ...stopped, phase: 'rotating', previousPhase: 'copying', backupId: manifest.id };
+        await writeDeploymentState(control, rotating);
+        await transaction.check();
+        await rotateWindowsInactiveTaskSnapshot({ context: transaction, control, lock: owner });
+        assert.deepEqual(await verifySnapshot(path.join(control, 'backup')), manifest);
+        let previousPhase = 'rotating';
+        for (const phase of ['backup-ready', 'source-selected', 'dependencies', 'building', 'configuring', 'activating']) {
+          await writeDeploymentState(control, { ...rotating, phase, previousPhase });
+          await transaction.check();
+          previousPhase = phase;
+        }
+        await configuration.checkFiles();
+        const preparationOptions = { context: transaction, control, lock: owner, bundle };
+        await assert.rejects(prepareWindowsInactiveTaskActivation({ ...preparationOptions, context: { ...transaction } }));
+        const preparation = await prepareWindowsInactiveTaskActivation(preparationOptions);
+        const intent = JSON.parse(await readFile(preparation.file));
+        assert.equal(intent.phase, 'activation-prepared');
+        assert.equal(intent.admissionSha256, result.sha256);
+        assert.equal(intent.definition, original.observation.definition);
+        assert.equal(intent.configuration, bundle.configuration);
+        await assert.rejects(prepareWindowsInactiveTaskActivation(preparationOptions));
+        assert.deepEqual(await readdir(maintenance), ['admission.json', 'inactive-activation-prepared.json']);
+        activationPrepared = preparation.file;
+      } finally { await configuration.close(); }
       await transaction.close();
       writtenState = Object.freeze({
         ...writtenState, bytes: await readFile(stateFile), identity: await lstat(stateFile, { bigint: true }),
@@ -435,6 +486,7 @@ export async function assertRestartPreparation({
     } finally { await scope.close(); }
     // The inactive scope retains its published admission handle until it closes.
     await unlink(published);
+    await unlink(activationPrepared);
     await rmdir(maintenance);
   }
   if (publish && !held) {
@@ -499,6 +551,7 @@ export async function assertRestartPreparation({
     console.log('PASS: ordinary inactive task admission refuses the exact live restart owner written preflight while handoff evidence remains without publishing maintenance');
     console.log('PASS: handoff-aware inactive admission publishes only the exact live restart owner written preflight binding through the shared native verifier while copied foreign ordinary and duplicate admission remain refused');
     console.log('PASS: handoff-aware inactive admission begins the existing inactive transaction for the exact live restart owner and reaches its copying snapshot stage while copied scopes and duplicate consumers remain refused');
+    console.log('PASS: handoff-aware inactive transaction snapshots rotates and prepares activation with its distinct operation bundle and proved task definition while copied contexts and duplicate preparation remain refused');
   }
   console.log(releaseRestart && writeState
     ? 'PASS: native live restart owner releases only its exact committed lock after its acknowledged state write while nine records and written state remain exact without authority'
