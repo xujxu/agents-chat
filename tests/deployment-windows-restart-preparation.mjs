@@ -375,6 +375,7 @@ export async function assertRestartPreparation({
     let published;
     let activationPrepared;
     let replacedDefinition;
+    let activatedRuntime;
     try {
       await assert.rejects(captureWindowsInactiveTaskHandoffAdmission({
         scope, control, lock: { ...owner, token: randomUUID() }, admission, handoff,
@@ -498,8 +499,32 @@ export async function assertRestartPreparation({
         await assert.rejects(replaceWindowsInactiveTask(replacementOptions));
         assert.deepEqual((await readdir(maintenance)).sort(), ['admission.json', 'inactive-activation-prepared.json',
           'inactive-replacement-complete.json', 'inactive-replacement-requested.json']);
+        // The replaced handoff transaction starts one distinct guarded runtime from its operation bundle.
+        const { startWindowsInactiveTask } = await load('windows-inactive-task-transaction.mjs');
+        await assert.rejects(startWindowsInactiveTask({ ...replacementOptions, context: { ...transaction } }));
+        const active = await startWindowsInactiveTask(replacementOptions);
+        activatedRuntime = active.runtime;
+        assert.equal(active.status, 'guarded-running');
+        assert.equal(active.taskName, original.observation.taskName);
+        assert.notEqual(active.runtime.identity, original.observation.retiredRuntime.identity);
+        assert.notEqual(active.runtime.generation, original.observation.retiredRuntime.generation);
+        assert.equal(active.runtime.configurationSha256, bundle.sha256);
+        await transaction.check();
+        await assert.rejects(startWindowsInactiveTask(replacementOptions));
+        const running = JSON.parse(await readFile(path.join(maintenance, 'inactive-start-running.json')));
+        assert.equal(running.preparationSha256, preparation.sha256);
+        assert.equal(running.configuration, bundle.configuration);
+        assert.deepEqual(running.runtime, active.runtime);
       } finally { await configuration.close(); }
       await transaction.close();
+      if (activatedRuntime) {
+        // Closing the unfinished transaction settles its guarded runtime.
+        const deadline = Date.now() + 30000;
+        while (await processIdentity(activatedRuntime.pid) === activatedRuntime.identity && Date.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        assert.notEqual(await processIdentity(activatedRuntime.pid), activatedRuntime.identity);
+      }
       writtenState = Object.freeze({
         ...writtenState, bytes: await readFile(stateFile), identity: await lstat(stateFile, { bigint: true }),
       });
@@ -507,7 +532,8 @@ export async function assertRestartPreparation({
     // The inactive scope retains its published admission handle until it closes.
     await unlink(published);
     await unlink(activationPrepared);
-    for (const name of ['inactive-replacement-requested.json', 'inactive-replacement-complete.json']) {
+    for (const name of await readdir(maintenance)) {
+      assert.match(name, /^inactive-(replacement|start)-[a-z-]+\.json$/);
       await unlink(path.join(maintenance, name));
     }
     await rmdir(maintenance);
@@ -588,6 +614,7 @@ export async function assertRestartPreparation({
     console.log('PASS: handoff-aware inactive admission begins the existing inactive transaction for the exact live restart owner and reaches its copying snapshot stage while copied scopes and duplicate consumers remain refused');
     console.log('PASS: handoff-aware inactive transaction snapshots rotates and prepares activation with its distinct operation bundle and proved task definition while copied contexts and duplicate preparation remain refused');
     console.log('PASS: handoff-aware inactive transaction replaces the inhibited task with its operation bundle and records the proved original definition while copied contexts and duplicate replacement remain refused');
+    console.log('PASS: handoff-aware inactive transaction starts one distinct guarded runtime from its operation bundle and settles it on close while copied contexts and duplicate startup remain refused');
   }
   console.log(releaseRestart && writeState
     ? 'PASS: native live restart owner releases only its exact committed lock after its acknowledged state write while nine records and written state remain exact without authority'
