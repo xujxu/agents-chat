@@ -1606,9 +1606,9 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       await assert.rejects(api.openWindowsInactiveRollbackHistoryArchive(options));
       assert.deepEqual(await readFile(completionFile), changedCompletion);
     } finally { await writeFile(completionFile, completionBytes); }
-    if (restartStateWrittenResume || restartStateDeadResume) {
+    if (restartStateWrittenResume || restartStateDeadResume || mode === 'resume-lock-state-written-history') {
       // The actual write replaced the original state inode; only its bytes were restored in place, so
-      // identity-pinned generic archive readers must refuse without the explicit ninth-record transition.
+      // identity-pinned generic archive readers must refuse without the explicit state-intent transition.
       await assert.rejects(api.openWindowsInactiveRollbackHistoryArchive(options));
     } else {
       const proof = await api.openWindowsInactiveRollbackHistoryArchive(options);
