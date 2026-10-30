@@ -1,13 +1,21 @@
 import { randomUUID } from 'node:crypto';
-import { inspectWindowsWorkerScope } from './windows-worker-scope.mjs';
-import { inspectWindowsConfiguration } from './windows-configuration.mjs';
+import { inspectWindowsWorkerScope, inspectWindowsInactiveWorkerScope } from './windows-worker-scope.mjs';
+import { inspectWindowsConfiguration, inspectWindowsInactiveConfiguration } from './windows-configuration.mjs';
 import { inspectTargetCompatibility } from './target-compatibility.mjs';
 import { prepareDatabaseInspectionCommand, readDatabaseInspectionResult } from './database-command.mjs';
 
-export async function admitWindowsCompatibility({
+export async function admitWindowsCompatibility(options) {
+  return admitCompatibility(options, false);
+}
+
+export async function admitWindowsInactiveCompatibility(options) {
+  return admitCompatibility(options, true);
+}
+
+async function admitCompatibility({
   scope, control, lock, operation, node, git, pwsh, commit, signal,
-}) {
-  const authority = await inspectWindowsWorkerScope({
+}, inactive) {
+  const authority = await (inactive ? inspectWindowsInactiveWorkerScope : inspectWindowsWorkerScope)({
     scope, control, lock, node, pwsh, tools: [git], signal,
   });
   const project = authority.observation.project;
@@ -32,7 +40,7 @@ export async function admitWindowsCompatibility({
   const target = await inspectTargetCompatibility({
     project, commit, git, nodeVersion: runtime.nodeVersion, platform: runtime.platform, signal,
   });
-  const configuration = await inspectWindowsConfiguration({
+  const configuration = await (inactive ? inspectWindowsInactiveConfiguration : inspectWindowsConfiguration)({
     scope, pwsh, profile: target.configurationProfile, signal,
   });
   try {

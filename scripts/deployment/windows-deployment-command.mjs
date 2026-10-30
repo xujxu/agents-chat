@@ -11,19 +11,20 @@ import { hasUnsettledWorker } from './worker-errors.mjs';
 import { runWindowsLiveDeployment } from './windows-deployment.mjs';
 import { inspectWindowsManagedTask } from './windows-managed-task.mjs';
 import { runWindowsFirstCommand } from './windows-first-command.mjs';
+import { isArchivedWindowsStoppedHistory, runWindowsStoppedHistoryUpdate } from './windows-stopped-history-update-command.mjs';
 
 const refused = (code, message) => Object.assign(new Error(message), { code });
 const canonical = value => typeof value === 'string' && value.length <= 4096
   && path.isAbsolute(value) && path.resolve(value) === value && !/[\0\r\n]/.test(value);
 
 export async function runWindowsDeploymentCommand({
-  operation, args, project, control, taskName, node, npmCli, git, pwsh, signal, onProgress,
+  operation, args, project, control, taskName, node, npmCli, git, pwsh, admission, signal, onProgress,
 }) {
   if (!['deploy', 'update'].includes(operation)) throw new Error('Unsupported Windows deployment command.');
   const options = parseWindowsCommandArguments(operation, args);
   if (options.help) return {
     status: 'help',
-    message: 'Windows command admission supports existing running managed tasks, explicit first NoTunnel deployment, positive health waits and read-only status.',
+    message: 'Windows command admission supports existing running managed tasks, updates of archived stopped history, explicit first NoTunnel deployment, positive health waits and read-only status.',
   };
   if (options.operation === 'verify' || options.waitSeconds === 0 || options.dryRun) {
     throw refused('DEPLOYMENT_COMMAND_MODE_UNSUPPORTED',
@@ -54,6 +55,12 @@ export async function runWindowsDeploymentCommand({
   if (options.operation === 'status') return { ...status, project, control, targetCommit: originalState?.targetCommit ?? null };
   if (!originalState && names.length) {
     throw refused('DEPLOYMENT_CONTROL_UNBOUND', 'Nonempty control directory has no project-bound state; retain and inspect it.');
+  }
+  if (options.operation === 'update' && !options.firstInstall && originalState
+    && isArchivedWindowsStoppedHistory(names, status)) {
+    return runWindowsStoppedHistoryUpdate({
+      options, project, control, taskName, node, npmCli, git, pwsh, admission, signal, onProgress,
+    });
   }
   if (!['idle', 'already-current', 'preflight-refused', 'prior-runtime-restored'].includes(status.status)) {
     throw refused('DEPLOYMENT_RECOVERY_REQUIRED', 'Existing operation needs inspection or recovery before another deployment.');
