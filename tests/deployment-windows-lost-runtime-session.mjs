@@ -583,10 +583,10 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
     (mode.startsWith('resume-') || retirementCrash || ownerRetirementCrash || directoryRetirementCrash || ownerRetirementCheck || settlementCrash || settlementCheck || successorCrash || successorCheck || successorAbandonedCrash || successorAbandonedCheck || restartCrash || restartDirectoryCrash || restartOwnerCrash || restartCommittedCrash || restartStateCrash || restartReleasedCrash || restartRetirementCrash || restartReleaseIntentCrash));
   if (['crash-history', 'resume-history', 'crash-finalized-history', 'resume-finalized-history',
     'resume-history-saved', 'crash-completed-history', 'resume-completed-history',
-    'crash-prepared-history', 'resume-prepared-history',
+    'resume-lock-state-admitted-history', 'crash-prepared-history', 'resume-prepared-history',
     'crash-abandoned-history', 'resume-abandoned-history'].includes(mode) || lockStage) {
     const finalizedResume = ['resume-finalized-history', 'resume-history-saved',
-      'resume-completed-history', 'resume-prepared-history',
+      'resume-completed-history', 'resume-lock-state-admitted-history', 'resume-prepared-history',
       'crash-abandoned-history', 'resume-abandoned-history'].includes(mode) || lockResume;
     if (!finalizedResume) await retainOriginalRuntimeAbsence();
     const intentFile = path.join(control, 'inactive-rollback-history-intent.json');
@@ -595,7 +595,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       : intentFile);
     const intent = JSON.parse(originalIntent);
     const completionFile = path.join(control, `retired-${intent.operationId}-inactive-rollback-history-complete.json`);
-    const retainedCompletion = ['resume-completed-history', 'resume-prepared-history',
+    const retainedCompletion = ['resume-completed-history', 'resume-lock-state-admitted-history', 'resume-prepared-history',
       'crash-abandoned-history', 'resume-abandoned-history'].includes(mode) || lockResume ? {
       bytes: await readFile(completionFile), identity: await lstat(completionFile, { bigint: true }),
     } : undefined;
@@ -1308,8 +1308,10 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       await unlink(preparedFile);
       console.log('PASS: actual prepared publisher death retains its exact record and a distinct actor cannot claim lock authority');
     }
+    // The first-attempt admission writes the shared original state, so it reuses this path only as its shard's last boundary.
+    const firstAdmitResume = mode === 'resume-lock-state-admitted-history';
     let firstStateAdmitted = false;
-    if (mode === 'resume-completed-history') {
+    if (mode === 'resume-completed-history' || firstAdmitResume) {
       const attemptId = randomUUID();
       const operationId = randomUUID();
       const token = randomUUID();
@@ -1583,91 +1585,93 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       console.log('PASS: first-attempt committed handoff publishes its exact state-transition intent for the live committed owner while copied foreign duplicate and write authority remain refused');
       // The live first-attempt owner commits again, publishes its intent and writes preflight; its bridge exits so
       // only handoff-aware admission through the shared native verifier may admit the written state.
-      const writtenPublication = await promisify(execFile)(pwsh,
-        [...commitArgs, '-Token', handoffOptions.token, '-PrepareState', '-WriteState'],
-        { timeout: 45000, maxBuffer: 131072, windowsHide: true });
-      assert.equal(writtenPublication.stderr, '');
-      const writtenOutput = JSON.parse(writtenPublication.stdout);
-      assert.deepEqual(Object.keys(writtenOutput).sort(), ['committed', 'refusals', 'state', 'stateIntent']);
-      const stateFile = path.join(control, 'state.json');
-      const writtenStateBytes = await readFile(stateFile);
-      assert.equal(writtenOutput.state.sha256, createHash('sha256').update(writtenStateBytes).digest('hex'));
-      const writtenIntent = JSON.parse(await readFile(path.join(control, writtenOutput.stateIntent.path)));
-      assert.deepEqual(JSON.parse(writtenStateBytes), writtenIntent.nextState);
-      const liveOwner = JSON.parse(await readFile(lockFile));
-      assert.deepEqual(liveOwner, retainedRecord.newOwner);
-      const firstHandoff = {
-        attemptId: handoffOptions.attemptId, prepared: retainedDescriptor, committed: writtenOutput.committed,
-        stateIntent: writtenOutput.stateIntent, state: writtenOutput.state,
-      };
-      const {
-        inspectWindowsInactiveTaskHandoff, captureWindowsInactiveTaskAdmission,
-        captureWindowsInactiveTaskHandoffAdmission, assertWindowsInactiveTaskAdmissionBinding,
-      } = await load('windows-managed-task.mjs');
-      const { createWindowsInactiveTaskAdmissionRecord } = await load('windows-inactive-task-admission.mjs');
-      const { validateState } = await load('state.mjs');
-      const ordinaryRefusal = error => /requires its handoff-aware admission/.test(`${error.message} ${error.cause?.message ?? ''}`);
-      const maintenance = path.join(control, 'task-maintenance');
-      const openFirst = async () => {
-        const firstScope = await inspectWindowsInactiveTaskHandoff({
-          taskName: retainedRecord.observation.taskName, project: retainedRecord.project, pwsh, control,
-          handoff: firstHandoff,
-        });
-        assert.deepEqual(JSON.parse(JSON.stringify(firstScope.observation)), retainedRecord.observation);
-        return firstScope;
-      };
-      for (const copied of [
-        { ...firstHandoff, state: { ...firstHandoff.state, sha256: '0'.repeat(64) } },
-        { ...firstHandoff, restartCommitted: firstHandoff.committed },
-        { ...firstHandoff, stateIntent: undefined },
-      ]) {
+      if (firstAdmitResume) {
+        const writtenPublication = await promisify(execFile)(pwsh,
+          [...commitArgs, '-Token', handoffOptions.token, '-PrepareState', '-WriteState'],
+          { timeout: 45000, maxBuffer: 131072, windowsHide: true });
+        assert.equal(writtenPublication.stderr, '');
+        const writtenOutput = JSON.parse(writtenPublication.stdout);
+        assert.deepEqual(Object.keys(writtenOutput).sort(), ['committed', 'refusals', 'state', 'stateIntent']);
+        const stateFile = path.join(control, 'state.json');
+        const writtenStateBytes = await readFile(stateFile);
+        assert.equal(writtenOutput.state.sha256, createHash('sha256').update(writtenStateBytes).digest('hex'));
+        const writtenIntent = JSON.parse(await readFile(path.join(control, writtenOutput.stateIntent.path)));
+        assert.deepEqual(JSON.parse(writtenStateBytes), writtenIntent.nextState);
+        const liveOwner = JSON.parse(await readFile(lockFile));
+        assert.deepEqual(liveOwner, retainedRecord.newOwner);
+        const firstHandoff = {
+          attemptId: handoffOptions.attemptId, prepared: retainedDescriptor, committed: writtenOutput.committed,
+          stateIntent: writtenOutput.stateIntent, state: writtenOutput.state,
+        };
+        const {
+          inspectWindowsInactiveTaskHandoff, captureWindowsInactiveTaskAdmission,
+          captureWindowsInactiveTaskHandoffAdmission, assertWindowsInactiveTaskAdmissionBinding,
+        } = await load('windows-managed-task.mjs');
+        const { createWindowsInactiveTaskAdmissionRecord } = await load('windows-inactive-task-admission.mjs');
+        const { validateState } = await load('state.mjs');
+        const ordinaryRefusal = error => /requires its handoff-aware admission/.test(`${error.message} ${error.cause?.message ?? ''}`);
+        const maintenance = path.join(control, 'task-maintenance');
+        const openFirst = async () => {
+          const firstScope = await inspectWindowsInactiveTaskHandoff({
+            taskName: retainedRecord.observation.taskName, project: retainedRecord.project, pwsh, control,
+            handoff: firstHandoff,
+          });
+          assert.deepEqual(JSON.parse(JSON.stringify(firstScope.observation)), retainedRecord.observation);
+          return firstScope;
+        };
+        for (const copied of [
+          { ...firstHandoff, state: { ...firstHandoff.state, sha256: '0'.repeat(64) } },
+          { ...firstHandoff, restartCommitted: firstHandoff.committed },
+          { ...firstHandoff, stateIntent: undefined },
+        ]) {
+          const firstScope = await openFirst();
+          try {
+            await assert.rejects(captureWindowsInactiveTaskAdmission({ scope: firstScope, control, lock: liveOwner, admission }),
+              ordinaryRefusal);
+            await assert.rejects(captureWindowsInactiveTaskHandoffAdmission({
+              scope: firstScope, control, lock: liveOwner, admission, handoff: copied,
+            }), { code: 'DEPLOYMENT_WINDOWS_MANAGED_TASK_REFUSED' });
+          } finally { await firstScope.close(); }
+          await assert.rejects(lstat(maintenance), { code: 'ENOENT' });
+        }
         const firstScope = await openFirst();
         try {
+          await assert.rejects(captureWindowsInactiveTaskHandoffAdmission({
+            scope: firstScope, control, lock: { ...liveOwner, token: randomUUID() }, admission, handoff: firstHandoff,
+          }));
+          await assert.rejects(lstat(maintenance), { code: 'ENOENT' });
+          const result = await captureWindowsInactiveTaskHandoffAdmission({
+            scope: firstScope, control, lock: liveOwner, admission, handoff: firstHandoff,
+          });
+          assert.deepEqual(Object.keys(result).sort(), ['admission', 'sha256']);
+          assert.equal(result.admission, path.join(maintenance, 'admission.json'));
+          assert.deepEqual(await readdir(maintenance), ['admission.json']);
+          const admissionBytes = await readFile(result.admission);
+          assert.equal(createHash('sha256').update(admissionBytes).digest('hex'), result.sha256);
+          assert.deepEqual(JSON.parse(admissionBytes), createWindowsInactiveTaskAdmissionRecord({
+            observation: retainedRecord.observation, lock: liveOwner, state: JSON.parse(writtenStateBytes),
+          }));
+          const binding = await assertWindowsInactiveTaskAdmissionBinding({
+            scope: firstScope, control, lock: liveOwner, admission: result.admission, sha256: result.sha256,
+          });
+          assert.deepEqual(binding.state, { ...validateState(JSON.parse(writtenStateBytes)) });
           await assert.rejects(captureWindowsInactiveTaskAdmission({ scope: firstScope, control, lock: liveOwner, admission }),
             ordinaryRefusal);
           await assert.rejects(captureWindowsInactiveTaskHandoffAdmission({
-            scope: firstScope, control, lock: liveOwner, admission, handoff: copied,
-          }), { code: 'DEPLOYMENT_WINDOWS_MANAGED_TASK_REFUSED' });
+            scope: firstScope, control, lock: liveOwner, admission, handoff: firstHandoff,
+          }));
+          assert.deepEqual(await readFile(result.admission), admissionBytes);
         } finally { await firstScope.close(); }
-        await assert.rejects(lstat(maintenance), { code: 'ENOENT' });
+        await unlink(path.join(maintenance, 'admission.json'));
+        await rmdir(maintenance);
+        await unlink(path.join(control, writtenOutput.stateIntent.path));
+        await unlink(path.join(control, writtenOutput.committed.path));
+        await unlink(lockFile);
+        await rmdir(lockDirectory);
+        await writeFile(stateFile, state);
+        firstStateAdmitted = true;
+        console.log('PASS: handoff-aware inactive admission publishes only the exact live first-attempt owner written preflight binding through the shared native verifier while copied foreign ordinary and duplicate admission remain refused');
       }
-      const firstScope = await openFirst();
-      try {
-        await assert.rejects(captureWindowsInactiveTaskHandoffAdmission({
-          scope: firstScope, control, lock: { ...liveOwner, token: randomUUID() }, admission, handoff: firstHandoff,
-        }));
-        await assert.rejects(lstat(maintenance), { code: 'ENOENT' });
-        const result = await captureWindowsInactiveTaskHandoffAdmission({
-          scope: firstScope, control, lock: liveOwner, admission, handoff: firstHandoff,
-        });
-        assert.deepEqual(Object.keys(result).sort(), ['admission', 'sha256']);
-        assert.equal(result.admission, path.join(maintenance, 'admission.json'));
-        assert.deepEqual(await readdir(maintenance), ['admission.json']);
-        const admissionBytes = await readFile(result.admission);
-        assert.equal(createHash('sha256').update(admissionBytes).digest('hex'), result.sha256);
-        assert.deepEqual(JSON.parse(admissionBytes), createWindowsInactiveTaskAdmissionRecord({
-          observation: retainedRecord.observation, lock: liveOwner, state: JSON.parse(writtenStateBytes),
-        }));
-        const binding = await assertWindowsInactiveTaskAdmissionBinding({
-          scope: firstScope, control, lock: liveOwner, admission: result.admission, sha256: result.sha256,
-        });
-        assert.deepEqual(binding.state, { ...validateState(JSON.parse(writtenStateBytes)) });
-        await assert.rejects(captureWindowsInactiveTaskAdmission({ scope: firstScope, control, lock: liveOwner, admission }),
-          ordinaryRefusal);
-        await assert.rejects(captureWindowsInactiveTaskHandoffAdmission({
-          scope: firstScope, control, lock: liveOwner, admission, handoff: firstHandoff,
-        }));
-        assert.deepEqual(await readFile(result.admission), admissionBytes);
-      } finally { await firstScope.close(); }
-      await unlink(path.join(maintenance, 'admission.json'));
-      await rmdir(maintenance);
-      await unlink(path.join(control, writtenOutput.stateIntent.path));
-      await unlink(path.join(control, writtenOutput.committed.path));
-      await unlink(lockFile);
-      await rmdir(lockDirectory);
-      await writeFile(stateFile, state);
-      firstStateAdmitted = true;
-      console.log('PASS: handoff-aware inactive admission publishes only the exact live first-attempt owner written preflight binding through the shared native verifier while copied foreign ordinary and duplicate admission remain refused');
       assert.deepEqual(await readFile(retainedFile), retainedBytes);
       const afterClose = await lstat(retainedFile, { bigint: true });
       assert.equal(afterClose.dev, retainedFileIdentity.dev);
