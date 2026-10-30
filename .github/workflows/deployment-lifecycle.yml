@@ -454,19 +454,6 @@ jobs:
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-windows-project-policy.test.mjs')
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-windows-combined-restore.test.mjs') -NamePattern '^Windows combined restoration (uses explicit PowerShell|preserves inherited private Git root policy)'
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-restore-project.test.mjs') -NamePattern '^Windows (project restoration preserves an eligible|unsupported saved ownership)'
-      - name: Verify stopped restore evidence after original controller exit
-        if: ${{ matrix.scenario == 'complete' }}
-        shell: pwsh
-        run: |
-          ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-restore -StoppedProof
-          ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-restore -StoppedProof -ColdActivationCrash
-          ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-proof-restore
-          ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement-restore
-      - name: Verify unacknowledged cold launch recovery and original journal archival
-        if: ${{ matrix.scenario == 'complete' }}
-        shell: pwsh
-        run: |
-          ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-restore -StoppedProof -ColdStartupCrash
       - name: Verify public task-option refusals in Windows PowerShell
         if: ${{ inputs.windows_application_only && inputs.windows_commands_only }}
         shell: powershell
@@ -496,6 +483,31 @@ jobs:
           $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node).Source) 'node_modules/npm/bin/npm-cli.js'
           $timeoutSeconds = if ($env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY -in @('startup', 'launch', 'enabled', 'requested', 'registered', 'unlaunched')) { 10500 } elseif ($env:DEPLOYMENT_TEST_WINDOWS_RESTORE_SCENARIO -eq 'copy-crashed') { 7800 } else { 6300 }
           ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-native-operation.test.mjs') -NamePattern '^actual application source installs and builds' -TimeoutSeconds $timeoutSeconds
+
+  windows-live-stopped-proof:
+    # Split from the live deployment job so the complete scenario stays inside its budget.
+    if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !inputs.windows_first_application_only && !(inputs.windows_application_only && inputs.windows_live_only && inputs.windows_failed_application_only) && !(inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && inputs.windows_cold_started_only) && !(inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && inputs.windows_history_only && inputs.windows_restore_scenario == 'failed') && (!inputs.windows_restore_scenario || inputs.windows_restore_scenario == 'complete') }}
+    name: Actual Windows stopped restore evidence
+    runs-on: windows-2022
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify stopped restore evidence after original controller exit
+        shell: pwsh
+        run: |
+          ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-restore -StoppedProof
+          ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-restore -StoppedProof -ColdActivationCrash
+          ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-proof-restore
+          ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement-restore
+      - name: Verify unacknowledged cold launch recovery and original journal archival
+        shell: pwsh
+        run: |
+          ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-restore -StoppedProof -ColdStartupCrash
 
   windows-failed-application:
     if: ${{ inputs.windows_application_only && inputs.windows_live_only && inputs.windows_failed_application_only }}

@@ -113,4 +113,8 @@ working directory beside (not inside) the control used as actor `TEMP`.
   for the whole live/restore job. Stopped-history run `41051063751` at the same SHA passed every shard except
   `takeover`, which tripped on Windows reusing the dead retirer's PID (`settler.bridgePid` equal to `retirer.pid`).
   Dead-actor distinctness assertions now compare process identity (PID plus creation time) instead of bare PIDs.
+- Regression run `41061365722` at `14bd5425`: 54 jobs passed, including every actual restore scenario; stopped-history
+  run `41061371234` passed all 17 jobs (acceptance job `124112029158`). `Actual Windows live deployment` reached its
+  300-minute budget during the actual application update after passing every earlier step. The stopped restore evidence
+  and unacknowledged cold launch steps now run in their own `Actual Windows stopped restore evidence` job.
 - Not yet covered: the inactive runner's `publish-receipt` stage (needs a real-application public stopped-history run).
