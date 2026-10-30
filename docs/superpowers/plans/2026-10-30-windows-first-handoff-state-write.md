@@ -51,4 +51,7 @@ The phase literal (`stopped-history-handoff-state-intent` or `...-restart-state-
 - Modify: `scripts/deployment/windows-stopped-history-handoff-committed-observation.ps1`
   - When `stateIntent` and `state` are present, initialize the transition, pin the intent through `Assert-AgentsChatStoppedHistoryHandoffStateIntent` in observer mode (creator = the dead controller), and report `committed-handoff-state-observed`.
 
-- [ ] Green stopped-history run (79 receipts) plus a same-SHA Contracts run; record acceptance here.
+- [x] Green stopped-history run (79 receipts) plus a same-SHA Contracts run; record acceptance here.
+  - Red run `41009414227` (contract only, `firstwrite` red).
+  - Fixed failures: `41009851830`, `41011986866`.
+  - **Accepted** at `779e7fd2` (tag `gate73-production3`): stopped-history run `41013265676` (acceptance job `123931210646`) and same-SHA Contracts run `41013268657`, both green.
