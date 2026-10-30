@@ -24,8 +24,15 @@
 
 ### Task 2: Production (only if Actions refuses)
 
-- [ ] If the native `check` on the handoff scope refuses once the state leaves preflight, extend the controller's inactive handoff check so the stopped transaction phases still verify the retained proof. Do not grant activation methods until a later gate covers snapshot rotation and activation with handoff evidence present.
+- [x] Not needed: the native `check` on the handoff scope refuses once the state leaves preflight, extend the controller's inactive handoff check so the stopped transaction phases still verify the retained proof. Do not grant activation methods until a later gate covers snapshot rotation and activation with handoff evidence present.
 
 ### Task 3: Acceptance
 
-- [ ] Stopped-history run green on all 10 shards, the all-boundaries job verifies 69 receipts, and a same-SHA Contracts run is green.
+- [x] Stopped-history run green on all 10 shards, the all-boundaries job verifies 69 receipts, and a same-SHA Contracts run is green.
+
+## Acceptance (2026-10-30)
+
+Test-only change `376005c7` (`gate63-contract`); no production change was required because the handoff-aware scope already grants the native `check` the existing transaction uses.
+
+- Stopped-history run `40976142131` succeeded on all ten shards: commitment `123804532735`, postintent `123804533007`, takeover `123804533048`, successor `123804533057`, state `123804533082`, postwrite `123804533104`, restart `123804533112`, baseline `123804533120`, completion `123804533128` and release `123804533259`. The aggregate job (`123814495405`) verified all 69 required receipts.
+- Same-SHA Contracts run `40979238030` / `Contracts (windows-2022)` `123814831554` succeeded.
