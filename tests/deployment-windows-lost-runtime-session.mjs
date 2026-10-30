@@ -620,7 +620,10 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       assert.notEqual(await processIdentity(process.pid), previous.actorIdentity);
       assert.notEqual(await processIdentity(previous.pid), previous.processIdentity);
     }
-    if ((mode === 'resume-history' || finalizedResume) && !lockResume) {
+    // Distinct first-attempt actors already replaced the original state inode before this point; the
+    // identity-pinned archive closeout must not rerun for them (their later checks assert its refusal).
+    const distinctFirstActor = firstCloseout || firstRepeat;
+    if ((mode === 'resume-history' || finalizedResume) && !lockResume && !distinctFirstActor) {
       const { archiveCompletedWindowsInactiveRollback } = await load('windows-completed-closeout.mjs');
       assert.equal(typeof archiveCompletedWindowsInactiveRollback, 'function');
       const originalState = JSON.parse(state);
@@ -633,7 +636,7 @@ await withWindowsAdmission(control, { pwsh }, async admission => {
       const expected = { status: 'history-archived', operationId: originalState.operationId, phase: 'restored' };
       assert.deepEqual(await archiveCompletedWindowsInactiveRollback(closeout), expected);
       assert.deepEqual(await archiveCompletedWindowsInactiveRollback(closeout), expected);
-    } else if (!lockResume) {
+    } else if (!lockResume && !distinctFirstActor) {
       const writer = await api.openWindowsInactiveRollbackHistoryRetirement(options);
       try {
         assert.equal(writer.observation.archivedEntries, 0);
