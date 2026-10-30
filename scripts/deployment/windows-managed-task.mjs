@@ -180,7 +180,7 @@ export async function assertWindowsInactiveTaskScope(scope, { signal } = {}) {
 export async function windowsInactiveTaskHandoffEntries(scope, { control, signal } = {}) {
   const retained = inactiveScopes.get(scope);
   if (!retained?.handoff) return null;
-  const names = new Set(handoffDescriptors.map(name => retained.handoff[name].path.toLowerCase()));
+  const names = new Set(handoffDescriptorNames(retained.handoff).map(name => retained.handoff[name].path.toLowerCase()));
   for (const name of await readdir(control)) {
     const entry = name.toLowerCase();
     if (entry.startsWith('retired-') && (entry.endsWith('-inactive-rollback-history-intent.json')
@@ -198,10 +198,18 @@ export async function captureWindowsInactiveTaskAdmission({ scope, control, lock
   return captureTaskAdmission({ scope, control, lock, admission, signal }, true);
 }
 
-const handoffDescriptors = ['prepared', 'committed', 'retirement', 'terminal', 'successor', 'abandoned',
+// A first-attempt owner admits its own written state; a restart owner admits after the settled first attempt.
+const firstHandoffDescriptors = ['prepared', 'committed', 'stateIntent', 'state'];
+const restartHandoffDescriptors = ['prepared', 'committed', 'retirement', 'terminal', 'successor', 'abandoned',
   'restart', 'restartCommitted', 'restartStateIntent', 'restartState'];
+function handoffDescriptorNames(handoff) {
+  return Object.hasOwn(handoff, 'stateIntent') ? firstHandoffDescriptors : restartHandoffDescriptors;
+}
+function handoffState(handoff) { return Object.hasOwn(handoff, 'stateIntent') ? handoff.state : handoff.restartState; }
 function captureHandoff(value) {
   const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Handoff-aware admission evidence differs.');
+  const handoffDescriptors = handoffDescriptorNames(value);
   const handoff = captureWorkerFields(value, ['attemptId', ...handoffDescriptors], 'handoff-aware admission');
   if (typeof handoff.attemptId !== 'string' || !guid.test(handoff.attemptId)) {
     throw new Error('Handoff-aware admission attempt differs.');
@@ -269,8 +277,8 @@ async function captureTaskAdmission({ scope, control, lock: suppliedLock, admiss
   await assertLockOwner(root, lock);
   await assertWindowsAdmission(root, admission, { signal });
   const digest = bytes => createHash('sha256').update(bytes).digest('hex');
-  if (handoff && handoff.restartState.sha256 !== digest(stateBytes)) {
-    throw refused(new Error('Handoff-aware admission requires its exact written restart state.'));
+  if (handoff && handoffState(handoff).sha256 !== digest(stateBytes)) {
+    throw refused(new Error('Handoff-aware admission requires its exact written handoff state.'));
   }
   const result = await retained.request(handoff ? 'capture-handoff-admission' : 'capture-admission', signal, {
     control: root, lockSha256: digest(lockBytes), stateSha256: digest(stateBytes), ...(handoff ? { handoff } : {}),

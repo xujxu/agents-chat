@@ -37,12 +37,12 @@ function Assert-AgentsChatStoppedHistoryHandoffRetiredPreparedBinding(
             }
             $held.Check()
             if ($held.ReadText() -cne $text) { throw 'Retired prepared handoff bytes changed.' }
-            $owner = Get-AgentsChatStoppedHistoryHandoffRetiredOwner @request
+            $owner = Get-AgentsChatStoppedHistoryHandoffObservedOwner $Context $request
             $binding = Get-AgentsChatStoppedHistoryHandoffBinding $Context $AttemptId $owner
             $expected = [Text.Json.JsonDocument]::Parse(($binding | ConvertTo-Json -Depth 12 -Compress))
             try { Assert-AgentsChatStoppedHandoffJsonBinding $document.RootElement $expected.RootElement }
             finally { $expected.Dispose() }
-            $null = Get-AgentsChatStoppedHistoryHandoffRetiredOwner @request
+            $null = Get-AgentsChatStoppedHistoryHandoffObservedOwner $Context $request
             $null = Assert-AgentsChatStoppedWorkerCleanup $Context
             if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity) {
                 throw 'Retired prepared observer changed during observation.'

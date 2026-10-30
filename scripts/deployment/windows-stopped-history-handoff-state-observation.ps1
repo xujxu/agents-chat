@@ -14,12 +14,13 @@ function Get-AgentsChatStoppedHistoryHandoffObservedStateIntentRecord([hashtable
         $record.attemptId -cne $observed.AttemptId) {
         throw 'Handoff state observation prepared template differs.'
     }
-    Assert-AgentsChatRetirementCreator $Creator $observed.ControllerPid $observed.ControllerIdentity
+    Assert-AgentsChatStoppedHistoryHandoffObservedCreator $Context $Creator $observed.ControllerPid $observed.ControllerIdentity
+    $admitter = Test-AgentsChatStoppedHistoryHandoffFirstOwnerAdmitter $Context
     if ($Creator.pid -ne $record.newOwner.pid -or
         $Creator.processIdentity -cne $record.newOwner.processIdentity -or
         $Creator.pid -ne $observed.Creator.pid -or
         $Creator.processIdentity -cne $observed.Creator.processIdentity -or
-        $Creator.processIdentity -ceq $observed.ControllerIdentity -or
+        (-not $admitter -and $Creator.processIdentity -ceq $observed.ControllerIdentity) -or
         $Creator.bridgeIdentity -ceq [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)) {
         throw 'Handoff state observation creator differs from its committed owner.'
     }
@@ -163,7 +164,7 @@ function Get-AgentsChatStoppedHistoryHandoffStateObservation(
 
 function Open-AgentsChatStoppedHistoryHandoffStateObservation(
     [string]$Control, [int]$ControllerPid, [string]$ControllerIdentity,
-    [string]$AttemptId, $Prepared, $Committed, $StateIntent, $State
+    [string]$AttemptId, $Prepared, $Committed, $StateIntent, $State, [switch]$OwnerAdmission
 ) {
     $scope = $null
     try {
@@ -173,6 +174,7 @@ function Open-AgentsChatStoppedHistoryHandoffStateObservation(
             controllerPid=$ControllerPid; controllerIdentity=$ControllerIdentity
             stateIntent=$StateIntent; state=$State
         }
+        if ($OwnerAdmission) { $request.firstOwnerAdmission = $true }
         $scope = Open-AgentsChatStoppedWorkerCleanup $Control -HistoryArchive -HistoryHandoffObservation $request
         $null = Get-AgentsChatStoppedHistoryHandoffStateObservation $scope $ControllerPid $ControllerIdentity
         return $scope

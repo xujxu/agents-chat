@@ -12,7 +12,7 @@ function Assert-AgentsChatStoppedHistoryHandoffLock([hashtable]$Context) {
     }
     $lock = $Context.HistoryHandoffLock
     $request = $lock.OwnerRequest
-    $owner = if ($observer) { Get-AgentsChatStoppedHistoryHandoffRetiredOwner @request }
+    $owner = if ($observer) { Get-AgentsChatStoppedHistoryHandoffObservedOwner $Context $request }
         else { New-AgentsChatStoppedHistoryHandoffOwner @request }
     if (($owner | ConvertTo-Json -Compress) -cne $lock.OwnerText) { throw 'Handoff lock live owner differs.' }
     $root = @(Get-ChildItem -LiteralPath $Context.Control -Force |
@@ -102,7 +102,7 @@ function Assert-AgentsChatStoppedHistoryHandoffLock([hashtable]$Context) {
     }
     if ($directoryTarget) { $lock.DirectoryRetirement.Check() }
     else { $lock.Directory.Check() }
-    if ($observer) { $null = Get-AgentsChatStoppedHistoryHandoffRetiredOwner @request }
+    if ($observer) { $null = Get-AgentsChatStoppedHistoryHandoffObservedOwner $Context $request }
     else { $null = New-AgentsChatStoppedHistoryHandoffOwner @request }
 }
 

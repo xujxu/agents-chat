@@ -56,3 +56,53 @@ function Get-AgentsChatStoppedHistoryHandoffRetiredOwner(
     }
     return $owner
 }
+
+# First-attempt handoff-aware admission observes from inside the exact live committed owner; every other
+# observer requires the owner's death.
+function Test-AgentsChatStoppedHistoryHandoffFirstOwnerAdmitter([hashtable]$Context) {
+    if (-not $Context.ContainsKey('HistoryHandoffFirstOwnerAdmitter')) { return $false }
+    $admitter = $Context.HistoryHandoffFirstOwnerAdmitter
+    if ($admitter -isnot [hashtable] -or $admitter.ControllerPid -isnot [int] -or
+        $admitter.ControllerIdentity -isnot [string] -or $admitter.ControllerPid -eq $PID -or
+        $Context.ContainsKey('HistoryHandoffLockPublisher') -or
+        $Context.ContainsKey('HistoryHandoffRestartOwnerAdmitter') -or
+        [Deployment.WindowsWorkerJob]::ProcessIdentity($admitter.ControllerPid) -cne $admitter.ControllerIdentity) {
+        throw 'First-attempt owner admission requires the exact live committed owner.'
+    }
+    return $true
+}
+
+function Get-AgentsChatStoppedHistoryHandoffObservedOwner([hashtable]$Context, [hashtable]$Request) {
+    if (Test-AgentsChatStoppedHistoryHandoffFirstOwnerAdmitter $Context) {
+        $admitter = $Context.HistoryHandoffFirstOwnerAdmitter
+        if ($Request.ControllerPid -ne $admitter.ControllerPid -or
+            $Request.ControllerIdentity -cne $admitter.ControllerIdentity) {
+            throw 'First-attempt owner admission owner differs.'
+        }
+        return New-AgentsChatStoppedHistoryHandoffOwner @Request
+    }
+    return Get-AgentsChatStoppedHistoryHandoffRetiredOwner @Request
+}
+
+function Assert-AgentsChatStoppedHistoryHandoffObservedCreator(
+    [hashtable]$Context, $Creator, [int]$ControllerPid, [string]$ControllerIdentity
+) {
+    if (-not (Test-AgentsChatStoppedHistoryHandoffFirstOwnerAdmitter $Context)) {
+        Assert-AgentsChatRetirementCreator $Creator $ControllerPid $ControllerIdentity
+        return
+    }
+    $admitter = $Context.HistoryHandoffFirstOwnerAdmitter
+    Assert-AgentsChatRetirementFields $Creator @('pid', 'processIdentity', 'bridgePid', 'bridgeIdentity')
+    if ($Creator.pid -isnot [int] -or $Creator.bridgePid -isnot [int] -or $Creator.pid -eq $Creator.bridgePid) {
+        throw 'Invalid retirement creator.'
+    }
+    Assert-AgentsChatCompletionProcessIdentity $Creator.pid $Creator.processIdentity
+    Assert-AgentsChatCompletionProcessIdentity $Creator.bridgePid $Creator.bridgeIdentity
+    if ($ControllerPid -ne $admitter.ControllerPid -or $ControllerIdentity -cne $admitter.ControllerIdentity -or
+        $Creator.pid -ne $ControllerPid -or $Creator.processIdentity -cne $ControllerIdentity -or
+        $Creator.bridgePid -eq $PID -or
+        $Creator.bridgeIdentity -ceq [Deployment.WindowsWorkerJob]::ProcessIdentity($PID)) {
+        throw 'First-attempt owner admission creator differs from its live committed owner.'
+    }
+    Assert-AgentsChatCompletionProcessAbsent $Creator.bridgePid $Creator.bridgeIdentity
+}

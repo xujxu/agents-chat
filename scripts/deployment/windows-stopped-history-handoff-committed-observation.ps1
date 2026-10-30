@@ -14,6 +14,11 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
     $hasRestartRetirement = $Request -is [Collections.IDictionary] -and $Request.Contains('restartRetirement')
     $hasRestartSettlement = $Request -is [Collections.IDictionary] -and $Request.Contains('restartSettlement')
     $hasOwnerAdmission = $Request -is [Collections.IDictionary] -and $Request.Contains('restartOwnerAdmission')
+    $hasFirstOwnerAdmission = $Request -is [Collections.IDictionary] -and $Request.Contains('firstOwnerAdmission')
+    if ($hasFirstOwnerAdmission -and (-not $hasState -or $Request.firstOwnerAdmission -isnot [bool] -or
+        $Request.firstOwnerAdmission -ne $true)) {
+        throw 'Committed handoff first-attempt owner admission requires its written state.'
+    }
     if ($hasOwnerAdmission -and (-not $hasRestartState -or $Request.restartOwnerAdmission -isnot [bool] -or
         $Request.restartOwnerAdmission -ne $true)) {
         throw 'Committed handoff owner admission requires its written restart state.'
@@ -47,6 +52,7 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
     if ($hasRestartRetirement) { $fields += 'restartRetirement' }
     if ($hasRestartSettlement) { $fields += 'restartSettlement' }
     if ($hasOwnerAdmission) { $fields += 'restartOwnerAdmission' }
+    if ($hasFirstOwnerAdmission) { $fields += 'firstOwnerAdmission' }
     Assert-AgentsChatRetirementFields $Request $fields
     Assert-AgentsChatCompletionGuid $Request.attemptId
     Assert-AgentsChatCompletionProcessIdentity $Request.controllerPid $Request.controllerIdentity
@@ -54,6 +60,12 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
         -not $Context.ContainsKey('HistoryRecord') -or $Context.ContainsKey('HistoryWriter') -or
         $Context.ContainsKey('HistoryHandoffLock') -or $Context.ContainsKey('HistoryHandoffLockPublisher')) {
         throw 'Committed handoff observation bootstrap differs.'
+    }
+    if ($hasFirstOwnerAdmission) {
+        $Context.HistoryHandoffFirstOwnerAdmitter = @{
+            ControllerPid=$Request.controllerPid; ControllerIdentity=$Request.controllerIdentity
+        }
+        $null = Test-AgentsChatStoppedHistoryHandoffFirstOwnerAdmitter $Context
     }
     $preparedName = "inactive-handoff-$($Request.attemptId)-prepared.json"
     $committedName = "inactive-handoff-$($Request.attemptId)-committed.json"
@@ -144,8 +156,8 @@ function Initialize-AgentsChatStoppedHistoryHandoffCommittedObservation([hashtab
         PreviousUpdatedAt=(Get-AgentsChatStoppedHistoryHandoffStateUpdatedAt $Context)
         ControllerPid=$record.newOwner.pid; ControllerIdentity=$record.newOwner.processIdentity
     }
-    $owner = Get-AgentsChatStoppedHistoryHandoffRetiredOwner @ownerRequest
-    Assert-AgentsChatRetirementCreator $record.creator $Request.controllerPid $Request.controllerIdentity
+    $owner = Get-AgentsChatStoppedHistoryHandoffObservedOwner $Context $ownerRequest
+    Assert-AgentsChatStoppedHistoryHandoffObservedCreator $Context $record.creator $Request.controllerPid $Request.controllerIdentity
     if ($record.creator.pid -ne $owner.pid -or $record.creator.processIdentity -cne $owner.processIdentity) {
         throw 'Committed creator differs from its original owner.'
     }
@@ -309,10 +321,10 @@ function Get-AgentsChatStoppedHistoryHandoffCommittedObservation(
             Assert-AgentsChatStoppedHistoryHandoffNamespace $Context $names
             Assert-AgentsChatStoppedHistoryHandoffRetiredPreparedBinding $Context $retained.Prepared $retained.AttemptId `
                 $ControllerPid $ControllerIdentity
-            Assert-AgentsChatRetirementCreator $retained.Creator $ControllerPid $ControllerIdentity
+            Assert-AgentsChatStoppedHistoryHandoffObservedCreator $Context $retained.Creator $ControllerPid $ControllerIdentity
             $lock = $Context.HistoryHandoffLock
             $request = $lock.OwnerRequest
-            $owner = Get-AgentsChatStoppedHistoryHandoffRetiredOwner @request
+            $owner = Get-AgentsChatStoppedHistoryHandoffObservedOwner $Context $request
             $record = [ordered]@{
                 version=1; phase='stopped-history-handoff-committed'; attemptId=$retained.AttemptId
                 control=$Context.Control; project=$Context.Project
