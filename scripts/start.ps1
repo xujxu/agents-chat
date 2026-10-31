@@ -2,9 +2,12 @@
 # Usage: .\start.ps1              → uses Dev Tunnel (permanent URL)
 #        .\start.ps1 -Cloudflare  → uses Cloudflare quick tunnel (random URL)
 #        .\start.ps1 -NoTunnel    → just start the local server (no tunnel, no Azure AD update)
+#        -NoBuild                → run a deployed release (node server.js); used by service-watchdog.ps1
 param(
     [switch]$Cloudflare,
-    [switch]$NoTunnel
+    [switch]$NoTunnel,
+    [switch]$NoBuild,
+    [int]$Port = 3000
 )
 
 if ($Cloudflare -and $NoTunnel) {
@@ -15,7 +18,7 @@ if ($Cloudflare -and $NoTunnel) {
 $ErrorActionPreference = "Stop"
 $ProjectDir = Split-Path -Parent $PSScriptRoot
 $EnvFile = Join-Path $ProjectDir ".env.local"
-$AppPort = 3000
+$AppPort = $Port
 
 function Read-DotEnvFile {
     param([Parameter(Mandatory=$true)][string]$Path)
@@ -66,13 +69,15 @@ if ($NoTunnel) {
     $DevTunnelUrl = Get-RequiredEnvValue -Values $DotEnv -Name "DEV_TUNNEL_URL"
 }
 
-Write-Host "[$ProjectDir] Cleaning .next cache..." -ForegroundColor Cyan
 Set-Location $ProjectDir
-Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+if (-not $NoBuild) {
+    Write-Host "[$ProjectDir] Cleaning .next cache..." -ForegroundColor Cyan
+    Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
 
-Write-Host "[$ProjectDir] Building..." -ForegroundColor Cyan
-npm run build
-if ($LASTEXITCODE -ne 0) { Write-Host "Build failed" -ForegroundColor Red; exit 1 }
+    Write-Host "[$ProjectDir] Building..." -ForegroundColor Cyan
+    npm run build
+    if ($LASTEXITCODE -ne 0) { Write-Host "Build failed" -ForegroundColor Red; exit 1 }
+}
 
 if ($NoTunnel) {
     Write-Host "No tunnel mode: serving on http://localhost:$AppPort only" -ForegroundColor Cyan
@@ -161,8 +166,21 @@ Write-Host "Logs -> $($env:LOG_DIR)\$($env:LOG_FILE) (level=$($env:LOG_LEVEL), r
 Write-Host "Starting Next.js server on port $AppPort..." -ForegroundColor Cyan
 $serverOut = Join-Path $env:LOG_DIR "server.log"
 $serverErr = Join-Path $env:LOG_DIR "server-error.log"
-$nextStartCommand = "npx next start --port $AppPort"
-$server = Start-Process -FilePath "cmd.exe" -ArgumentList "/c $nextStartCommand" -WorkingDirectory $ProjectDir -PassThru -WindowStyle Hidden -RedirectStandardOutput $serverOut -RedirectStandardError $serverErr
+if ($NoBuild) {
+    # Standalone server: load .env.local (re-read after tunnel URL updates) and run with the build's Node.js.
+    $runtimeEnv = Read-DotEnvFile -Path $EnvFile
+    foreach ($key in $runtimeEnv.Keys) {
+        if (-not [Environment]::GetEnvironmentVariable($key)) { [Environment]::SetEnvironmentVariable($key, $runtimeEnv[$key]) }
+    }
+    $env:PORT = "$AppPort"
+    $env:HOSTNAME = '0.0.0.0'
+    $env:NODE_ENV = 'production'
+    $nodeExe = (Get-Content (Join-Path $ProjectDir 'node-path.txt') -Raw).Trim()
+    $server = Start-Process -FilePath $nodeExe -ArgumentList 'server.js' -WorkingDirectory $ProjectDir -PassThru -WindowStyle Hidden -RedirectStandardOutput $serverOut -RedirectStandardError $serverErr
+} else {
+    $nextStartCommand = "npx next start --port $AppPort"
+    $server = Start-Process -FilePath "cmd.exe" -ArgumentList "/c $nextStartCommand" -WorkingDirectory $ProjectDir -PassThru -WindowStyle Hidden -RedirectStandardOutput $serverOut -RedirectStandardError $serverErr
+}
 Start-Sleep -Seconds 2
 
 if (-not $Cloudflare -and -not $NoTunnel) {

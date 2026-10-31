@@ -131,73 +131,111 @@ Copy-Item .env.example .env.local
 powershell -ExecutionPolicy Bypass -File .\scripts\start-release.ps1
 ```
 
-### Deployment (Windows Scheduled Task)
+### Deployment
 
-For persistent deployment on a Windows machine, use `scripts\deploy.ps1` which manages a Scheduled Task that auto-starts the app on login/boot.
+The deploy scripts install the app into a **deployment folder** (separate from your git checkout) and keep the last three versions, so a bad update can be rolled back without rebuilding.
+
+```
+<ProjectDir>/
+  repo/              git clone used for builds
+  releases/<id>/     built versions (id = commit + build time); the last 3 are kept
+  current            link to the running release
+  shared/            .env.local, .data/ (chat database), logs/, agents.json, nodes.json
+  backups/           copy of shared/.data taken before every switch (last 3 kept)
+  state.json         current/previous versions, last result, in-progress operation
+```
+
+What every update does:
+
+1. Builds the new version in `repo/` while the app keeps running. A failed build changes nothing.
+2. Stops the app, copies `shared/.data` to `backups/`, points `current` at the new release and starts it.
+3. Waits for `GET /api/health` to return 200 with the new commit (default 120 s).
+4. If the check fails, it switches back to the previous release **and its data** automatically.
+
+If a deploy is interrupted (crash, reboot, Ctrl+C), the next run of any deploy command first undoes the interrupted switch.
+
+Requirements: Node.js 24 and git on `PATH`, an elevated shell (Administrator / `sudo`), and about 1.5 GB free disk plus twice the size of `.data`.
+
+Exit codes: `0` succeeded, `1` failed (the previous version is running), `2` invalid usage or a failed pre-check (nothing changed). Add `-Json` / `--json` for a machine-readable result on stdout.
+
+#### Windows (Scheduled Task)
+
+Run from an elevated PowerShell in a checkout of this repo. `-ProjectDir` can also be set with `$env:AGENTS_CHAT_PROJECT_DIR`.
 
 ```powershell
-# Deploy (pulls latest code, restarts the service, waits for readiness)
-.\scripts\deploy.ps1
+# First install: create C:gents-chat\shared\.env.local first
+.\scripts\deploy.ps1 -ProjectDir C:\agents-chat
 
-# Deploy without git pull
-.\scripts\deploy.ps1 -SkipGitPull
+# Or migrate an existing checkout that already runs as the Scheduled Task
+# (copies .env.local, agents.json, nodes.json, .data and logs; the old checkout is not changed)
+.\scripts\deploy.ps1 -ProjectDir C:\agents-chat -ImportFrom C:\src\agents-chat
 
-# Deploy with AtStartup trigger (runs even without login)
-.\scripts\deploy.ps1 -TaskTriggerType AtStartup -TaskLogonType S4U
+# Upgrade to the latest commit, or to a specific one
+.\scripts\update.ps1 -ProjectDir C:\agents-chat
+.\scripts\update.ps1 -ProjectDir C:\agents-chat -Revision <sha>
 
-# Remove the scheduled task entirely
-.\scripts\deploy.ps1 -RemoveTask
+# Preview the next update, or show what is installed
+.\scripts\update.ps1 -ProjectDir C:\agents-chat -DryRun
+.\scripts\update.ps1 -ProjectDir C:\agents-chat -Status
+
+# Go back to the previous version and the chat data saved when it was replaced
+.\scripts\restore.ps1 -ProjectDir C:\agents-chat -AcceptDataLoss
+.\scripts\restore.ps1 -ProjectDir C:\agents-chat -Revision <sha> -AcceptDataLoss
+
+# Rebuild the current commit, or remove the Scheduled Task (data and releases are kept)
+.\scripts\deploy.ps1 -ProjectDir C:\agents-chat -SkipGitPull
+.\scripts\deploy.ps1 -ProjectDir C:\agents-chat -RemoveTask
 ```
 
-The deploy script:
-1. Pulls latest code from git (unless `-SkipGitPull`)
-2. Stops the existing Scheduled Task and cleans up port 3000
-3. Restarts the task so the app rebuilds and serves again
-4. Waits up to 180s for `localhost:3000` to respond
+| Option | Applies to | Meaning |
+|---|---|---|
+| `-Repo <url>` | first install | Repository to clone (default: `origin` of the checkout you run the script from) |
+| `-Revision <sha>` | install, update, restore | Commit (or branch/tag) to deploy; for restore, a release id or commit |
+| `-TaskLogonType Interactive\|S4U` | first install | `S4U` runs without an interactive login |
+| `-TaskTriggerType AtLogOn\|AtStartup` | first install | When Windows starts the task |
+| `-UserId <account>` | first install | Task account (default: current account) |
+| `-NoTunnel` / `-Cloudflare` | first install | Tunnel mode passed to `start.ps1` (default: Dev Tunnel) |
+| `-TaskName <name>` | all | Default `Agents-Chat-Startup` |
+| `-Port <n>` | all | App port (default 3000) |
+| `-NoInstall` | install, update | Skip `npm ci`; refused if `package-lock.json` changed |
+| `-NoWait` / `-WaitSeconds <n>` | update, restore | Skip the health wait (the release is marked unverified and not rolled back automatically) / change the timeout |
 
-Logs are written to `logs/service-watchdog.log` and `logs/start-service-child.log`.
+With `-ImportFrom`, the task keeps its account, logon type, trigger and tunnel mode. The task runs `current\scripts\service-watchdog.ps1`, which runs `start.ps1 -NoBuild`. Logs are in `shared\logs\` (`service-watchdog.log`, `start-service-child*.log`, `server*.log`).
 
-### Deployment (Linux systemd)
+#### Linux (systemd)
 
-For persistent deployment on Ubuntu/Debian, use `scripts/deploy.sh` — it installs the systemd unit on first run and updates the deployment on subsequent runs.
+The same commands with kebab-case flags; `--project-dir` can also come from `AGENTS_CHAT_PROJECT_DIR`.
 
 ```bash
-# First time on a machine (installs the unit, builds, enables auto-start, starts)
-sudo ./scripts/deploy.sh
+# First install (create /opt/agents-chat/shared/.env.local first); the service runs as root unless --user is given
+sudo ./scripts/deploy.sh --project-dir /opt/agents-chat [--user agents]
 
-# Subsequent updates: git pull + npm ci + build + restart + health check
-sudo ./scripts/deploy.sh
-sudo ./scripts/deploy.sh --no-pull          # rebuild + restart without git pull
-sudo ./scripts/deploy.sh --no-install       # skip npm ci (no dep changes)
-sudo ./scripts/deploy.sh --wait 0           # don't wait for health check (default 120s)
+# Or migrate an existing checkout that already runs as the agents-chat unit
+sudo ./scripts/deploy.sh --project-dir /opt/agents-chat --import-from /home/me/agents-chat
+
+sudo ./scripts/update.sh  --project-dir /opt/agents-chat [--revision <sha>] [--no-install] [--wait 0]
+sudo ./scripts/update.sh  --project-dir /opt/agents-chat --dry-run
+sudo ./scripts/update.sh  --project-dir /opt/agents-chat --status [--json]
+sudo ./scripts/restore.sh --project-dir /opt/agents-chat [--revision <sha>] --accept-data-loss
+sudo ./scripts/deploy.sh  --project-dir /opt/agents-chat --skip-git-pull   # rebuild current commit
 ```
 
-The service runs as whoever invoked the script — `sudo ./scripts/deploy.sh` means everything (git, npm, the Node process) runs as `root`. If you want a different user, run the script directly as that user (you'll still need a separate path to grant systemctl access, e.g. polkit).
+The default port is 3010; change it with `--port` (not with `PORT` in an env file, so the health check uses the same port). Migration keeps the unit's `User`, `Environment`, `EnvironmentFile` lines and drop-ins, and only changes `WorkingDirectory` and `ExecStart`.
 
-Manage the service:
+Environment variables are loaded from `shared/.env.local` and then `/etc/agents-chat.env` (optional machine-level overrides). systemd's `EnvironmentFile` accepts `KEY=value` or `KEY="value"` lines only (no `export`, single quotes or `${VAR}`).
 
 ```bash
-sudo systemctl status   agents-chat
-sudo systemctl restart  agents-chat
-sudo systemctl stop     agents-chat
-sudo journalctl -u agents-chat -f          # live log stream
+sudo systemctl status agents-chat
+sudo journalctl -u agents-chat -f
 ```
 
-Environment variables are loaded from two files (later wins):
+#### Troubleshooting
 
-1. **`.env.local`** in the project root — the same file Next.js reads. systemd loads it into the unit's environment so `npm start` sees `PORT`, `LOG_*`, etc. before Node starts.
-2. **`/etc/agents-chat.env`** (optional) — machine-level overrides that take precedence over `.env.local`.
-
-> systemd's `EnvironmentFile` parser accepts `KEY=value` or `KEY="value"` per line. It does **not** support `export KEY=...`, single quotes, or `${VAR}` interpolation. Keep `.env.local` to plain `KEY=VALUE` lines if you want the unit to read them.
-
-```bash
-sudo tee /etc/agents-chat.env > /dev/null <<EOF
-PORT=8080
-LOG_LEVEL=debug
-LOG_DIR=/var/log/agents-chat
-EOF
-sudo systemctl restart agents-chat
-```
+- **`Preflight failed`** (exit 2): the listed checks explain what to fix; nothing was changed.
+- **Update rolled back**: `update -Status` shows `lastResult` with the failing step and message. Check `shared/logs` (Windows) or `journalctl -u agents-chat` (Linux).
+- **`-NoInstall refused`**: dependencies changed; run without `-NoInstall`.
+- **`deploy.lock is held`**: another deploy is running. A lock left by a process that no longer exists is taken over automatically.
+- **Undo a migration**: run `deploy.ps1 -RemoveTask` (Windows) or remove the unit, then re-register the old task/unit from `backups/migration-*/`.
 
 ### Logging
 
