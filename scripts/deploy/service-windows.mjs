@@ -82,7 +82,7 @@ export function createWindowsService({ name = 'Agents-Chat-Startup', root }) {
         $w = ${q(watchdog ?? '')}
         if ($w) {
           Get-CimInstance Win32_Process -Filter "Name='powershell.exe' OR Name='pwsh.exe'" |
-            Where-Object { $_.CommandLine -and $_.CommandLine.ToLower().Contains($w.ToLower()) } |
+            Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.ToLower().Contains($w.ToLower()) } |
             ForEach-Object { & taskkill.exe /T /F /PID $_.ProcessId 2>&1 | Out-Null }
         }
         Stop-ScheduledTask -TaskName ${q(name)} -ErrorAction SilentlyContinue
