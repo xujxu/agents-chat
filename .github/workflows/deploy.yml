@@ -1,0 +1,27 @@
+name: Deploy scripts
+
+on:
+  push:
+    branches: [feat/simple-deploy]
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - 'tests/deploy/**'
+      - 'app/api/health/**'
+      - 'middleware.ts'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node --test "tests/deploy/*.test.mjs"
