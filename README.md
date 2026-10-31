@@ -133,1043 +133,130 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-release.ps1
 
 ### Deployment (Windows Scheduled Task)
 
-For persistent deployment on a Windows machine, use `scripts\deploy.ps1` which manages a Scheduled Task that auto-starts the app on login/boot.
+The Windows scripts run the app as a managed Scheduled Task (default name
+`Agents-Chat-Startup`) that starts automatically on logon or boot. Every
+deploy/update takes a backup first, builds, checks readiness on port **3010**,
+and keeps enough state to restore or recover after a failure.
 
-On this development branch, Windows transaction/backup/recovery integration is
-still incomplete; do not use it as the final cross-platform deployment release.
-The existing-managed-task transaction now passed the full 42-job
-Linux/Windows regression at `86f2928` (Actions `37980766655`). Its real
-Windows application case upgrades to a different commit, retains the original
-source snapshot, closes the completed transaction through saved recovery code
-after controller exit, preserves authenticated chat data, and confirms that a
-second update does not restart the task or replace its backup or receipt.
-Public Windows command composition, first installation and cold restore
-remain incomplete; this is not acceptance of those entrypoints.
-The captured Windows command-admission layer subsequently passed all 42
-jobs at `8334efd` (Actions `37990590341`), including read-only status,
-unsupported-mode refusals, competing-lock preservation and the real upgrade/
-closeout/no-op flow. The private process entry and production supervisor are
-separate integration gates; the public PowerShell scripts are not yet accepted.
-The private process entry and exact saved recovery-manifest handoff passed
-the full regression at `f47a8a7` (Actions `37995338592`, attempt 2): 41 jobs
-passed initially, and the one cancelled Linux worker job passed an unchanged
-targeted retry. The production supervisor subsequently passed all 42 jobs at
-`bec7c7c` (Actions `38001799703`), including real update, automatic exact-manifest
-saved finalization, preserved authenticated data and no-op. Exact successful
-capture cleanup passed all 42 jobs at `26bcf7e` (Actions `38006102348`).
-The public existing-task update/no-op path passed all 42 jobs at `9355b6c`
-(Actions `38015607706`), including private directory preparation and automatic
-finalization. Default-tunnel Windows first installation and public cold restore
-remain pending; explicit fresh NoTunnel acceptance is recorded below.
-Native first-install inspection and configuration capture also passed all 42
-jobs at `6f514cc` (Actions `38018693061`), preserving the real public update/no-op
-path. These foundations do not yet enable public first deployment.
-Owned first-install builds and retained private runtime publication passed all
-42 jobs at `7023439` (Actions `38020925331`). Native create-only inhibited task
-creation, original-controller registration in both supported logon modes and
-configuring-to-activating state handoff passed the focused Windows gate at
-`85d9394` (Actions `38024807392`, 15 cases) and all 42 dual-platform jobs
-(Actions `38025215365`). Guarded first-runtime startup and original-instance
-settlement subsequently passed all 42 jobs at `3975f34`
-(Actions `38027451422`), preserving real public update/no-op behavior.
-Original Job/listener-bound HTTP provider readiness passed 20 native cases
-at `9de2cee` (Actions `38028513194`), including wrong-provider refusal and
-zero HTTP requests to a foreign listener. These small first-runtime fixtures
-do not constitute real Next first-deployment acceptance.
-Readiness-backed completion preparation also passed 20 native cases at
-`42962f2` (Actions `38029650928`): the original controller records readiness
-evidence before releasing only its activating-state lease. The runtime stays
-guarded and the task stays inhibited until permanent completion.
-Original-controller permanent completion and exact failure settlement passed
-24 native cases at `a863a9b` (Actions `38032725784`). Successful completion
-preserves the original runtime after controller close; receipt failures before
-release, after release and after enable stop only the original runtime and
-leave its task disabled. Task policy comparisons preserve exact semantics
-across Scheduler default omission, namespace placement and field ordering.
-The same permanent-completion revision passed all 42 Linux/Windows jobs
-(Actions `38033402323`), including real public Windows update/no-op.
-All twelve explicit original-controller completion steps and partial advancement
-followed by normal completion passed 26 native cases at `aaf4198`
-(Actions `38034721120`), retaining the same final proof and live original runtime.
-Genuine loss of both the native publisher and Node operation actor passed
-28 native cases at `bef8952` (Actions `38036507496`): before lease release,
-the original owner and task instance disappear; after release but before its
-receipt, the same disabled-task runtime keeps serving HTTP. These observations
-preserve the interrupted state and do not themselves perform cold recovery.
-First-specific retained cold proof passed 29 native cases at `a94bc01`
-(Actions `38038631583`), including live-controller refusal, changed-evidence
-refusals, immutable state retention, successful reopening after exact restoration
-and preserved original runtime. Its saved module closure also works after the
-source disappears. The proof is read-only; recovery uses a separate capability.
-The same revision passed all 42 Linux/Windows jobs (Actions `38039225393`),
-including real public Windows update/no-op with the saved dependency additions.
-Released first-completion recovery passed 32 native cases at `2ffb19c`
-(Actions `38041954471`). Recovery preserves the original runtime across real
-operation-actor loss after lease release, permanent-policy application and
-enablement; it resumes the exact durable sequence, refuses overlapping native
-recovery, and survives orderly close/reopen without restarting the application.
-Abrupt loss of the recovery actor itself passed all 35 native cases at
-`707f478` (Actions `38042820672`): after `released`,
-`permanent-policy-applied` and `enable-applied`, both native helpers exit,
-the same application runtime survives, and a fresh admission resumes the exact
-observation through completion. Final receipt/retirement and public first
-deployment remain separate integration gates.
-The recovery implementation at `2ffb19c` also passed all 42 Linux/Windows jobs
-(Actions `38042553678`), including the real Windows application lifecycle.
-First-runtime managed adoption, actual deployment receipt publication and
-read-only cold proof after that receipt passed all four focused cases at
-`16d449e` (Actions `38046028164`). The task now uses its private bundle as the
-Scheduler working directory while the application still runs in its configured
-project directory. Cold proof retains the completed receipt, rejects partial
-publication and foreign metadata, and grants no retirement authority.
-The same revision passed all 37 native cases (Actions `38046037772`), including
-all three genuine recovery-actor interruptions and the saved-source closure.
-First-specific retirement passed five focused cases at `ac0637b`
-(Actions `38047289219`): exact ordered deletion, exclusive retained evidence,
-interrupted-prefix reopening, unchanged live runtime and final receipt, and
-fresh lock acquisition after cleanup. Genuine retirement-actor loss passed all
-six focused cases at `beb635a` (Actions `38047850347`): three separate actors
-were terminated after marker publication, the first deletion and all evidence
-deletions; fresh admissions resumed the same marker and original runtime.
-Public first-deployment integration remains a separate gate.
-The verified saved finalizer also accepts completed first deployments at
-`50a6a5c` (Actions `38049487645`, seven focused cases). It requires the exact
-accepted absent-prior state, uses first-specific retirement rather than managed
-history, and preserves the final receipt, original runtime and recovery engine.
-The combined implementation passed all 42 Linux/Windows jobs at `389e20f`
-(Actions `38050578461`), including 40 native first-install cases and the real
-Windows application update, closeout and no-op lifecycle.
-The internal first-deployment driver passed a real fresh Windows application
-at `856b624` (Actions `38056610253`): owned dependency installation/build,
-authenticated chat data before and after the original actor exits, saved
-finalization, unchanged runtime and receipt, and fresh lock reuse without a
-backup. This uses explicit S4U/AtStartup in the fixture; public first deployment
-remains gated pending default task-policy and tunnel integration.
-The same first-created application also passed the actual public update no-op
-at `4768b9a` (Actions `38057969008`), preserving its runtime, task triggers,
-authenticated data and original receipt without creating a backup or leaving
-operation locks or successful controller captures behind.
-The latest complete Linux/Windows regression passed all 44 jobs at `1876402`
-(Actions `38075160363`), including 42 native first-install cases, real normal
-and interrupted first-application recovery, and the existing-task application
-lifecycle. Real default-tunnel acceptance still needs a suitable
-Actions test environment; default-tunnel first installation and cold restore
-remain unfinished.
-First-completion preparation now retains original source, build, dependency and
-configuration identities in its existing hash-linked record at `d0dbc5b`
-(Actions `38063498689`, seven focused cases). Cold proof exposes that original
-identity and rejects mismatched receipt digests; legacy records remain readable
-without inventing missing provenance. Retaining this identity alone does not
-grant cold receipt publication authority.
-The identity handoff also passed all 40 native first-install cases at
-`d87981b / 38064697243` and the real first-application/public-update lifecycle
-at `d87981b / 38064697428`.
-Internal cold missing-receipt publication passed all eight focused cases at
-`d9dc24a / 38071140956`. It requires a separately admitted exclusive native
-scope, the surviving completed original runtime, and current source/build/
-dependency/configuration matching the retained original identity. It rejects
-incomplete publication evidence, validates the service digest against retained
-native task evidence, and creates only the receipt; it does not release the
-original operation lock or retire evidence. Saved closeout now invokes this
-operation before ordinary first-deployment retirement when the receipt is
-missing. At `41317ee`, all nine focused cases passed in Actions `38073750577`;
-Actions `38073752429` also passed both real-application cases: normal first
-deployment and original actor loss before receipt publication, followed by
-saved recovery and public update no-op with the same runtime and chat data.
-Saved closeout's earlier released-prefix composition passed all 12 focused
-cases at `dd9d4d5 / 38077869010`. It checks original
-build/configuration provenance before restoring task policy or enabling the
-task; guarded or dead runtimes and missing provenance are not admitted by this
-composition.
-The changed recovery handshake passed all 45 native first-install cases at
-`551c3ca / 38080120594`.
-The complete-prefix fast path also passed both actual application regressions
-at `551c3ca / 38080122680` (normal first deployment and receipt-loss recovery).
-These preserve the original instance and authenticated chat through saved
-finalization and public update no-op; they use explicit S4U/AtStartup.
-The existing default current-account Interactive/AtLogOn policy also passed
-native runtime activation, completion and receipt publication at
-`cdd8192 / 38080335930` (13 focused cases, small HTTP fixture).
-Actual application acceptance also passed at `68f0be5 / 38082449059`:
-default Interactive/AtLogOn, explicit S4U/AtStartup, and receipt-loss recovery
-all preserved runtime and chat data through saved finalization and public
-update no-op. The explicit public fresh `deploy.ps1 -NoTunnel` route also
-passed at `6d91d06 / 38085665538` (job `114311512963`), including automatic
-saved finalization and empty successful-controller capture storage.
-That full regression finished 45/46: the combined Windows native batch reached
-its 40-minute deadline before the existing-application update step could run.
-Its cleanup failure obscured the timeout diagnostics. The native cases are now
-split into complementary foundations/cold-receipt jobs without dropping cases
-or increasing that deadline. The replacement 48-job run finished 47/48:
-all 46 named native cases and the existing-application lifecycle passed.
-The remaining receipt-loss case hit a state-file replacement `EPERM` before
-its crash boundary. Its observer now avoids polling the mutable state file;
-all four first-application scenarios passed the corrected
-`6388ddc / 38090723610` run. These two runs provide combined regression
-coverage, not a single green 48-job run. Production state-write protections
-were not relaxed, and the original native error's cause remains unproven.
-Default-tunnel and remaining watchdog integration are separate gates.
-The task parameter and read-only definition changes below passed native
-PowerShell 5.1 acceptance. The full 25-job regression, including private
-runtime-control transport, task-held Jobs, scoped control requests,
-retained private configuration, direct native task-owner checks and the
-installed private runtime host, native restart inhibition and write-through
-private receipt publication, durable native task-stop contexts and
-original-Node-controller close/exit handling, private lock/state transaction
-authorization, native private-directory creation and distinct child-token/Job
-characterization with actual private Node lock/state/journal/saved-engine
-creation, passed at `c7de917` (run `37017549550`). This also accepts the
-production native controller process: literal arguments and bidirectional
-stdio, unchanged caller token, private child-file ownership, retained working
-directory, and original-Job descendant settlement without stopping independent
-processes. Real task controllers and installed runtime bundles now use
-production creation-time privacy rather than fixture ACL repair.
-Native original-owner retirement also passed for update and restore
-(task-options job `110784933138`): the task stays disabled, its
-original owner exits cleanly, and private receipts bind the exact activation
-state. Disabled replacement-task publication also passed: it preserves
-account, triggers, existing permissions (including a nondefault ACL) and
-unrelated task XML, retains a validated private candidate, and publishes
-intent/completion evidence without starting it. Incorrect digests and paths
-containing Scheduler substitutions are refused before replacement.
-Controller-bound unverified runtime lifetime and authenticated lease release
-also passed: original controller loss or expiry terminates the guarded host
-and its original Job, while release by the actual original pipe peer lets the
-same runtime survive controller exit. This does not establish application
-health. Guarded transactional replacement activation also passed native
-update/restore and controller-loss cases (`ad311cf`, job `110814478038`):
-temporary demand-start suppresses triggers and restart-on-failure, the new
-original task/Job is bound to private readiness, and the task is disabled
-again while its runtime lease remains armed. All 24 regression jobs passed
-for this step; transaction-evidence retirement and lock release remain
-incomplete. Active checks retain the original Scheduler
-instance as well as the process, and reject a changed activation-state digest
-before settling the unreleased generation.
-Integration into the public deployment entrypoints remains pending.
-The isolated real Windows application job also passed in that run:
-three prebuilt managed starts, authenticated chat
-persistence, stopped-database restoration, original-Job listener ownership and
-unchanged build artifacts. This is not yet acceptance of the public Windows
-deploy/update/restore transaction.
-Native listener checks now retain original process/Job ownership and kernel
-bind time, including the exact dual-stack wildcard pair. Foreign listeners,
-same-process rebinds and independently created same-process wildcard pairs
-are refused. Controller-side HTTP readiness and the full 24-job shared-readiness
-regression passed at `839ac62`, including saved Linux restore and real Windows
-application/data checks. Health-gated permanent task-policy restoration and
-original-peer lease release passed native update/restore, custom-permission,
-originally-disabled and changed-state cases at `f7c5e19`; all 24 regression
-jobs also passed. Actual read-only lease observation passed at `8f3063b`,
-including observation of the released original runtime after controller exit;
-all 24 jobs passed. The fresh-process completed-task proof now retains the
-23-file private evidence chain, lock/state, installed bundles and original
-native runtime/listener identity. It is read-only and grants no mutation or
-lock-release authority; its dedicated 25th regression job and full regression
-passed at `2c1aafc`. Expanded native update, restore/custom-permission and
-originally-disabled cases passed at `c7de917`, including refusals for live
-controllers, changed evidence/policy and same-process listener rebinding.
-The expanded full regression also passed all 25 jobs.
-Windows shared admission uses a private, non-inherited
-exclusive file handle, following the standard package-manager locking pattern.
-The primitive preserves durable operation evidence and does not itself permit
-recovery or unlock. Native admission and the three completed-task proof
-scenarios passed at `234bef9`, along with all 25 full-regression jobs.
-The original-controller-bound bridge passed native acceptance at `c1f90f1`,
-including competing processes, invalid contexts/requests and controller loss.
-Its full regression also passed all 25 jobs. Shared admission is now wired
-into Windows operation-lock acquisition/release and saved worker-retirement
-recovery, with explicit PowerShell selection and retained-context checks.
-This entrypoint integration passed all 25 Actions jobs at `b08a6fe`, including
-real Windows application/data restoration and native publication with generated
-temporary paths beyond MAX_PATH. Admission never grants authority to bypass
-durable evidence. Mutating Windows controllers
-and their test fixtures use private creation-time ownership rather than
-repairing arbitrary existing permissions.
-Recovery integration retains the completed-task proof on its original
-native controller while the caller holds actual same-installation admission.
-Its native contention, strict-context/protocol and controller-loss cases passed
-at `119b17e`, including update, restore and originally disabled tasks; all 25
-Actions jobs passed. It does not grant evidence-deletion or unlock authority.
-The retained proof can prepare a private `task-retirement.json`, binding the
-original lock/state, all 23 maintenance records, directory/file identities
-and the original preparing processes. Reopening preserves the original intent
-and requires either that same retained session or both original preparers
-absent. This preparation preserves every maintenance file and the operation
-lock. This preparation passed all 25 Actions jobs at `b30581f`, including
-original-actor loss and strict reopening/refusal on all three native scenarios.
-The private-file layer also provides an explicit exclusive, checked
-DELETE-capable handle. It deletes only the original descriptor-matched file
-through that handle; ordinary disposal preserves it. Its native refusal and
-deletion cases, all three completed-task scenarios, and the full 25-job
-regression passed at `00c9857`. It is not yet wired as task retirement or
-unlock authority.
-The retained full proof can also prepare a private runtime checkpoint bound
-to that intent: exact task-policy/security hashes, original listener binding,
-installed configuration and retired process identities. It preserves all
-receipts and is intended for subsequent partial-cleanup recovery; native
-checkpoint acceptance passed all three scenarios and the full 25-job
-regression at `cb7a2aa`; its receipt-cleanup consumer is accepted below.
-Both root retirement records independently block ordinary lock acquisition,
-release, worker-retirement recovery and idle reporting even without the task
-receipt directory. Windows checks include case aliases; marker contents are
-not interpreted as permission to clear the barrier.
-Checkpoint-backed receipt retirement now has a separate native scope and
-Actions fixture: live handoff retains the original controller, while cold
-reopening accepts only an exact missing prefix after creator loss. Each
-request deletes only the next original descriptor through its exclusive
-native handle. All three native scenarios and the full 26-job regression
-passed at `670818a / 37067463428`. The consumer retains the
-empty task receipt directory, state, lock and both root records, and does not
-perform final worker cleanup or unlock.
-The native empty-directory retirement handle passed its Windows refusal cases
-and the full 26-job regression at `0a1500a / 37071297219`.
-A final-cleanup consumer now retains and
-validates the original sealed worker operation, publishes a private version 3
-`worker-retirement.json`, and transfers the same native controller. Its fixed
-entry list covers the empty task directory, settled worker evidence, saved
-worker helpers, task markers and old lock. Cold reopening uses the retained
-manifest and an independent saved recovery engine, never directory absence
-alone. Ordinary ownership stays blocked until the final manifest is retired.
-All three native scenarios (update, restore and originally disabled task),
-including two destructive crash prefixes, final unlock and preservation of
-unrelated runtime bundles, passed at `8599304 / 37076374627`. The full
-26-job Linux/Windows regression also passed.
-The live completion controller additionally exposes single-step native
-acknowledgements for deterministic write-ahead interruption testing. It keeps
-the existing nine receipt files and the normal all-at-once completion API;
-the update, restore and disabled-task scenarios and all 26 regression jobs
-passed at `6b9e26d / 37080601995`. This remains live-owner authority, not cold
-recovery. A separate interrupted-completion consumer now replays only a
-validated receipt prefix for the same surviving, released runtime, after
-fresh native-listener and HTTP checks. It preserves original receipt values
-and reconciles only recognized task-policy states. An exclusive read-only
-handle to the existing release-intent receipt keeps a dying recovery bridge
-serialized until its own exit, even after its Node admission owner exits.
-The consumer, five genuine actor-loss cases and all 31 regression jobs passed
-at `4b1a84f / 37082766145`. Additional coverage that loses admission while a
-recovery bridge remains alive, then kills the recovery actor and resumes
-its acknowledged progress, also passed with all 31 jobs at
-`e4c793f / 37083428275`.
-Pre-release/reboot recovery and public Windows integration remain unaccepted.
-Installed native-task discovery is now implemented as a separate read-only
-observer. All three native discovery cases (update, restore with custom task
-security, and originally disabled task) and all 34 regression jobs passed at
-`5928115 / 37086347173`. It derives the literal installed bundle
-from the actual task, retains original process/instance/account and private
-readiness evidence, and checks that generation's active Job and unguarded or
-released lease. It does not depend on retired operation journals, create
-admission or lock records, grant stop authority, or infer HTTP health.
-A separate production capture helper now publishes the existing task admission
-record from that retained observer, the original live operation lock and matching
-preflight state under shared native admission. It uses explicit private native
-publication rather than caller-provided runtime metadata. Update, custom-security
-restore and originally disabled native scenarios, including refusal cases and
-the complete stop-to-cleanup sequence, passed with all 34 regression jobs at
-`e59b0e9 / 37089382913`. Public Windows command composition remains unfinished.
-Windows owned source/build stages now share the existing Linux orchestration
-and bind mutations to the original native task transaction, selected commit
-and designated phase. The native fixture's actual Git/npm commands, small
-fixture build and subsequent completion/cleanup passed with all 34 regression
-jobs at `a2092bf / 37092400795`; this is not full application deployment
-acceptance. Build workers use the installed task's account in the controller's
-actual session, which may differ from an S4U service's session zero; native
-worker account/session checks remain enforced. Cross-account execution is
-refused before worker enrollment. Cold recovery does not gain a rebuild dependency.
-Windows configuration inspection is implemented with retained native source
-file identities, content hashes and owner/group/DACL descriptors, including
-explicit absence checks. It reads the installed bundle environment, applies
-case-insensitive Windows dotenv/build precedence, and refuses ambiguous aliases
-without reporting secret values. Native ACL-change and source/build integration
-passed with all 34 lifecycle jobs (`4cf4e97`, Actions `37095933156`). This does
-not yet implement ACL restoration or broaden the private backup policy.
-Windows snapshot capture now includes deduplicated owner/group/DACL and
-ordinary file-attribute metadata in a version-3 manifest, with source ACL
-rechecks and a private destination requirement. Native cases and all 34 lifecycle
-jobs passed (`188ab55`, Actions `37098213362`). Existing Linux snapshot formats remain unchanged; saved
-recovery includes the new verification dependencies. Windows project payload
-restoration now uses private creation before copying, identity-bound deletion
-including read-only files, and standard handle-based owner/group/DACL and
-attribute restoration. It requires version-3 metadata and unchanged root policy;
-legacy, cross-account, Git-bearing and external-runtime snapshots refuse before
-project mutation. Windows may add the DACL `AI` flag when its standard security
-API converts a legacy descriptor to automatic inheritance; restoration permits
-only that addition, not changes to owners, groups, ACE order/rights/inheritance,
-protection flags or file attributes. Root policy remains exact.
-Native payload/privacy/read-only/retry cases and all 34 lifecycle jobs passed
-(`4d5ff70`, Actions `37104965937`). Git/runtime restoration and full Windows
-application acceptance remain separate.
-Windows Git object restoration passed native cases and all 34 lifecycle jobs
-(`af0235c`, Actions `37107826175`). It reuses the shared streaming/checksum/hardlink publication
-flow, preserves newer objects and private backups, and restores original ACLs
-and read-only attributes. Mutable single/split commit-graph pointers use the
-shared writable-handle copier with private creation, original-identity deletion
-and retryable missing/partial pointers while stopped; hardlinks refuse before
-object mutation and again at native deletion. HEAD/index/ref and public Windows
-restore composition are not enabled by this object-store adapter.
-Windows Git permission snapshot support passed all 34 lifecycle jobs on
-`f1d425c605ed1ccc127440eec07f81d884583ac1 / 37109444922`:
-`git.json` version 2 includes `.git` root and HEAD/index/ref/parent
-ACLs and attributes, plus explicit absent names for packed references. The
-existing native observer rechecks these alongside source bytes and keeps the
-backup private. Linux snapshots and direct Git inspection remain version 1.
-Version-2 HEAD/index/ref restoration requires a private backup context.
-Its native journal adapter passed all 35 lifecycle jobs at
-`f808b8ac7a7918a67c2fc18f318891e579decd7a / 37116174373`, covering attached,
-detached and packed refs, inherited policy for previously absent paths,
-controller-death continuation, drift/alias refusal and incomplete private
-preparation. Native snapshot/restoration now has an independent
-15-minute CI job, retaining all other contracts and five cold-retirement probes;
-the full lifecycle matrix contains 36 jobs. Linux service recovery and
-interrupted-recovery resumption run separately under unchanged 10-minute
-limits, preserving all 66 existing cases without name-based filtering.
-Before the live public acceptance recorded below, Windows task-backed restore
-composition was gated. Component-level
-saved-engine archive inspection, native task-policy comparison and distinct
-runtime bundle publication passed all seven focused native jobs at
-`4a20946 / 38095473152`. Publication uses archived configuration/helpers even
-when the historical configuration is absent and the current configuration
-differs; it excludes stale runtime records and preserves the running task.
-The policy comparison accounts for Scheduler's implicit `Enabled=true` but
-refuses account, trigger, enabled-state and security changes. These are restore
-preflight components, not acceptance of public or cold no-build restoration.
+> **Status:** this branch is still in development. Supported today: fresh
+> installs with `-NoTunnel`, updates/rebuilds of an existing running managed
+> task, and restore. Default-tunnel first installs, legacy watchdog/stopped-task
+> adoption and reboot recovery are not supported yet.
 
-Explicit archived-runtime relocation passed the complete 48-job Linux/Windows
-matrix at `e2d8abd / 38097108061`, including absent historical runtime parents
-and parents shared with ordinary external files. Archived configuration
-admission subsequently passed all seven native restore jobs at
-`5fef17e / 38097859251`. Restored-runtime receipt publication passed its five
-Windows contracts at `db66705 / 38099716685`; it uses an explicit terminal
-restore entry without allowing the ordinary deployment publisher to accept
-restore state. The full 48-job result predates these latter additions.
-Actual saved Windows application restore passed at `3e6a403 / 38129215300`:
-public update, no-op, saved restoration and separate-controller closeout all
-completed. Acceptance includes restored source/artifact/environment bytes,
-authenticated pre-backup chat data, an unchanged backup, a distinct restored
-runtime and lock removal without restarting that runtime. Restoration uses
-saved artifacts without installation or rebuilding. Public/cold Windows restore
-remains gated. Full dual-platform
-regression `3e6a403 / 38131880686` passed all 48 jobs, repeating the complete
-actual Windows restore and independent closeout.
-Actual cancellation after native stop but before project mutation passed at
-`375b18a / 38134859077`. It retains recovery-required state, the original lock,
-backup and deployment receipt; independent post-controller observation confirms
-the original runtime remains quiescent, restart-disabled and without writers
-or a listener. This is not acceptance of interruption after partial restoration.
-Full dual-platform regression `375b18a / 38137237291` passed all 49 jobs,
-including both complete saved restoration and pre-mutation cancellation.
-Actual thrown-error settlement after project restoration passed at
-`4bb8ebb / 38137334922`: archived project bytes are restored, but the previous
-receipt, backup and recovery lock remain; independent observation confirms
-the original runtime stays restart-disabled and quiescent. Abrupt controller
-death after project restoration passed at `d7111e8 / 38141960473`: a distinct
-verifier confirms the interrupted journal, original backup/receipt/lock and
-restored project bytes; native observation confirms no restart or writers.
-Actual file-copy interruption passed at `e1bc523 / 38145325358`: archived
-environment bytes are present while a later native addon is absent, proving
-an incomplete copy remains fenced rather than being reported as restored.
-The same run also passed the after-project crash regression.
-Actual restoration and independent closeout with executable-scoped external
-egress denial passed at `bc245a7 / 38152007084`. Windows Firewall blocks
-non-loopback outbound traffic for the actual Node, PowerShell, Git and Git
-network helpers; effective rules and positive/negative TCP probes are checked.
-The restored authenticated data, artifacts, backup and no-restart closeout pass
-under those rules. This is not a whole-VM air gap or isolation of every process
-and DNS service. The saved Windows process entry subsequently passed the full
-53-job dual-platform matrix at `3e72433 / 38184729161`, completed
-`2026-10-12 00:29:12 UTC`. Both complete restoration and executable-scoped
-egress-denied restoration invoke the verified saved entry as a distinct process,
-then pass independent closeout and authenticated data checks. The matrix also
-repeats all four interruption scenarios. This baseline predates public `restore.ps1`; cold reentry remains gated.
-Actual public `restore.ps1` passed executable-scoped egress-denied restoration
-at `4e1aed1 / 38188828721`, job `114616945668`, completed
-`2026-10-12 01:36:22 UTC`. The public command verifies and runs the saved entry,
-then completes independent finalization before returning success. Acceptance
-requires restored source/artifacts/environment and authenticated pre-backup
-data, the unchanged backup, removed lock and no successful controller captures.
-A later read-only actor confirms the restored runtime is not restarted.
-The whole 53-job dual-platform run subsequently passed at
-`2026-10-12 01:58:50 UTC`, including normal public restoration and all four
-interruption regressions. This accepts the public live-restore path, not cold
-recovery or the remaining deployment compatibility/final release work.
-The subsequent capture-inventory correction also passed all 53 jobs at
-`a57fad4 / 38190945815`, completed `2026-10-12 03:04:17 UTC`, including the
-Linux and Windows 512-helper boundary checks and actual restore regressions.
-This full baseline predates the private Windows cold-file restoration work.
-Private cold file restoration subsequently passed actual application recovery
-at `2cd722c / 38199570752`, including interrupted copy, restored native addon
-and database bytes, with the original task still inhibited. Native completion
-receipts and completed-owner reentry passed at `c293127 / 38199887646`.
-Absent-original-host admission passed at `078471a / 38204381123`: exact
-disabled task policy, no Scheduler instances and an empty/absent original Job
-are required. The query uses the recorded session, including Session 0 from
-an interactive observer; other foreign sessions remain refused. These private
-gates do not accept cold activation, public cold restore or reboot recovery.
-Full dual-platform regression `e5749c5 / 38201064684` then passed all 53 jobs
-at `2026-10-12 05:12:36 UTC`, including actual cold file restoration with its
-durable completion receipt, normal public restore and all interruption cases.
-This full baseline predates the absent-owner and cold-owned retirement changes.
-Native cold-owned retirement passed at `c8eb4b9 / 38206988583`, and exact
-restored startup configuration retention passed at `684acbc / 38209032489`.
-The latter retains environment/agent file presence, bytes, ACLs and attributes
-across original-host retirement. Actual copy-crash recovery and original-host
-retirement passed at `adfdef0 / 38208188366`, preserving original task policy,
-state, lock, backup and restored data. Native write-ahead activation intent and
-unused-intent takeover passed at `8510f67 / 38210972185`. Native guarded cold
-startup and owned shutdown subsequently passed at `45b150d / 38215561820`,
-including an exited entry process whose descendants remain in the original Job.
-Native owned-listener/HTTP acceptance passed at `1c5a72d / 38217437905`,
-including provider mismatch refusal and transient HTTP503 retry. Actual
-configuration retention across old-host retirement passed at
-`8510f67 / 38210974436`. Durable startup/shutdown journal binding passed at
-`7783994 / 38220999163`; independent read-only observation of the complete
-stopped cold journal and both empty Jobs passed at `f18dfec / 38224040058`.
-Actual cold application startup, owned HTTP, authenticated restored API data
-and guarded shutdown passed at `dfd2ad0 / 38220610437` on
-`2026-10-12 09:15:38 UTC`, within the unchanged 45-minute cold actor bound.
-Genuine cold bridge death, independent inactive-runtime observation, repeated
-policy-recovery controller deaths, and the native no-overwrite directory archival
-primitive passed at `4df3e81 / 38231631286` (`2026-10-12 10:06:56 UTC`).
-Policy recovery restores only the exact original disabled task, retaining its
-security and full owner journal; it does not restart the task. Authorized journal
-archival followed by a fresh complete file-recovery claim passed for both normal
-shutdown and genuine bridge-death histories at `fc9914c / 38234299468`
-(`2026-10-12 10:55:15 UTC`). Completed cold restore, public cold integration and
-terminal closeout remain separate gates.
-The saved recovery engine now retains the private stopped/cold/policy/archive
-dependency closure. Source-disappearance imports, native asset references,
-saved/public entry regressions and both archival/fresh-copy cases passed at
-`5c33578 / 38239407765` (`2026-10-12 11:32:25 UTC`), without raising the existing
-saved-engine inventory or byte limits.
-Cold runtime lease release, original permanent task-policy restoration and
-independent read-only completion observation passed for both normal and genuine
-bridge-death histories at `97d0d87 / 38252902245`
-(`2026-10-12 13:38:57 UTC`). The same gate passed 30 focused unit contracts,
-saved dependency closure and the original terminal-completion regression.
-The new runtime survives its original controllers; state and lock remain
-unchanged. Actual application completion and post-controller independent
-observation passed at `97d0d87 / 38252901221`
-(`2026-10-12 14:16:33 UTC`), including authenticated restored data and the
-unchanged warm-crash regression. The cold actor took 2,001,517 ms and the
-independent observer 21,505 ms, within their unchanged bounds. Interrupted
-completion recovery, cold terminal closeout and public cold restore are not yet
-complete.
-Finite cold completion acknowledgements passed at `041df63 / 38262682824`
-(`2026-10-12 15:01:23 UTC`): each of the 13 steps binds its durable receipt
-prefix before an optional awaited progress callback. Both native cold histories,
-their independent completion observers, saved dependencies and the original
-terminal-completion regression passed; this gate does not itself prove
-interrupted-prefix recovery.
-Released-prefix recovery passed native acceptance at `999a3ed / 38267393844`
-(`2026-10-12 15:41:10 UTC`), including repeated interruption after physical
-lease release, permanent-policy registration and task enablement. It
-requires explicit data-loss acknowledgement, an already released live runtime,
-the original receipt chain and exclusive native ownership of the original
-transaction file. It resumes permanent-policy and enabled-state acknowledgements
-without restarting the runtime; it does not yet publish terminal restore state
-or remove the original lock.
-The same three interruption boundaries passed with the actual restored
-application at `de762f2 / 38272482169` (`2026-10-12 17:12:35 UTC`).
-Every actor exit retained the same released runtime and authenticated restored
-data; a separate final observer verified the completed journal. The original
-warm-crash regression also passed. The single cold copy/start actor took
-2,342,229 ms, within its unchanged 45-minute bound.
-Cold terminal handoff preparation passed native acceptance at
-`f91e454 / 38284227745`: all 34 focused contracts, saved helper closure,
-normal and repeated-interruption cases, same/new-actor marker reentry,
-pending-publication refusal and the prior warm terminal regression passed.
-It retains the complete released-runtime proof while binding exact old and
-proposed terminal state, original file/directory identities and completion
-receipts in a no-overwrite private marker. Preparation alone does not write
-`restored`, replace the deployment receipt, retire evidence or remove the lock.
-Consuming that handoff for staged, atomic root-state publication and interrupted
-reentry passed the native gate at `ab3aee3 / 38289886125`: all 36 focused
-contracts and both cold cases passed, including interruption after staging and
-publication, original staged-inode preservation and two fresh reentry actors.
-Actual application acceptance also passed at `14870b1 / 38311921706`.
-The staged/published interruption actors and final idempotent recovery preserved
-the original staged inode, transaction digest/inode, released runtime and
-authenticated restored data. Both actual crash jobs passed. This does not yet publish
-the deployment receipt, retire evidence or remove the original lock.
-The follow-on cold receipt entry reuses the staged receipt writer under a
-separate retained native terminal authority; ordinary warm publication still
-requires the current lock owner. Its new interruption and authority-refusal
-fixtures passed at `7c84f84 / 38320959400`: 38 focused contracts, five warm
-receipt tests, saved closure and both cold interruption/reentry cases passed.
-The actual receipt orchestrator now derives source, artifacts, configuration
-and readiness from the retained production observers, not caller fingerprints.
-Its awaited staged/published callbacks passed native acceptance at
-`8ab226a / 38323713056`: all 39 focused contracts, five warm receipt tests,
-saved closure, both cold interruption/reentry cases and the warm terminal
-regression passed. Actual application receipt acceptance also passed at
-`de8f6e8 / 38331450888`: staged and published interruptions followed by
-independent recovery preserved the original staged receipt inode, receipt
-bytes/timestamp, terminal state, transaction, released runtime and restored
-authenticated data. Both actual crash jobs passed.
-Ordered cold evidence retirement passed native acceptance at
-`d2fcf8fa / 38340106069`: both cold cases resumed after manifest publication,
-early deletion and the boundary before original unlock, refused foreign,
-pending, non-prefix and replaced-inode evidence, and preserved the original
-released runtime. The shared warm deletion regression passed as well.
-Corrected first-install selection at `adcbdf21 / 38341682047` then exercised
-the actual first-install retirement, actor-loss and saved-closeout cases;
-the earlier file-level green results did not select these cases and do not
-count as acceptance. Actual application retirement and its prepared-manifest
-public closeout passed at `1f3e470b / 38354204691`: all three interruption
-boundaries, final unlock and public `restore.ps1` completion preserved the
-original runtime, accepted state/receipt and authenticated restored data.
-This accepts the completed-runtime branch, not earlier cold recovery.
-The remaining cold-specific live-creator refusal regression passed at
-`2aaa963b / 38373292736`: a second actor was refused while the original
-manifest creator remained alive, without changing the manifest or retained
-entries; later actors resumed successfully after that creator exited.
-The saved restore entry now routes an existing version-5 cold retirement
-manifest to snapshot-bound native admission and the existing independent
-closeout supervisor, rather than starting another restore. Its native gate
-passed at `1f3e470b / 38353404850`: all 44 focused contracts, five warm
-receipt tests, saved dependency closure, saved-entry refusals and public
-invocation checks passed. Its actual copy-crash job `115181479909` passed at
-2026-10-13 08:57:14 UTC; warm-crash job `115181479645` also passed.
-The next extension prepares that same manifest from a physically
-published cold restored state and accepted deployment receipt, using the
-complete original terminal proof and verified saved snapshot. It does not
-delete evidence until the independent supervisor runs. Native acceptance
-`38d6d85a / 38360471128` passed all 45 focused contracts and both cold
-terminal/retirement cases, including snapshot mismatch refusals and three
-cleanup interruption boundaries; the warm retirement regression also passed.
-Actual saved-entry preparation and public final closeout passed in
-`186ab283 / 38374428099`: copy-crash job `115236903202` completed at
-2026-10-13 11:23:53 UTC and warm-crash job `115236903566` at 10:47:37 UTC.
-The saved entry prepared the manifest without deletion, then fresh actors
-resumed all three interruption boundaries and public PowerShell completed
-the original operation. The preceding `4d112c41 / 38366334006`
-copy job failed before application startup because the test wrapper still
-rejected its increased budget; that bound and its regression were corrected.
-The older direct actual run reached early
-retirement but timed out before final unlock; the subsequent public run
-completed that branch. Earlier cold prefixes are still refused.
-The next saved-entry extension recovers a missing or prior-operation receipt
-from physically published cold terminal state, including an existing staged
-replacement, before preparing retirement. It binds the entire verified
-snapshot again under native admission before mutation. Native acceptance
-`29aca8e3 / 38391313938` passed all 46 focused contracts, snapshot-mismatch
-refusals, both cold receipt/retirement chains and the warm retirement regression.
-Actual public recovery from the staged receipt failed in
-`38391317840` at `cold-receipt-closeout`, after all preceding cold actors
-passed. The saved process returned `DEPLOYMENT_WINDOWS_COLD_RECEIPT_RECOVERY_REFUSED`;
-the public wrapper discarded its nested diagnostic locations. Diagnostic
-fix `e7cc9130` passed native command contracts; actual run `38403397856`
-then localized the refusal to native cold authority startup (observer wire
-closed before readiness). The native receipt fixture now exercises the
-verified saved engine in the same restricted environment: `38416439987`
-passed both native chains, so those factors alone do not explain the actual
-failure. The next actual gate adds bounded native exception types and owned
-PowerShell line locations; forwarded diagnostics still expose no error messages
-or raw native output. Matching the public interpreter canonicalization in
-`38424265463` reproduced the refusal: case-sensitive historical task XML
-reconstruction used the new process's executable spelling rather than the
-recorded spelling. The fix binds the recorded command to the same native
-interpreter (case-insensitive Windows path comparison) while preserving exact
-guarded/permanent XML comparison. Fixed native `f111d12c / 38427893271`
-passed the casing/refusal contract, both saved-engine canonical-interpreter
-receipt and cold retirement chains, and warm retirement. Fixed actual
-`38427897817` passed uninterrupted public receipt completion, preserving
-the staged receipt inode, original runtime, state/backup and authenticated
-application data through final cleanup. The next extension handles a prepared
-terminal marker with old or staged state: it binds the full saved snapshot
-under native admission, publishes the original state atomically, then uses
-the accepted receipt/cleanup path. Its dedicated `cold-state` native
-`38447854547` and actual `38447859126` gates passed at `1e476662`;
-the public invocation preserved the staged state inode and original runtime
-through final receipt/cleanup. The `cold-completion` extension uses the original
-finite recovery authority to finish an already released runtime's completion
-prefix before preparing that terminal handoff. Native `e59315db / 38455988433`
-and actual `9fd602ba / 38448823591` passed, including a single public invocation
-after physical lease release but before its durable acknowledgement.
-The `cold-start` extension restores an interrupted copy with its original
-stopped runtime retained, then starts the saved application and settles the
-original controller. The existing supervisor invokes one independent continuation
-before finalization, preserving strict original-owner absence. Native
-`38471316945` and actual `38471320648` passed at `1d52b08f`; the single public
-invocation retired the old Job, retained its backup/data, and completed the
-new released task's state/receipt/cleanup in 2,411,631 ms.
-The new `cold-startup` extension first restores disabled policy and archives an
-acknowledged interrupted guarded runtime's journal, requiring all its original
-owners and runtime to be absent. Its native and actual gates are pending.
-Unacknowledged startup, live guarded peers, inactive/reboot and legacy recovery
-remain unsupported publicly.
-The dedicated `cold-receipt`, `cold-state`, `cold-completion` and `cold-start` scenarios
-preserve existing default terminal/retirement coverage. Receipt, staged state
-and released completion, plus interrupted-copy startup, have completed actual
-public acceptance.
-The subsequent native restore regression passed all seven jobs at
-`953fe1b / 38106043726`. Restore now compares snapshot ACLs with native
-file-security evidence, retaining inherited ACE flags; the separate
-kernel-handle descriptor remains unchanged for existing identity checks.
+**Prerequisites**
 
-Component-level
-project/Git/external restoration and original-task snapshot capture passed all
-36 lifecycle jobs at `201133577d1a680aa380ea9be991a081d3244c9c / 37124027076`.
-The journal's native atomic lockfile publication primitive passed all 34 jobs
-on `0f2da811690c718eeac9acb728baae2b45438b5c / 37111501173`.
-It binds original/staged file IDs, checksums, ACLs and attributes
-and uses Windows handle-based rename with readonly-target support; it does
-not fall back to deleting the target or clearing attributes.
-Windows external-file snapshot capture passed all 35 lifecycle jobs at
-`712474ee3424c253570ad6c785a4a41deb47b1a1 / 37117066926`.
-Version-3 snapshots add `windowsExternalSecurity`, using the existing
-native security tables for each external parent and its present files, including
-root-only tables for absent resources. Original byte/presence and ACL checks
-remain active until snapshot completion; backups stay private. Linux formats
-are unchanged. Standalone native external restoration passed all 36 lifecycle
-jobs at `2b955ac406a811020e62d858f54a295f14385f0d / 37119983194`.
-It requires exact destination authorization, data-loss
-acknowledgement, a stopped/inhibited runtime and unchanged parent policy. It
-reuses private creation and native source removal/permission restoration;
-interrupted private copies can be retried from the unchanged backup.
-An admitted external parent whose selected bytes, absence and native policies
-all match is verified without rewriting its files, preserving immutable readers
-and file identities. The accepted matrix includes a real native reader denying
-write/delete sharing, repeated-restore identity checks and private-copy retries.
-The accepted original-task snapshot adapter binds the transaction's copying phase and admission,
-captures complete project/Git state plus every immutable runtime helper, and
-keeps configuration values only in private backup payloads. Co-located runtime
-files remain in the project inventory; outside files use native external
-capture. Explicit PowerShell reaches every native observer, including nested
-Git-object snapshots, without broadening the private controller's PATH.
-Read-only target admission against the actual managed Windows application
-passed all 36 jobs at `89b7aa933c534ea4475360083b2f5d76d837f9fa / 37125749351`.
-It uses the selected Git executable under a minimal PATH while retaining exact
-source-profile checks and original task/listener ownership.
-Combined original-task runtime, configuration and live database admission
-passed all 36 jobs at `e877f2cc0cf52124712a285152e90f2d0c34ae0f / 37127140330`.
-Version and database probes use owned workers with private temporary directories;
-the actual application fixture also verifies repeated data admission.
-Complete Windows application snapshot acceptance passed:
-Next.js generates internal NTFS Junctions for bundled dependencies. Native
-original-handle observation and recreation passed the focused source/snapshot
-gate at `f45f431 / 37132289152`. Snapshot integration stores these links only
-as project-bound reparse metadata (native security payload version 2), not live
-links inside backup files. Restoration reconstructs them after ordinary
-payloads and restores their own ACLs last without propagating into targets.
-The standalone build also contains directory symbolic links. Their integration
-uses a separate optional `symlinks` metadata table, validates absolute/relative
-target encoding and retains the same ordinary-directory target protections.
-Other reparse tags, file symbolic links, external targets and link chains remain unsupported.
-The native snapshot/restore integration, long-path handling and bounded-copy
-contracts passed the focused gate at `f8ba0b4 / 37139096350`, including all
-97 existing regression cases. The actual application snapshot passed at
-`106c96e / 37925456181`, verifying 27,765 entries, Git, native dependencies,
-build output, data and external runtime files; the full dual-platform gate
-`37926962784` passed all 36 jobs at the same commit.
-Its full-backup fixture has a separate bounded maintenance budget
-rather than reusing the short three-start smoke-test deadline.
-Rejected live Windows preflight closeout passed the actual application gate
-at `04152de / 37929432101`: settled workers and the original lock are retired
-without stopping the running application, and a subsequent lock can be acquired.
-The full dual-platform gate `04faac8 / 37931331942` passed all 36 jobs.
-Completed Windows update/restore closeout through the manifest-verified saved
-entry passed the full 37-job gate at `7d854de / 37938609145`. It requires the
-original controller to have exited, retains native runtime/policy checks, and
-can resume partial task-receipt or final deployment-manifest retirement.
-Native pre-source runtime recovery passed all 41 lifecycle jobs at
-`d844b66 / 37942832825`. It requires the unchanged original configuration
-in a distinct bundle, refuses post-source or changed-configuration recovery,
-and retains `prior-runtime-restored` with the original update failure rather
-than claiming a new accepted deployment.
-Read-only managed readiness and original failure-code propagation passed all
-41 lifecycle jobs at `c728c0e / 37948844066`. Original task/Job listener
-ownership and authentication providers are verified without mutating task
-policy or journals; foreign listeners and mismatched providers are refused.
-Checked Windows deployment receipts and saved current-deployment inspection
-passed all 41 lifecycle jobs at `a3f1125 / 37953717734`. Receipts are published
-after real native completion under the original lock and remain verifiable
-after final retirement. Wrong project/source and changed build artifacts
-cannot produce an already-current result.
-Original Windows runtime bundle publication passed the focused seven-job gate
-at `b6f53b4 / 37955892930` and all 41 lifecycle jobs at
-`bce3d99 / 37957395127`, including helper-exit settlement checks. The publisher
-copies the exact installed command, environment and helpers into a distinct
-private bundle before task admission, without starting or changing the runtime.
-External Windows controller capture passed all 41 lifecycle jobs at
-`4893130 / 37963608037`. It retains private copies of the complete controller
-module tree and workflow schema outside mutable source, so replacing source
-cannot alter an in-flight controller. The private supervisor and exact successful
-capture retirement passed all 42 jobs at `26bcf7e / 38006102348`.
-The public existing-task update/no-op path below passed all 43 jobs at
-`5e15139 / 38057686717`. Default-tunnel first installation and cold restore
-remain separate, unfinished integration gates.
-Installed immutable runtime bundles are not rewritten through retained scopes.
-The separate task installer defaults registration to the current Windows account.
-The staged public deploy/update commands currently preserve the installed task
-and refuse explicit account, logon, trigger or tunnel changes. Foreign task
-actions are refused before changing the task.
-The native task-definition inspector records and rechecks XML,
-task permissions, principal/mode settings and Scheduler instances. It is
-read-only and explicitly returns no runtime authority: a Scheduler engine PID
-is not proof of ownership of the watchdog or its descendants, and Ready or
-Disabled is not proof that application processes are stopped. Default-tunnel
-first installation and the unsupported cold boundaries listed below remain pending.
+- Elevated PowerShell **7.4+**
+- **Node.js 24** (with bundled npm) and Git on `PATH` (restore needs only Node.js)
+- For a first install: a fresh checkout with `.env.local` configured, and no
+  `.data`, `.next`, `node_modules`, registered task or earlier deployment state
 
-**Deployment-backup branch: staged public commands.** Run from elevated
-PowerShell **7.4 or newer**, with **Node.js 24** (including its bundled npm)
-and Git on the controller PATH. This replaces the legacy deploy implementation;
-there is no fallback that kills port owners, reinstalls a task or builds before
-backup. Existing running managed tasks and explicit fresh
-`deploy.ps1 -NoTunnel` are accepted in actual application scenarios.
-Legacy watchdog and stopped-task adoption remain unsupported.
+**Common tasks**
 
 ```powershell
-# Read-only help or status (no control files or helper capture)
+# Help and read-only status
 pwsh -NoProfile -File .\scripts\update.ps1 -Help
 pwsh -NoProfile -File .\scripts\update.ps1 -ProjectDir C:\apps\agents-chat -Status -Json
 
-# First deployment from a fresh checkout with its .env.local already configured
+# First deployment (fresh checkout)
 pwsh -NoProfile -File .\scripts\deploy.ps1 -ProjectDir C:\apps\agents-chat -NoTunnel -SkipGitPull -Json
 
-# Update an existing managed task; skip only with matching accepted provenance
+# Update an existing managed task (no-op if already current)
 pwsh -NoProfile -File .\scripts\update.ps1 -ProjectDir C:\apps\agents-chat -Json
 
-# Rebuild the current revision of an existing managed task
+# Roll back / pin to a specific commit
+pwsh -NoProfile -File .\scripts\update.ps1 -ProjectDir C:\apps\agents-chat -Revision <full-commit-id>
+
+# Rebuild the current revision
 pwsh -NoProfile -File .\scripts\deploy.ps1 -ProjectDir C:\apps\agents-chat -SkipGitPull
-```
 
-Both commands accept `-TaskName` (default `Agents-Chat-Startup`), `-ProjectDir`
-(default tools checkout), `-Revision` (full local commit ID, conflicts with
-`-SkipGitPull`), `-NoInstall`, `-WaitSeconds` (positive, default 180),
-`-TimeoutSeconds` (positive per-stage limit, default 1800), `-Status`, `-Json`
-and `-Help`. Readiness uses port **3010**. The private sibling
-`.<project>.deployment` retains the backup, state and recovery engine;
-`.<project>.deployment-controllers` holds temporary helper captures.
-Successful captures are removed only after original processes settle. Failed
-captures and all recovery evidence must be retained for inspection.
-Inherited `NODE_OPTIONS`/`NODE_PATH` do not configure the controller or runtime.
-`-NoWait`, zero wait, `-Verify`, `-DryRun`, `-RemoveTask` and explicit `-UserId`
-are temporarily refused before installation access. First-only `-NoTunnel`
-requires `deploy`, dependency installation, positive readiness waits, a fresh
-checkout/configuration, no `.data`/`.next`/`node_modules`, no registered task,
-and no previous deployment state/evidence. Its default policy is the current
-account with Interactive/AtLogOn; optional `-TaskLogonType Interactive|S4U`
-and `-TaskTriggerType AtLogOn|AtStartup` require this same fresh NoTunnel mode.
-These options cannot reconfigure an existing installation or an update.
-Default-tunnel first deployment remains unfinished; do not use the old task
-installer as an automatic recovery fallback.
-
-**Update after a stopped-task rollback (archived stopped history).** When an
-earlier update of a stopped task was rolled back and its history was archived
-(`retired-<operation>-inactive-rollback-history-*.json` in the control
-directory), a plain `update.ps1` is the supported way forward. `deploy.ps1`
-stays refused. The update first verifies the exact archive, then hands the
-retained lock to a new owner through create-only
-`inactive-handoff-<attempt>-*.json` records. It then runs the stopped-task
-update and starts the application only after backup, build and configuration
-checks. An accepted update publishes `deployment.json`. The public supervisor
-then closes out in a separate process, retiring the task receipts, workers,
-handoff records and lock. The archive itself is kept as evidence. Once a
-later operation is accepted, or the task is running again, that older archive
-no longer blocks admission or routing. After this the task is an ordinary
-running managed task. Roll back with `update.ps1 -Revision <older full commit>`,
-and repeat updates the same way. Failed or interrupted updates keep their
-handoff and lock for recovery. No option ignores, deletes or bypasses the
-archive of the current operation. Native contracts cover routing, the accepted
-stopped-task transaction, closeout and the superseded archive. A full
-real-application run of this path in Actions is still pending.
-
-**Windows restore (managed task and supported interrupted recovery).** The public entry and its saved-engine
-invocation passed native contracts at `3497176 / 38187043591` and actual
-egress-denied restoration at `4e1aed1 / 38188828721`, job `114616945668`.
-It admits an existing running managed task with settled deployment state.
-Saved interrupted-copy startup and released-completion, terminal-state, receipt
-and retirement recovery also require their exact original retained evidence.
-Public interrupted-copy startup passed native and actual application acceptance
-at `1d52b08f / 38471316945 / 38471320648`. Acknowledged guarded startup recovery
-passed native acceptance at `25b99507 / 38481259288` and actual public recovery
-at `e7d56609 / 38490500463`: both old runtime Jobs settle, the exact original
-journal is archived, and a distinct released runtime completes restoration
-with the original backup and data preserved. Unacknowledged startup recovery
-also passed native acceptance at `0d3e3ee3 / 38523236422` and actual public
-recovery at `e38a45ba / 38531710666`. It requires the original immutable
-guarded-launch record, the exact disabled task and absent original owners/Jobs;
-it does not synthesize a running receipt. The actual application scenario
-interrupts after native runtime observation but before running acknowledgement.
-Recovery before task inhibition also passed its targeted native chain at
-`805fe11a / 38548499794` and actual public recovery at
-`d29ead38 / 38566074828`. This earlier boundary requires the same original
-launch evidence and absent owners/Jobs, but admits the exact enabled guarded
-task with no automatic triggers or restart policy. Read-only inspection does
-not disable it; a durable recovery request precedes restoring the original
-disabled policy. Existing-path regressions passed in job `115787034572`
-of `5fa661e6 / 38544479831`, whose separate earlier-prefix failure was
-subsequently corrected. Version-two never-enabled preparation now has native
-acceptance at `7d84bfea / 38598302976 / 38598304250 / 38598304291`.
-Public recovery before guarded task registration passed at
-`c1273ee2 / 38601393495`: it requires the original version-two request, no
-enable intent, launch or readiness evidence, absent original owners and an
-empty original Job, and the exact disabled task policy/security. It retains
-a null runtime rather than inventing a host or running receipt, then uses
-the durable policy journal and original archive before a fresh cold copy.
-The registered-but-never-enabled variant also passed actual public application
-recovery at `c1273ee2 / 38602160464`, preserving the same original evidence,
-archive, backup and data before a distinct released final runtime.
-Version-two enable attempts without launch evidence also passed actual public
-recovery at `d6cd777f / 38838082330`. Recovery requires the exact original
-enable intent, absent original owners, an empty original Job and the exact
-guarded task/security with no instances. It preserves null runtime evidence,
-the original enable file and its archived policy digest before a distinct
-released final runtime; read-only inspection does not disable the task.
-Other missing-launch cases, including legacy requests, live
-guarded peers, initially inactive/legacy tasks and reboot recovery remain
-unsupported.
-Do not remove a retained lock to bypass a recovery refusal.
-
-```powershell
-# Export post-backup data separately before acknowledging its loss
+# Restore the retained backup (export newer data first — it will be replaced)
 pwsh -NoProfile -File .\scripts\restore.ps1 -ProjectDir C:\apps\agents-chat -AcceptDataLoss -Json
 ```
 
-Restore accepts only `-TaskName` (default `Agents-Chat-Startup`), `-ProjectDir`
-(default tools checkout), `-AcceptDataLoss`, `-TimeoutSeconds` (positive
-per-stage limit, default 1800), `-Json` and `-Help`. Use elevated PowerShell
-7.4 or newer and Node.js 24 from outside the installed checkout. Git and npm
-are not required on PATH. Readiness is fixed at port 3010 with a 120-second
-wait. The command verifies the backup's historical saved engine without
-importing it into current controller code, then executes that saved entry.
-It restores archived artifacts without installation or rebuilding and retains
-the backup. Success requires separate-controller closeout after the restore
-actor has exited; only then are the original lock and successful helper capture
-removed. Failed or interrupted operations retain their evidence for recovery.
+**`deploy.ps1` / `update.ps1` options**
+
+| Option | Description |
+|---|---|
+| `-TaskName` | Scheduled Task name (default `Agents-Chat-Startup`) |
+| `-ProjectDir` | Installed checkout (default: the checkout containing the script) |
+| `-Revision` | Full local commit ID to deploy; cannot be combined with `-SkipGitPull` |
+| `-SkipGitPull` | Deploy the current checkout without fetching |
+| `-NoInstall` | Skip `npm install` (existing installs only) |
+| `-WaitSeconds` | Readiness wait, positive (default 180) |
+| `-TimeoutSeconds` | Per-stage timeout, positive (default 1800) |
+| `-NoTunnel` | First install only, without a tunnel |
+| `-TaskLogonType Interactive\|S4U` | First `-NoTunnel` install only (default `Interactive`) |
+| `-TaskTriggerType AtLogOn\|AtStartup` | First `-NoTunnel` install only (default `AtLogOn`) |
+| `-Status`, `-Json`, `-Help` | Read-only status, JSON output, usage |
+
+`-NoWait`, `-Verify`, `-DryRun`, `-RemoveTask` and `-UserId` are currently
+refused. An existing installation's account, logon mode, triggers and tunnel
+cannot be changed through update/deploy.
+
+`restore.ps1` accepts only `-TaskName`, `-ProjectDir`, `-AcceptDataLoss`,
+`-TimeoutSeconds`, `-Json` and `-Help`. It restores the saved build without
+reinstalling or rebuilding and keeps the backup. Run it from outside the
+installed checkout if that checkout's scripts are missing or damaged.
+
+**Files and recovery**
+
+- `.<project>.deployment` (sibling of the project): backup, state and saved
+  recovery engine. Do not delete it.
+- `.<project>.deployment-controllers`: temporary helper copies, removed after
+  a successful run.
+- A failed or interrupted operation keeps its lock and evidence. Re-run
+  `update.ps1` or `restore.ps1` to resume; **never delete the lock or recovery
+  files to bypass a refusal**.
+- If an earlier update of a stopped task was rolled back, run a plain
+  `update.ps1` to continue (`deploy.ps1` is refused in that state).
+- Inherited `NODE_OPTIONS`/`NODE_PATH` are ignored.
 
 ### Deployment (Linux systemd)
 
-**Deployment-backup branch: staged update command.** The new
-`sudo bash scripts/update.sh --project-dir /absolute/installed/checkout` updates
-an **existing running, inactive or failed** `agents-chat.service` using its installed account,
-Node/npm and configuration, rather than the invoking user's environment.
-It supports execution inside the installed checkout or from separate tools via
-`--project-dir`. Before source replacement it captures controller code in a private
-temporary directory, including modules needed by later dynamic imports and worker
-bootstraps. Completed commands remove this code-only copy; an abruptly killed
-controller may leave one under `/tmp/agents-chat-controller-*`. These directories
-contain neither application data nor configuration and are not recovery authority.
-`--dry-run --json` reports local revisions, estimated backup/build space, planned
-steps and pending checks without fetching, creating control files, launching
-workers or executing target code. It does not run Git status/filters/fsmonitor,
-so source cleanliness remains pending, along with target/database admission,
-capacity rechecks and readiness. An unavailable local target is explicitly
-unknown; a tracking ref is never presented as remotely refreshed. Preview does
-not replace the last operation result or authorize an update.
-To restore the retained backup, use
-`sudo bash scripts/restore.sh --project-dir /absolute/installed/checkout --accept-data-loss`.
-Export newer data first: restoration replaces application data with its backup
-version. The command verifies and invokes the saved external recovery engine;
-it does not fetch Git objects, install dependencies or build the application.
-It accepts `--json` and `--timeout SECONDS` (per-stage, default 1800); `--help`
-lists its requirements. If the selected historical source has no restore script,
-run this command from a separate tools checkout and specify the installed path.
-New native backups bind the exact recovery-engine digest in a version-2 snapshot.
-When controller helpers change, the update saves an immutable
-`recovery-engine-<sha256>` generation rather than replacing the original
-`recovery-engine` directory. Version-1 backups continue to use that original
-engine. Do not remove these directories or unpublished `.staging` evidence;
-older restore tools that cannot read version-2 snapshots must not be used.
-After a successful update and verified worker retirement, obsolete generated
-engines are removed while preserving the original engine and the generation
-required by the retained backup/current operation. Cleanup first renames a
-verified unused generation to `retired-recovery-engine-<sha256>` and removes its
-manifest last, allowing interrupted file deletion to resume. Unknown files,
-staging directories or unsettled worker evidence block cleanup rather than
-being silently discarded.
-Use `--help` for supported flags, `--status --json` for read-only status, and
-`--json` for machine-readable outcomes (progress/errors remain on stderr).
-Failed deploy/update results include bounded diagnostic codes and controller
-module line/column locations, without raw exceptions, private paths or native
-command output.
-If the retained backup directory is absent, restore refuses with
-`DEPLOYMENT_BACKUP_MISSING` (`backupAvailable: false` in JSON); it cannot recover
-a failed first installation without a previous backup. Existing but incomplete
-backup contents are reported as errors, not reclassified as a missing backup.
-Git object backups include single-file and split commit graphs. Restoration
-preserves newer immutable objects while restoring the saved graph pointer layout;
-alternate object stores, unknown entries and writer locks remain unsupported.
-The controller requires Node.js 24+, `/usr/bin/git`, systemd, port 3010, and a
-minimum 2 GiB build-space budget in addition to backup space. It keeps one
-complete backup and independent recovery helpers in the private sibling
-`.<project-basename>.deployment` directory. Preserve that directory after failure.
+The Linux scripts manage `agents-chat.service`. Like Windows, each operation
+backs up first, builds as the checkout owner, checks readiness on port **3010**,
+and keeps one complete backup for restore.
 
-This command is **not yet the complete cross-platform deployment release**:
-first install and deferred verification/no-wait are
-not supported by `update.sh` and are refused rather than delegated to another
-installer. The first-install controller and its version-4 live/cold retirement
-have passed Actions acceptance, including real source builds, application
-readiness, cancellation and interruption/tampering recovery.
+> **Status:** this branch is still in development; don't use it on a live
+> installation yet. `--no-wait`/`--wait 0`, deferred verification and
+> `deploy.sh --dry-run` are refused.
 
-**Public `deploy.sh` has passed fresh-install and running-service Actions
-acceptance. Do not use this branch on a live installation before the remaining
-runtime-mode and platform gates.** The old
-root build/install procedure has been replaced, not retained as a fallback.
-The staged native command supports a fresh installation or redeployment of an
-existing running, inactive or failed service; deferred verification,
-`--wait 0` and deploy `--dry-run` are explicitly refused.
-The continuous Linux gate also passes first deployment, an unchanged update,
-two source-content updates, and saved recovery of the original source, build
-and authenticated chat data after removing installed scripts and Git packs.
+**Prerequisites**
 
-Inactive/failed public lifecycle support passed all 22 Actions jobs at
-`5eb4d81` (run `36870898113`). Admission does not start the service
-to discover its executables or read a fictitious process environment. It requires
-literal `npm start`, npm's `#!/usr/bin/env node` interpreter, and an external Node
-selected from the retained startup PATH (unit/EnvironmentFile, then ExecSearchPath,
-then manager PATH), not the controller or Next dotenv PATH. Project-local candidates
-are refused, and earlier PATH candidates are rechecked throughout the operation.
-Non-locale manager-global environment assignments must be explicitly overridden in
-the retained unit/EnvironmentFile; dotenv does not mask those startup assignments.
-For example, a host-global `SGX_AESM_ADDR` needs a deliberate per-service assignment
-if present. Do not remove host-wide settings just to admit an update.
-A stopped same-commit update still builds and verifies. Pre-source failure never
-starts an originally stopped service; explicit restore starts and verifies the
-restored application. Status and preview preserve the stopped/failed state and
-do not claim that readiness passed.
+- Root (`sudo`), systemd, **Node.js 24**, `/usr/bin/git`
+- At least 2 GiB free for the build, plus space for the backup
+- For a first install: a clean checkout owned by a non-root, primary-group-only
+  account with a writable npm cache and a private `.env.local`; no existing
+  service, `.data`, `.next`, `node_modules` or deployment state
 
-For first installation, prepare a clean source checkout owned by its non-root,
-primary-group-only runtime account and private production authentication
-configuration, such as `.env.local`. The account needs a writable npm cache,
-normally under its home.
-The service must be absent, without prior `.data`, `.next`, `node_modules` or
-operation evidence. Existing artifacts/evidence require inspection, not deletion
-to force a fresh install. The controller requires Node.js 24, `/usr/bin/git`
-and systemd; it does not automatically install packages, change account ownership
-or generate configuration.
+**Common tasks**
 
 ```bash
-# Read-only help/status
+# Help and read-only status
 sudo ./scripts/deploy.sh --help
 sudo ./scripts/deploy.sh --project-dir /absolute/checkout --status --json
 
-# Fresh source build, owned service publication, enablement and readiness
+# First deployment (fresh checkout)
 sudo ./scripts/deploy.sh --project-dir /absolute/checkout --no-pull
 
-# Existing installation: redeploy, or update (running services can be already-current)
-sudo ./scripts/deploy.sh --project-dir /absolute/checkout --no-pull
+# Preview an update (no changes made)
+sudo ./scripts/update.sh --project-dir /absolute/checkout --dry-run --json
+
+# Update (no-op if already current), or force a redeploy
 sudo ./scripts/update.sh --project-dir /absolute/checkout
+sudo ./scripts/deploy.sh --project-dir /absolute/checkout --no-pull
+
+# Restore the retained backup (export newer data first — it will be replaced)
+sudo ./scripts/restore.sh --project-dir /absolute/checkout --accept-data-loss
 ```
 
-Root controls systemd and private transaction evidence; fresh source-changing
-Git operations, npm/build and application processes use the non-root checkout owner, not the sudo
-caller. Existing installations retain their admitted account, Node/npm
-executables and configuration. Redeploy uses `operation: deploy` and does not
-skip merely because its source is already current. `--no-install` is supported
-only for an existing installation; fresh installation always installs
-dependencies. Positive `--wait`, `--timeout`, `--revision`, `--json` and
-`--project-dir` follow the update command's conventions.
+Common flags: `--project-dir`, `--revision <commit>`, `--no-pull`,
+`--no-install` (existing installs only), `--wait SECONDS` (positive),
+`--timeout SECONDS` (per stage, default 1800), `--status`, `--json`, `--help`.
+`update.sh` works on running, inactive or failed services and uses the
+service's installed account, Node/npm and environment, not the caller's.
 
-First deployment creates no prior backup. On failure it explicitly reports this
-and retains the lock and worker/service evidence for inspection. First-unit
-publication and enablement are separately journaled and initially inhibited;
-startup alone is not application acceptance. Version-4 accepted retirement
-binds the real installation/enablement journals, persistent startup link and
-published deployment receipt. The link and receipt are never deletion targets
-and remain prerequisites throughout live and saved cold cleanup.
-
-Manage the service:
+**Manage the service**
 
 ```bash
 sudo systemctl status   agents-chat
@@ -1178,14 +265,27 @@ sudo systemctl stop     agents-chat
 sudo journalctl -u agents-chat -f          # live log stream
 ```
 
-Fresh units set production mode and their inspected executable path/home.
-Next.js reads the admitted project dotenv files in production precedence order:
-`.env.production.local`, `.env.local`, `.env.production`, then `.env`.
-Use supported literal values and keep authentication configuration private.
-Fresh units do not automatically load `/etc/agents-chat.env` or inherit the
-root controller's environment. Existing services retain their admitted systemd
-environment and `EnvironmentFile` settings. Native readiness currently uses
-port 3010; changing an arbitrary `PORT` value does not change that contract.
+**Configuration notes**
+
+- Next.js reads `.env.production.local`, `.env.local`, `.env.production`,
+  then `.env`. New units do not load `/etc/agents-chat.env`; existing services
+  keep their `Environment`/`EnvironmentFile` settings.
+- The service must start with `npm start` using an external Node.js (not one
+  inside the project).
+- Readiness is fixed at port 3010; changing `PORT` does not change it.
+
+**Files and recovery**
+
+- `.<project>.deployment` (sibling of the project) holds the backup, state and
+  recovery engines (`recovery-engine*`). Do not delete it or any `.staging`
+  directories.
+- On failure the lock and evidence are kept; inspect with `--status --json`,
+  then re-run the command or `restore.sh`. Failed results include diagnostic
+  codes.
+- `restore.sh` reports `DEPLOYMENT_BACKUP_MISSING` when there is no backup
+  (for example after a failed first install).
+- A killed controller may leave `/tmp/agents-chat-controller-*`; it contains
+  only code and can be removed.
 
 ### Logging
 
