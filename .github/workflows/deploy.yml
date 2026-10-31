@@ -25,3 +25,32 @@ jobs:
         with:
           node-version: 24
       - run: node --test "tests/deploy/*.test.mjs"
+
+  linux-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Deployment E2E (systemd)
+        run: sudo env "PATH=$PATH" "npm_config_cache=$HOME/.npm" bash tests/deploy/e2e-linux.sh
+
+  windows-e2e:
+    runs-on: windows-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Deployment E2E (Scheduled Task)
+        shell: pwsh
+        run: ./tests/deploy/e2e-windows.ps1
