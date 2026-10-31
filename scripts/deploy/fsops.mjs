@@ -155,11 +155,24 @@ export function inspectLock(root) {
 
 export function acquireLock(root) {
   const file = path.join(root, 'deploy.lock');
-  const status = inspectLock(root);
-  if (status === 'held') throw new DeployError('Another deployment is running (deploy.lock is held).', 2, 'preflight');
-  if (status === 'stale') log('Taking over a stale deploy.lock.');
+  const data = JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() });
   fs.mkdirSync(root, { recursive: true });
-  fs.writeFileSync(file, JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }));
+  const create = () => {
+    try {
+      fs.writeFileSync(file, data, { flag: 'wx' });
+      return true;
+    } catch (err) {
+      if (err.code === 'EEXIST') return false;
+      throw err;
+    }
+  };
+  const held = () => new DeployError('Another deployment is running (deploy.lock is held).', 2, 'preflight');
+  if (!create()) {
+    if (inspectLock(root) === 'held') throw held();
+    log('Taking over a stale deploy.lock.');
+    fs.rmSync(file, { force: true });
+    if (!create()) throw held();
+  }
   return () => {
     if (readJson(file, null)?.pid === process.pid) fs.rmSync(file, { force: true });
   };

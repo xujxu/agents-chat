@@ -74,6 +74,7 @@ export function createWindowsService({ name = 'Agents-Chat-Startup', root }) {
     },
 
     remove() {
+      if (!this.exists()) return;
       this.stop();
       ps(`Unregister-ScheduledTask -TaskName ${q(name)} -Confirm:$false`);
     },

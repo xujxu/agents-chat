@@ -27,6 +27,20 @@ wait_version() { # expected sha
 marker() { node "$SRC/tests/deploy/marker.mjs" "$@"; }
 state() { node -pe "const s=JSON.parse(require('fs').readFileSync('$ROOT/state.json'));$1"; }
 d() { "$SRC/scripts/$1.sh" --project-dir "$ROOT" "${@:2}"; }
+kill_at_health() { # command... ; runs it in the background and kills the deploy process at the health step
+  "$@" > "$T/crash.log" 2>&1 &
+  local pid=$!
+  for _ in $(seq 1 3000); do
+    [[ "$(state 's.pending && s.pending.step' 2>/dev/null)" == health ]] && break
+    sleep 0.1
+  done
+  [[ "$(state 's.pending && s.pending.step')" == health ]] || { cat "$T/crash.log"; fail "never reached the health step: $*"; }
+  local core
+  core=$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1])).pid' "$ROOT/deploy.lock")
+  kill -9 "$core"
+  wait "$pid" || true
+  while kill -0 "$core" 2>/dev/null; do sleep 0.2; done
+}
 expect_exit() { # code, command...
   local want=$1; shift
   set +e; trap - ERR; "$@"; local got=$?; set -e; trap 'fail "unexpected error on line $LINENO"' ERR
@@ -59,8 +73,10 @@ wait_version null
 marker write "$OLD/.data/chats.db" m1
 old_status=$(git -C "$OLD" status --porcelain)
 
-step "1. migrate the existing checkout"
+step "1. migrate the existing checkout (the first attempt is killed and undone by the re-run)"
+kill_at_health d deploy --import-from "$OLD"
 d deploy --import-from "$OLD"
+[[ "$(state 's.pending')" == null ]] || fail "pending not cleared after the re-run"
 wait_version "$BASE"
 marker has "$ROOT/shared/.data/chats.db" m1 || fail "marker m1 missing after migration"
 [[ "$(git -C "$OLD" status --porcelain)" == "$old_status" ]] || fail "old checkout changed"
@@ -98,17 +114,7 @@ marker has "$ROOT/shared/.data/chats.db" m1 || fail "marker m1 missing after res
 if marker has "$ROOT/shared/.data/chats.db" m2; then fail "marker m2 should be gone after restore"; fi
 
 step "6. an interrupted update is undone by the next run"
-d update --revision "$V3" --no-install --wait 120 > "$T/crash.log" 2>&1 &
-pid=$!
-for _ in $(seq 1 600); do
-  [[ "$(state 's.pending && s.pending.step' 2>/dev/null)" == health ]] && break
-  sleep 0.5
-done
-[[ "$(state 's.pending && s.pending.step')" == health ]] || { cat "$T/crash.log"; fail "update never reached the health step"; }
-core=$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1])).pid' "$ROOT/deploy.lock")
-kill -9 "$core"
-wait "$pid" || true
-while kill -0 "$core" 2>/dev/null; do sleep 0.2; done
+kill_at_health d update --revision "$V3" --no-install --wait 120
 
 step "7. re-run recovers; -NoWait marks the release unverified"
 d update --revision "$V3" --no-install --wait 0

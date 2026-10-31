@@ -98,7 +98,7 @@ function isElevated() {
   return run('net', ['session'], { capture: true, allowFail: true }).status === 0;
 }
 
-function preflight(op) {
+function preflight(op, holdingLock = false) {
   const importFrom = o['import-from'] && path.resolve(o['import-from']);
   const dataDir = importFrom ? path.join(importFrom, '.data') : P.data;
   const serviceExists = svc.exists();
@@ -107,7 +107,7 @@ function preflight(op) {
     isElevated: isElevated(),
     nodeMajor: Number(process.versions.node.split('.')[0]),
     hasGit: hasCommand('git'),
-    lockHeld: inspectLock(P.root) === 'held',
+    lockHeld: !holdingLock && inspectLock(P.root) === 'held',
     freeBytes: freeBytes(P.root),
     dataBytes: dirBytes(dataDir),
     hasEnvLocal: exists(path.join(importFrom ?? P.shared, '.env.local')),
@@ -262,6 +262,7 @@ async function undo(outcome, err) {
   const plan = recoveryPlan(state);
   const notes = [err.message];
   log(`Undoing ${p.op} (${p.step}): ${err.message}`);
+  let restored = false;
   try {
     try {
       svc.stop();
@@ -276,6 +277,7 @@ async function undo(outcome, err) {
     }
     if (plan.removeService) svc.remove();
     if (plan.restoreService) svc.restore(path.join(P.backups, plan.restoreService));
+    restored = true;
     if (plan.start) {
       svc.start();
       if (plan.relinkTo) {
@@ -290,6 +292,8 @@ async function undo(outcome, err) {
     notes.push(`Rollback also failed: ${undoErr.message}`);
   }
   state = failSwitch(state, { outcome, step: err.step ?? p.step, message: notes.join(' '), now: Date.now() });
+  // Keep `pending` so the next run retries the undo instead of trusting a half-restored state.
+  if (!restored) state = { ...state, pending: p };
   save();
   return outcome;
 }
@@ -304,6 +308,7 @@ async function recoverInterrupted() {
   const p = state.pending;
   await undo('failed', new DeployError(`Recovered from an interrupted ${p.op} (step ${p.step}).`, 1, p.step));
   log(state.lastResult.message);
+  if (state.pending) throw new DeployError(`Could not undo the interrupted ${p.op}; fix the error above and re-run.`, 1, p.step);
 }
 
 // ---------- operations ----------
@@ -456,16 +461,23 @@ function result(outcome, message, exitCode = 0) {
 }
 
 async function main() {
-  const op = resolveOp();
+  let op = resolveOp();
   svc = serviceFor();
   if (op === 'status') return status();
-  const errors = preflight(op);
-  if (o['dry-run']) return { ...dryRun(op, errors), exitCode: errors.length ? 2 : 0 };
-  if (errors.length) throw new DeployError(`Preflight failed:\n  - ${errors.join('\n  - ')}`, 2, 'preflight');
-  fs.mkdirSync(P.root, { recursive: true });
-  const release = acquireLock(P.root);
+  let release = null;
   try {
-    if (op !== 'remove-task') await recoverInterrupted();
+    // Undo an interrupted run first: its leftovers (a half-installed service, an adopted
+    // unit) would otherwise fail preflight and block the recovery forever.
+    if (state.pending && !o['dry-run'] && isElevated()) {
+      release = acquireLock(P.root);
+      await recoverInterrupted();
+      op = resolveOp();
+    }
+    const errors = preflight(op, Boolean(release));
+    if (o['dry-run']) return { ...dryRun(op, errors), exitCode: errors.length ? 2 : 0 };
+    if (errors.length) throw new DeployError(`Preflight failed:\n  - ${errors.join('\n  - ')}`, 2, 'preflight');
+    fs.mkdirSync(P.root, { recursive: true });
+    release ??= acquireLock(P.root);
     switch (op) {
       case 'install': return await install();
       case 'import': return await importFrom();
@@ -475,7 +487,7 @@ async function main() {
       case 'remove-task': return removeTask();
     }
   } finally {
-    release();
+    release?.();
   }
 }
 
