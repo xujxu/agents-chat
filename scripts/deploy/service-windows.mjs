@@ -7,9 +7,12 @@ import { run } from './fsops.mjs';
 const POWERSHELL = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
 const q = (s) => `'${String(s).replaceAll("'", "''")}'`;
 
+// Windows PowerShell -Command exits 1 when the last statement set $? to false (e.g. a
+// SilentlyContinue lookup found nothing); real failures throw because of 'Stop'.
 function ps(script, { allowFail = false } = {}) {
   const res = run(POWERSHELL, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command',
-    `$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; ${script}`],
+    `$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; ${script}
+; exit 0`],
   { capture: true, allowFail, step: 'service' });
   return res.stdout?.trim() ?? '';
 }
