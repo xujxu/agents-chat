@@ -1,0 +1,324 @@
+import assert from 'node:assert/strict';
+import { fork } from 'node:child_process';
+import { once } from 'node:events';
+import { fileURLToPath } from 'node:url';
+import { setTimeout as delay } from 'node:timers/promises';
+import { withWindowsAdmission } from '../scripts/deployment/windows-admission.mjs';
+import { acquireLock } from '../scripts/deployment/state.mjs';
+import { processIdentity } from '../scripts/deployment/process-identity.mjs';
+import { windowsControllerTransport } from '../scripts/deployment/windows-controller-transport.mjs';
+import {
+  openWindowsTaskCompletionProof, assertWindowsTaskCompletionProof, captureWindowsTaskCompletionProof,
+} from '../scripts/deployment/windows-task-completion-proof.mjs';
+
+const [control, pwsh, mode] = process.argv.slice(2);
+
+async function malformedRequest(frame) {
+  const controllerIdentity = await processIdentity(process.pid);
+  const script = fileURLToPath(new URL('../scripts/deployment/windows-task-completion-controller.ps1', import.meta.url));
+  const { child, wire, waitForExit, abandon } = windowsControllerTransport({
+    pwsh, refused: cause => cause, label: 'Malformed completion fixture',
+    args: ['-NoProfile', '-NonInteractive', '-File', script, '-Control', control,
+      '-ControllerPid', String(process.pid), '-ControllerIdentity', controllerIdentity],
+  });
+  const closed = once(child, 'close', { signal: AbortSignal.timeout(90000) });
+  closed.catch(() => {});
+  try {
+    const ready = await wire.receive({ timeoutMs: 60000 });
+    assert.equal(ready.type, 'ready');
+    assert.equal(ready.pid, child.pid);
+    await new Promise((resolve, reject) => child.stdin.write(`${frame}\n`, error => error ? reject(error) : resolve()));
+    assert.equal((await waitForExit()).code, 1);
+    await closed;
+    const result = await abandon(new Error('Expected malformed completion request refusal.'));
+    assert.match(result.diagnostic, /Completed-task proof refused: request\./);
+  } catch (error) { throw await abandon(error); }
+}
+
+if (['inactive-deployment', 'inactive-deployment-crash', 'inactive-deployment-precommit',
+  'inactive-deployment-resume'].includes(mode)) {
+  const { readFile, access } = await import('node:fs/promises');
+  const path = await import('node:path');
+  const { openWindowsInactiveTaskRetirement, beginWindowsInactiveDeploymentRetirement,
+    openWindowsInactiveDeploymentRetirement, openWindowsDeploymentRetirement,
+    retireNextWindowsDeploymentEntry } = await import('../scripts/deployment/windows-task-completion-proof.mjs');
+  assert.equal(typeof beginWindowsInactiveDeploymentRetirement, 'function',
+    'Inactive deployment closeout requires distinct original authority');
+  await withWindowsAdmission(control, { pwsh }, async admission => {
+    const resuming = mode === 'inactive-deployment-precommit' || mode === 'inactive-deployment-resume';
+    let task;
+    let deployment;
+    try {
+      if (resuming) {
+        await assert.rejects(openWindowsDeploymentRetirement({ control, pwsh, admission }),
+          /Completed-task proof unavailable/);
+        deployment = await openWindowsInactiveDeploymentRetirement({ control, pwsh, admission });
+      } else {
+        task = await openWindowsInactiveTaskRetirement({ control, pwsh, admission });
+        assert.equal(task.observation.retiredFiles, 13);
+      }
+      const checkpoint = deployment ? deployment.observation.manifest.record.task.checkpoint
+        : task.observation.checkpoint.checkpoint;
+      const paths = [path.join(control, 'state.json'), path.join(control, 'backup', 'manifest.json'),
+        path.join(control, 'backup', 'complete.json'), checkpoint.configuration, checkpoint.priorRuntime.configuration];
+      const before = await Promise.all(paths.map(file => readFile(file)));
+      if (!deployment) deployment = await beginWindowsInactiveDeploymentRetirement(control, task, admission);
+      let progress = deployment.observation;
+      const count = progress.manifest.record.entries.length;
+      const start = mode === 'inactive-deployment-precommit' ? 1 : mode === 'inactive-deployment-resume' ? count : 0;
+      const end = mode === 'inactive-deployment-crash' ? 1 : mode === 'inactive-deployment-precommit' ? count : count + 1;
+      assert.equal(progress.retiredEntries, start);
+      for (let index = start; index < end; index++) {
+        progress = await retireNextWindowsDeploymentEntry(control, deployment, admission);
+        if (index < count) {
+          assert.equal(progress.status, 'retiring-deployment');
+          assert.equal(progress.retiredEntries, index + 1);
+        }
+      }
+      if (mode === 'inactive-deployment-crash' || mode === 'inactive-deployment-precommit') {
+        assert.deepEqual(await Promise.all(paths.map(file => readFile(file))), before);
+        console.log(JSON.stringify({ held: true, retiredEntries: progress.retiredEntries,
+          totalEntries: count, bridge: deployment.identity }));
+        await delay(120000);
+        throw new Error('Parent did not terminate the held inactive deployment actor.');
+      }
+      assert.equal(progress.status, 'retired');
+      assert.deepEqual(await Promise.all(paths.map(file => readFile(file))), before);
+      for (const name of ['task-maintenance', 'worker-engine', 'worker-operation.ndjson',
+        'task-retirement.json', 'task-retirement-checkpoint.json', 'worker-retirement.json', 'lock']) {
+        await assert.rejects(access(path.join(control, name)), { code: 'ENOENT' });
+      }
+      await admission.check();
+    } finally {
+      if (deployment) await deployment.close();
+      else if (task) await task.close();
+    }
+  });
+  console.log('PASS: inactive deployment retires its exact worker and task evidence, releases the lock, and preserves accepted state, backup and runtime bundles');
+} else if (mode === 'inactive-retire' || mode === 'inactive-retire-crash' || mode === 'inactive-retire-resume') {
+  const { readFile, readdir, rename } = await import('node:fs/promises');
+  const path = await import('node:path');
+  const { openWindowsInactiveTaskRetirement, openWindowsTaskRetirement,
+    retireNextWindowsTaskFile, beginWindowsDeploymentRetirement } =
+    await import('../scripts/deployment/windows-task-completion-proof.mjs');
+  assert.equal(typeof openWindowsInactiveTaskRetirement, 'function',
+    'Inactive retirement requires independent version-two reopening');
+  const prefix = mode === 'inactive-retire-resume' ? 3 : 0;
+  const end = mode === 'inactive-retire-resume' ? 13 : 3;
+  const state = await readFile(path.join(control, 'state.json'));
+  const lock = await readFile(path.join(control, 'lock', 'owner.json'));
+  await withWindowsAdmission(control, { pwsh }, async admission => {
+    await assert.rejects(openWindowsTaskRetirement({ control, pwsh, admission }),
+      /Completed-task proof unavailable/);
+    if (prefix === 0) {
+      const receipt = path.join(control, 'task-maintenance', 'inactive-start-running.json');
+      const held = path.join(control, 'inactive-start-running-held.json');
+      await rename(receipt, held);
+      try {
+        await assert.rejects(openWindowsInactiveTaskRetirement({ control, pwsh, admission }),
+          error => /Non-prefix retirement inventory/.test(error.diagnostic ?? ''));
+      } finally { await rename(held, receipt); }
+    }
+    const scope = await openWindowsInactiveTaskRetirement({ control, pwsh, admission });
+    try {
+      assert.equal(scope.observation.retiredFiles, prefix);
+      assert.equal(scope.observation.checkpoint.intent.intent.version, 2);
+      await assert.rejects(beginWindowsDeploymentRetirement(control, scope, admission),
+        /Inactive deployment retirement is not available/);
+      for (let index = prefix; index < end; index++) {
+        const next = await retireNextWindowsTaskFile(control, scope, admission);
+        assert.equal(next.retiredFiles, index + 1);
+        assert.deepEqual(await scope.check(), next);
+        assert.equal((await readdir(path.join(control, 'task-maintenance'))).length, 13 - index - 1);
+      }
+      if (mode === 'inactive-retire-crash') {
+        assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
+        assert.deepEqual(await readFile(path.join(control, 'lock', 'owner.json')), lock);
+        console.log(JSON.stringify({ held: true, retiredFiles: end, bridge: scope.identity }));
+        await delay(120000);
+        throw new Error('Parent did not terminate the held inactive retirement actor.');
+      }
+      if (end === 13) await assert.rejects(retireNextWindowsTaskFile(control, scope, admission),
+        error => /exhausted/.test(error.cause?.message ?? ''));
+    } finally { await scope.close(); }
+  });
+  assert.deepEqual(await readFile(path.join(control, 'state.json')), state);
+  assert.deepEqual(await readFile(path.join(control, 'lock', 'owner.json')), lock);
+  console.log(`PASS: independent inactive retirement advances exact receipt prefix ${prefix} to ${end} without changing accepted state or lock`);
+} else if (mode === 'inactive') {
+  const { openWindowsInactiveTaskCompletionProof, prepareWindowsTaskRetirement,
+    prepareWindowsInactiveTaskRetirement, prepareWindowsInactiveTaskRetirementCheckpoint } =
+    await import('../scripts/deployment/windows-task-completion-proof.mjs');
+  assert.equal(typeof openWindowsInactiveTaskCompletionProof, 'function',
+    'Independent inactive proof requires its owned Node/native transport');
+  await withWindowsAdmission(control, { pwsh }, async admission => {
+    await assert.rejects(openWindowsInactiveTaskCompletionProof({
+      control, pwsh, admission: Object.freeze({ check: async () => {} }),
+    }), /Original retained Windows admission/);
+    const proof = await openWindowsInactiveTaskCompletionProof({ control, pwsh, admission });
+    try {
+      assert.equal(proof.observation.status, 'observed');
+      assert.equal(proof.observation.mutationAuthority, false);
+      assert.equal(proof.observation.lease, 'released');
+      assert.ok(Object.isFrozen(proof) && Object.isFrozen(proof.observation));
+      assert.deepEqual(await proof.check(), proof.observation);
+      assert.equal(typeof prepareWindowsInactiveTaskRetirement, 'function',
+        'Inactive retirement requires its distinct original proof authority');
+      const retired = await prepareWindowsInactiveTaskRetirement(control, proof, admission);
+      assert.equal(retired.intent.version, 2);
+      assert.equal(retired.intent.files.length, 13);
+      assert.equal(retired.intent.files[0].path, 'task-maintenance\\admission.json');
+      assert.equal(retired.intent.files.at(-1).path, 'task-maintenance\\inactive-complete-complete.json');
+      assert.deepEqual(retired.intent.completion, proof.observation);
+      const { captureWindowsTaskRetirement } = await import('../scripts/deployment/windows-task-retirement-record.mjs');
+      for (const change of [
+        value => { value.intent.version = 1; },
+        value => { value.intent.files.pop(); },
+        value => { value.intent.files[1].path = 'task-maintenance\\transaction.json'; },
+        value => { value.intent.files.reverse(); },
+      ]) {
+        const changed = structuredClone(retired);
+        change(changed);
+        assert.throws(() => captureWindowsTaskRetirement(changed));
+      }
+      assert.deepEqual(await prepareWindowsInactiveTaskRetirement(control, proof, admission), retired);
+      await assert.rejects(prepareWindowsInactiveTaskRetirement(control, { ...proof }, admission),
+        /Original retained inactive completed-task proof/);
+      await assert.rejects(prepareWindowsInactiveTaskRetirement(`${control}-foreign`, proof, admission),
+        /Original retained inactive completed-task proof/);
+      assert.equal(typeof prepareWindowsInactiveTaskRetirementCheckpoint, 'function',
+        'Inactive retirement checkpoint requires retained original retired runtime evidence');
+      const checkpoint = await prepareWindowsInactiveTaskRetirementCheckpoint(control, proof, admission);
+      assert.equal(checkpoint.checkpoint.version, 2);
+      assert.deepEqual(checkpoint.intent, retired);
+      assert.equal(checkpoint.checkpoint.enabled, false);
+      const prior = checkpoint.checkpoint.priorRuntime;
+      assert.equal(prior.runtime.identity, checkpoint.checkpoint.retiredOwner.processIdentity);
+      assert.notEqual(prior.runtime.generation, proof.observation.runtime.generation);
+      assert.equal(Object.hasOwn(prior.runtime, 'instanceGuid'), false);
+      assert.ok(Number.isInteger(prior.runtime.sessionId) && prior.runtime.sessionId >= 0);
+      assert.deepEqual(await prepareWindowsInactiveTaskRetirementCheckpoint(control, proof, admission), checkpoint);
+      const { captureWindowsTaskRetirementCheckpoint } =
+        await import('../scripts/deployment/windows-task-retirement-checkpoint.mjs');
+      for (const change of [
+        value => { delete value.checkpoint.priorRuntime; },
+        value => { value.checkpoint.version = 1; },
+        value => { value.checkpoint.priorRuntime.runtime.sessionId = -1; },
+        value => { value.checkpoint.priorRuntime.runtime.identity = proof.observation.runtime.identity; },
+        value => { value.checkpoint.priorRuntime.configuration = value.checkpoint.configuration; },
+      ]) {
+        const changed = structuredClone(checkpoint);
+        change(changed);
+        assert.throws(() => captureWindowsTaskRetirementCheckpoint(changed));
+      }
+      assert.deepEqual(await proof.check(), proof.observation);
+      await assert.rejects(prepareWindowsTaskRetirement(control, proof, admission),
+        /Original retained completed-task proof/);
+      await assert.rejects(openWindowsTaskCompletionProof({ control, pwsh, admission }),
+        /Completed-task proof unavailable/);
+      assert.deepEqual(await proof.check(), proof.observation);
+    } finally { await proof.close(); }
+    await assert.rejects(proof.check(), /Completed-task proof unavailable/);
+    await proof.close();
+    await admission.check();
+  });
+  console.log('PASS: independent inactive proof prepares exact version-two retirement intent and checkpoint with original retired runtime evidence');
+} else if (mode === 'hold') {
+  await withWindowsAdmission(control, { pwsh }, async admission => {
+    const proof = await openWindowsTaskCompletionProof({ control, pwsh, admission });
+    try {
+      await new Promise((resolve, reject) => process.send(
+        { proof: proof.identity, admission: admission.identity }, error => error ? reject(error) : resolve()));
+      await delay(120000);
+      throw new Error('Parent did not terminate original completion fixture controller.');
+    } finally { await proof.close(); }
+  });
+} else {
+  await withWindowsAdmission(control, { pwsh }, async admission => {
+    await assert.rejects(openWindowsTaskCompletionProof({
+      control, pwsh, admission: Object.freeze({ check: async () => {} }),
+    }), /Original retained Windows admission/);
+    await assert.rejects(openWindowsTaskCompletionProof({
+      control: `${control}-foreign`, pwsh, admission,
+    }), /Original retained Windows admission/);
+    const proof = await openWindowsTaskCompletionProof({ control, pwsh, admission });
+    try {
+      assert.equal(proof.observation.status, 'observed');
+      assert.equal(proof.observation.mutationAuthority, false);
+      assert.equal(proof.observation.lease, 'released');
+      assert.ok(Object.isFrozen(proof) && Object.isFrozen(proof.observation)
+        && Object.isFrozen(proof.observation.runtime) && Object.isFrozen(proof.observation.providers));
+      assert.deepEqual(captureWindowsTaskCompletionProof(structuredClone(proof.observation)), proof.observation);
+      for (const changed of [
+        { ...proof.observation, unexpected: true },
+        { ...proof.observation, mutationAuthority: true },
+        { ...proof.observation, lease: 'guarded' },
+        { ...proof.observation, operationId: '00000000-0000-0000-0000-000000000000' },
+        { ...proof.observation, port: String(proof.observation.port) },
+        { ...proof.observation, stateSha256: 'bad' },
+        { ...proof.observation, runtime: { ...proof.observation.runtime, identity: 'invalid' } },
+        { ...proof.observation, providers: [] },
+        { ...proof.observation, providers: [...proof.observation.providers, ...proof.observation.providers] },
+      ]) assert.throws(() => captureWindowsTaskCompletionProof(changed));
+      assert.deepEqual(await assertWindowsTaskCompletionProof(control, proof, admission), proof.observation);
+      await assert.rejects(assertWindowsTaskCompletionProof(control, { ...proof }, admission),
+        /Original retained completed-task proof/);
+      await assert.rejects(assertWindowsTaskCompletionProof(`${control}-foreign`, proof, admission),
+        /Original retained completed-task proof/);
+      await assert.rejects(acquireLock(control, { pwsh }),
+        error => /acquire\/busy/.test(error.diagnostic ?? ''));
+    } finally { await proof.close(); }
+    await assert.rejects(proof.check(), /Completed-task proof unavailable/);
+    await proof.close();
+    await admission.check();
+    for (const frame of [
+      '{"id":1,"method":"delete"}',
+      '{"id":2,"method":"check"}',
+      '{"id":1,"method":"check","method":"close"}',
+      `{"id":1,"method":"${'x'.repeat(4096)}"}`,
+    ]) await malformedRequest(frame);
+  });
+
+  const child = fork(fileURLToPath(import.meta.url), [control, pwsh, 'hold'], {
+    execArgv: [], stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
+  });
+  let stderr = '';
+  child.stderr.on('data', bytes => { stderr = (stderr + bytes.toString('utf8')).slice(-4096); });
+  const deadline = AbortSignal.timeout(90000);
+  const exited = once(child, 'exit', { signal: deadline });
+  exited.catch(() => {});
+  let identities;
+  let failure;
+  try {
+    const [ready] = await Promise.race([
+      once(child, 'message', { signal: deadline }),
+      exited.then(() => { throw new Error(`Completion fixture exited before readiness: ${stderr}`); }),
+    ]);
+    identities = [ready.proof, ready.admission];
+    for (const identity of identities) {
+      assert.ok(Number.isSafeInteger(identity.pid) && identity.pid > 0);
+      assert.equal(await processIdentity(identity.pid), identity.processIdentity);
+    }
+  } catch (error) { failure = error; }
+  finally {
+    if (child.exitCode === null && child.signalCode === null) child.kill();
+    try { await exited; }
+    catch (error) {
+      failure = failure ? new AggregateError([failure, error], 'Completion fixture and exit failed.') : error;
+    }
+  }
+  if (failure) throw failure;
+  const until = Date.now() + 20000;
+  for (const identity of identities) {
+    while (await processIdentity(identity.pid) === identity.processIdentity) {
+      assert.ok(Date.now() < until, 'Original native completion/admission controller survived its Node owner.');
+      await delay(100);
+    }
+  }
+  await withWindowsAdmission(control, { pwsh }, async admission => {
+    const proof = await openWindowsTaskCompletionProof({ control, pwsh, admission });
+    try { await proof.check(); }
+    finally { await proof.close(); }
+  });
+  console.log('PASS: retained completed-task proof excludes competitors, rejects forged/closed contexts and malformed requests, and follows original controller exit without mutation');
+}

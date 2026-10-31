@@ -1,0 +1,488 @@
+import { randomUUID } from 'node:crypto';
+import { lstat, mkdir, open, readFile, readdir, realpath, rename, rmdir, unlink } from 'node:fs/promises';
+import path from 'node:path';
+import { processIdentity } from './process-identity.mjs';
+import { captureWorkerFields } from './worker-identity.mjs';
+import { canonicalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
+import { describeWindowsStoppedHistoryHandoffEntries } from './windows-stopped-history-handoff-report.mjs';
+
+const transitions = {
+  preflight: ['stopped', 'source-selected', 'preflight-refused', 'already-current'],
+  stopped: ['copying', 'prior-runtime-restored'],
+  copying: ['rotating', 'prior-runtime-restored'],
+  rotating: ['backup-ready', 'prior-runtime-restored'],
+  'backup-ready': ['source-selected', 'prior-runtime-restored'],
+  'source-selected': ['dependencies'],
+  dependencies: ['building'],
+  building: ['configuring'],
+  configuring: ['activating'],
+  activating: ['accepted', 'activation-unverified'],
+  'activation-unverified': ['accepted'],
+  'restore-preflight': ['restoring'],
+  restoring: ['restore-activating'],
+  'restore-activating': ['restored'],
+  accepted: [],
+  restored: [],
+  'prior-runtime-restored': [],
+  'preflight-refused': [],
+  'already-current': [],
+  'recovery-required': [],
+  blocked: [],
+};
+
+export function completedDeploymentPhase(phase) {
+  return ['accepted', 'restored', 'prior-runtime-restored', 'preflight-refused', 'already-current'].includes(phase);
+}
+
+export function nextPhase(from, to, { firstInstall = false } = {}) {
+  if (!Object.hasOwn(transitions, from) || !Object.hasOwn(transitions, to)) {
+    throw new Error(`Unknown deployment phase: ${from} -> ${to}`);
+  }
+  const terminal = completedDeploymentPhase(from) || ['recovery-required', 'blocked'].includes(from);
+  if (to === 'blocked' && !terminal) return to;
+  if (to === 'recovery-required' && !terminal) return to;
+  if (!transitions[from].includes(to)
+    || (from === 'preflight' && to === 'source-selected' && !firstInstall)) {
+    throw new Error(`Invalid deployment transition: ${from} -> ${to}`);
+  }
+  return to;
+}
+
+function nonempty(value) {
+  return typeof value === 'string' && value.trim().length > 0 && !/[\0\r\n]/.test(value);
+}
+
+export function recoveryAdvice(details) {
+  if (!details || !Object.hasOwn(transitions, details.phase)
+    || typeof details.backupComplete !== 'boolean' || typeof details.restored !== 'boolean') {
+    throw new Error('Invalid deployment recovery state.');
+  }
+  if (details.phase === 'blocked') {
+    if (details.restored || !nonempty(details.diagnosticCommand)) {
+      throw new Error('Blocked workers require an explicit inspection command, not restoration.');
+    }
+    return {
+      status: 'blocked',
+      message: 'Owned workers may still write. Retain lock and backup; inspect worker termination before restore or restart.',
+      command: details.diagnosticCommand, diagnostics: details.diagnosticCommand,
+    };
+  }
+  if (details.phase === 'preflight-refused') {
+    if (details.restored || !nonempty(details.retryCommand) || !nonempty(details.diagnosticCommand)) {
+      throw new Error('Refused preflight requires retry/diagnostic commands, not backup restoration.');
+    }
+    if (details.phase === 'already-current') {
+      if (details.restored || !nonempty(details.diagnosticCommand)) throw new Error('Already-current requires inspection, not restoration.');
+      return { status: 'already-current', message: 'The accepted deployment was reverified without downtime or a new backup.',
+        command: details.diagnosticCommand, diagnostics: details.diagnosticCommand };
+    }
+    return {
+      status: 'preflight-refused',
+      message: 'Deployment was refused before downtime or source mutation. No deployment or restoration was accepted.',
+      command: details.retryCommand, diagnostics: details.diagnosticCommand,
+    };
+  }
+  if (details.phase === 'prior-runtime-restored') {
+    if (details.restored || !nonempty(details.retryCommand) || !nonempty(details.diagnosticCommand)) {
+      throw new Error('Prior runtime recovery requires retry/diagnostic commands, not backup restoration.');
+    }
+    return {
+      status: 'prior-runtime-restored',
+      message: 'The update failed before source mutation. The previous running application was restarted and verified; no new deployment was accepted.',
+      command: details.retryCommand, diagnostics: details.diagnosticCommand,
+    };
+  }
+  const status = details.restored ? 'restored'
+    : details.backupComplete ? 'recovery-required' : 'no-backup';
+  const command = status === 'recovery-required' ? details.restoreCommand : details.retryCommand;
+  if (!nonempty(command) || !nonempty(details.diagnosticCommand)) {
+    throw new Error('Recovery advice requires explicit next and diagnostic commands.');
+  }
+  const message = status === 'restored'
+    ? `Deployment failed during ${details.phase}; the old application was restored.`
+    : status === 'recovery-required'
+      ? `Deployment failed during ${details.phase}; the old application was not restored. A complete backup is available.`
+      : `Deployment failed during ${details.phase}; no complete backup is available.`;
+  return { status, message, command, diagnostics: details.diagnosticCommand };
+}
+
+const stateFields = new Set([
+  'version', 'operationId', 'project', 'operation', 'phase', 'previousPhase',
+  'sourceCommit', 'targetCommit', 'backupId', 'priorRuntime', 'runtimeIdentity',
+  'startedAt', 'updatedAt', 'errorCode',
+]);
+
+export function validateState(state) {
+  if (!state || typeof state !== 'object' || Array.isArray(state)) {
+    throw new Error('Invalid deployment state record.');
+  }
+  if (state.version !== 1) throw new Error('Unsupported deployment state version.');
+  if (Object.keys(state).some(key => !stateFields.has(key))) {
+    throw new Error('Unexpected field in deployment state.');
+  }
+  if (Object.keys(state).length !== stateFields.size
+    || !nonempty(state.operationId) || !nonempty(state.project) || !path.isAbsolute(state.project)
+    || !['deploy', 'update', 'restore'].includes(state.operation)
+    || !Object.hasOwn(transitions, state.phase)
+    || (state.previousPhase !== null && !Object.hasOwn(transitions, state.previousPhase))
+    || (!['running', 'stopped', 'absent'].includes(state.priorRuntime)
+      && !(state.phase === 'blocked' && state.priorRuntime === 'unknown'))
+    || (state.phase === 'blocked' && state.errorCode !== 'DEPLOYMENT_WORKER_UNSETTLED')
+    || !nonempty(state.runtimeIdentity)
+    || ![state.startedAt, state.updatedAt].every(value => nonempty(value) && Number.isFinite(Date.parse(value)))) {
+    throw new Error('Invalid or incomplete deployment state.');
+  }
+  for (const key of ['sourceCommit', 'targetCommit']) {
+    if (state[key] !== null && !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(state[key])) {
+      throw new Error(`Invalid deployment state ${key}.`);
+    }
+  }
+  for (const key of ['backupId', 'errorCode']) {
+    if (state[key] !== null && (!nonempty(state[key]) || !/^[a-zA-Z0-9_.:-]+$/.test(state[key]))) {
+      throw new Error(`Invalid deployment state ${key}.`);
+    }
+  }
+  if (state.phase === 'prior-runtime-restored'
+    && (state.operation === 'restore' || state.priorRuntime !== 'running' || state.errorCode === null
+      || !['stopped', 'copying', 'rotating', 'backup-ready'].includes(state.previousPhase))) {
+    throw new Error('Prior runtime recovery requires a failed pre-source operation and previously running service.');
+  }
+  if (state.phase === 'preflight-refused'
+    && (state.operation === 'restore' || state.previousPhase !== 'preflight' || state.errorCode === null)) {
+    throw new Error('Refused preflight requires a failed admission before any downtime or source mutation.');
+  }
+  if (state.phase === 'already-current' && (state.operation !== 'update' || state.previousPhase !== 'preflight'
+    || state.priorRuntime !== 'running' || state.errorCode !== null || state.sourceCommit === null
+    || state.sourceCommit !== state.targetCommit)) {
+    throw new Error('Already-current requires a running update with equal verified source and target.');
+  }
+  return state;
+}
+
+async function ownedDirectory(root) {
+  const resolved = path.resolve(root);
+  const info = await lstat(resolved);
+  if (!info.isDirectory() || info.isSymbolicLink()) {
+    throw new Error('Deployment control path must be a real directory.');
+  }
+  return resolved;
+}
+
+async function readRegularJson(file, label) {
+  let info;
+  try { info = await lstat(file); }
+  catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+  if (!info.isFile() || info.isSymbolicLink() || info.size > 64 * 1024) {
+    throw new Error(`Invalid ${label} file type or size.`);
+  }
+  const content = await readFile(file, 'utf8');
+  try { return JSON.parse(content); }
+  catch (cause) { throw new Error(`Malformed ${label}; inspect before continuing.`, { cause }); }
+}
+
+export async function loadState(root) {
+  const directory = await ownedDirectory(root);
+  const state = await readRegularJson(path.join(directory, 'state.json'), 'deployment state');
+  return state === null ? null : validateState(state);
+}
+
+export async function writeState(root, state) {
+  validateState(state);
+  const initialBlocked = state.phase === 'blocked' && state.previousPhase === null;
+  const directory = await ownedDirectory(root);
+  const destination = path.join(directory, 'state.json');
+  const old = await readRegularJson(destination, 'deployment state');
+  if (old !== null) {
+    validateState(old);
+    if (old.phase === 'blocked') {
+      throw new Error('Deployment is blocked by unsettled workers; establish termination before changing state.');
+    }
+    if (old.project !== state.project) throw new Error('Deployment state project changed.');
+    if (old.operationId === state.operationId) {
+      if (old.operation !== state.operation || state.previousPhase !== old.phase) {
+        throw new Error('Invalid deployment state transition identity.');
+      }
+      nextPhase(old.phase, state.phase, { firstInstall: old.priorRuntime === 'absent' });
+    } else if (state.previousPhase !== null
+      || (initialBlocked
+        ? !completedDeploymentPhase(old.phase)
+        : state.operation === 'restore'
+        ? state.phase !== 'restore-preflight'
+        : state.phase !== 'preflight' || !completedDeploymentPhase(old.phase))) {
+      throw new Error('Unfinished deployment state requires recovery before a new operation.');
+    }
+  } else if (state.previousPhase !== null
+    || (!initialBlocked && state.phase !== (state.operation === 'restore' ? 'restore-preflight' : 'preflight'))) {
+    throw new Error('Initial deployment state requires a preflight phase.');
+  }
+  const temporary = path.join(directory, `.state-${randomUUID()}.tmp`);
+  const handle = await open(temporary, 'wx', 0o600);
+  let closed = false;
+  try {
+    await handle.writeFile(`${JSON.stringify(state)}\n`);
+    await handle.sync();
+    await handle.close();
+    closed = true;
+    await rename(temporary, destination);
+  } catch (error) {
+    if (!closed) await handle.close();
+    try { await unlink(temporary); }
+    catch (cleanup) {
+      if (cleanup.code !== 'ENOENT') {
+        throw new AggregateError([error, cleanup], 'State write and temporary-file cleanup failed.');
+      }
+    }
+    throw error;
+  }
+}
+
+async function requireNoRecovery(directory) {
+  try { await lstat(path.join(directory, 'recovery-lock')); }
+  catch (error) {
+    if (error.code === 'ENOENT') return;
+    throw error;
+  }
+  throw new Error('Recovery authority exists; retain evidence and inspect before lock operations.');
+}
+
+export async function acquireLock(root, options) {
+  if (process.platform === 'win32') {
+    const { withWindowsAdmission } = await import('./windows-admission.mjs');
+    return withWindowsAdmission(root, options, () => acquireLockAdmitted(root, options));
+  }
+  const admission = process.platform === 'linux'
+    ? await (await import('./linux-recovery-admission.mjs')).acquireRecoveryAdmission(root) : null;
+  try { return await acquireLockAdmitted(root, options); }
+  finally { await admission?.close(); }
+}
+
+async function acquireLockAdmitted(root, { project, operationId }) {
+  if (!nonempty(project) || !nonempty(operationId)) throw new Error('Invalid lock owner.');
+  const directory = await ownedDirectory(root);
+  await requireNoRecovery(directory);
+  await requireNoServiceMaintenance(directory);
+  await requireNoWorkerRetirement(directory);
+  if ((await readdir(directory)).includes('live-retirement.json')) {
+    throw new Error('Live service retirement requires original unlock or recovery.');
+  }
+  const canonicalProject = await realpath(project);
+  const identity = await processIdentity(process.pid);
+  if (!identity) throw new Error('Cannot establish deployment lock owner identity.');
+  if ((await readdir(directory)).includes('cold-restore-complete.json')) {
+    const { retireCompletedColdReceipt } = await import('./linux-cold-retirement-proof.mjs');
+    await retireCompletedColdReceipt(directory, canonicalProject);
+  }
+  const lockPath = path.join(directory, 'lock');
+  try { await mkdir(lockPath, { mode: 0o700 }); }
+  catch (error) {
+    if (error.code === 'EEXIST') {
+      throw new Error('Deployment lock exists. Inspect the operation and owned processes before recovery; no lock was removed.', { cause: error });
+    }
+    throw error;
+  }
+  await requireNoRecovery(directory);
+  const owner = {
+    version: 1, token: randomUUID(), project: canonicalProject, operationId,
+    pid: process.pid, processIdentity: identity, createdAt: new Date().toISOString(),
+  };
+  const ownerPath = path.join(lockPath, 'owner.json');
+  let handle;
+  try {
+    handle = await open(ownerPath, 'wx', 0o600);
+    await handle.writeFile(`${JSON.stringify(owner)}\n`);
+    await handle.sync();
+  } finally {
+    if (handle) await handle.close();
+  }
+  // Even an incomplete owner file leaves a lock requiring inspection.
+  return owner;
+}
+
+export function captureLockOwner(value) {
+  const owner = captureWorkerFields(value,
+    ['version', 'token', 'project', 'operationId', 'pid', 'processIdentity', 'createdAt'], 'lock owner');
+  if (owner.version !== 1 || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(owner.token)
+    || ![owner.project, owner.operationId, owner.processIdentity, owner.createdAt]
+      .every(field => nonempty(field) && field.length <= 4096)
+    || !path.isAbsolute(owner.project) || path.resolve(owner.project) !== owner.project
+    || !Number.isSafeInteger(owner.pid) || owner.pid < 1 || owner.pid > 2147483647
+    || !Number.isFinite(Date.parse(owner.createdAt))) throw new Error('Invalid deployment lock owner.');
+  return owner;
+}
+
+export async function assertLockOwner(root, suppliedOwner) {
+  const owner = captureLockOwner(suppliedOwner);
+  const { root: directory } = await canonicalWorkerDirectory(root, { privateMode: true });
+  await canonicalWorkerDirectory(path.join(directory, 'lock'), { privateMode: true });
+  const actual = captureLockOwner(JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(
+    await readWorkerFile(path.join(directory, 'lock', 'owner.json'), 65536, { privateMode: true }),
+  )));
+  if (Object.keys(owner).some(key => owner[key] !== actual[key])
+    || owner.pid !== process.pid || owner.processIdentity !== await processIdentity(process.pid)) {
+    throw new Error('Only the current lock owner can authorize deployment workers.');
+  }
+  return owner;
+}
+
+export async function releaseLock(root, owner, options = {}) {
+  if (process.platform === 'win32') {
+    const { withWindowsAdmission } = await import('./windows-admission.mjs');
+    return withWindowsAdmission(root, options, () => releaseLockAdmitted(root, owner));
+  }
+  return releaseLockAdmitted(root, owner);
+}
+
+async function releaseLockAdmitted(root, owner) {
+  if (process.platform === 'linux' && (await readdir(root)).includes('live-retirement.json')) {
+    const { releaseLiveRetirement } = await import('./linux-live-retirement.mjs');
+    return releaseLiveRetirement(root, owner);
+  }
+  const directory = await ownedDirectory(root);
+  await requireNoRecovery(directory);
+  await requireNoServiceMaintenance(directory);
+  if ((await loadState(directory))?.phase === 'blocked') {
+    throw new Error('Blocked deployment workers require retaining the lock.');
+  }
+  const lockPath = path.join(directory, 'lock');
+  await ownedDirectory(lockPath);
+  const ownerPath = path.join(lockPath, 'owner.json');
+  const actual = await readRegularJson(ownerPath, 'deployment lock owner');
+  if (!actual || !owner || actual.token !== owner.token || actual.operationId !== owner.operationId
+    || actual.project !== owner.project || actual.pid !== process.pid || owner.pid !== process.pid
+    || actual.processIdentity !== owner.processIdentity
+    || actual.processIdentity !== await processIdentity(process.pid)) {
+    throw new Error('Only the current lock owner can release a deployment lock.');
+  }
+  if ((await readdir(directory)).some(name => name.startsWith('worker-') || workerRetirementEntry(name))) {
+    throw new Error('Native worker evidence requires verified retirement before lock release.');
+  }
+  await unlink(ownerPath);
+  await rmdir(lockPath);
+}
+
+function serviceMaintenanceEntry(name, allowLiveRetirement = false) {
+  const entry = process.platform === 'win32' ? name.toLowerCase() : name;
+  return entry.startsWith('service-')
+    || (entry.startsWith('inactive-rollback-') && entry.endsWith('.json'))
+    || (process.platform === 'win32'
+      && entry.startsWith('inactive-handoff-') && entry.endsWith('.json'))
+    || (process.platform === 'win32' && entry.startsWith('retired-')
+      && (entry.endsWith('-inactive-rollback-history-intent.json')
+        || entry.endsWith('-inactive-rollback-history-complete.json')))
+    || ['task-maintenance', 'task-retirement.json', 'task-retirement-checkpoint.json'].includes(entry)
+    || (!allowLiveRetirement && entry === 'live-retirement.json');
+}
+
+// A retired stopped-task rollback archive stays as evidence once a later operation took over: an accepted
+// update of that stopped history, or any later operation of the running task. Only the archive of the current
+// operation still blocks ordinary admission and routes a public update through the stopped-history handoff.
+function supersededStoppedHistoryEntry(name, state) {
+  if (process.platform !== 'win32' || !state) return false;
+  const match = /^retired-(.+)-inactive-rollback-history-(?:intent|complete)\.json$/.exec(name.toLowerCase());
+  return match !== null && typeof state.operationId === 'string' && match[1] !== state.operationId.toLowerCase()
+    && (state.phase === 'accepted' || state.priorRuntime === 'running');
+}
+
+function workerRetirementEntry(name) {
+  return (process.platform === 'win32' ? name.toLowerCase() : name) === 'worker-retirement.json';
+}
+
+async function requireNoWorkerRetirement(directory) {
+  if ((await readdir(directory)).some(workerRetirementEntry)) {
+    throw new Error('Native worker retirement evidence requires explicit cleanup before lock operations.');
+  }
+}
+
+export async function requireNoServiceMaintenance(directory, { allowLiveRetirement = false, allowEntries = null } = {}) {
+  const names = await readdir(directory);
+  const state = process.platform === 'win32' && names.some(name => name.toLowerCase().startsWith('retired-'))
+    ? await loadState(directory) : null;
+  const excused = name => allowEntries?.has(name.toLowerCase()) === true || supersededStoppedHistoryEntry(name, state);
+  if (names.some(name => !excused(name) && serviceMaintenanceEntry(name, allowLiveRetirement))) {
+    throw new Error('Service or task maintenance evidence requires explicit runtime recovery before this operation.');
+  }
+}
+
+export async function reconcileInterruptedOperation(root) {
+  const directory = await ownedDirectory(root);
+  const state = await loadState(directory);
+  const entries = await readdir(directory);
+  if (entries.some(name => (serviceMaintenanceEntry(name) && !supersededStoppedHistoryEntry(name, state))
+    || workerRetirementEntry(name))) {
+    const handoff = process.platform === 'win32' ? describeWindowsStoppedHistoryHandoffEntries(entries) : null;
+    return {
+      status: 'blocked', operationId: state?.operationId ?? null, phase: state?.phase ?? null,
+      message: 'Service, task or worker retirement evidence exists. Retain it; inspect before restart or recovery.',
+      ...(handoff ? { handoff } : {}),
+    };
+  }
+  let recoveryExists = true;
+  try { await lstat(path.join(directory, 'recovery-lock')); }
+  catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    recoveryExists = false;
+  }
+
+  if (recoveryExists) {
+    return {
+      status: 'blocked', operationId: state?.operationId ?? null, phase: state?.phase ?? null,
+      message: 'Exclusive recovery evidence exists. Retain it and inspect the recovery controller before continuing.',
+    };
+  }
+  if (state?.phase === 'blocked') {
+    return {
+      status: 'blocked', operationId: state.operationId, phase: state.phase,
+      message: 'Worker settlement was not confirmed. Retain lock and backup; inspect owned workers before recovery.',
+    };
+  }
+  const lockPath = path.join(directory, 'lock');
+  let lockExists = true;
+  try { await ownedDirectory(lockPath); }
+  catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    lockExists = false;
+  }
+  if (lockExists) {
+    const owner = await readRegularJson(path.join(lockPath, 'owner.json'), 'deployment lock owner');
+    if (owner !== null) {
+      if (owner.version !== 1 || !nonempty(owner.processIdentity)
+        || !nonempty(owner.operationId) || !nonempty(owner.project) || !nonempty(owner.token)) {
+        throw new Error('Invalid deployment lock owner; inspect before continuing.');
+      }
+      const identity = await processIdentity(owner.pid);
+      if (identity !== null && identity === owner.processIdentity) {
+        return { status: 'active', operationId: owner.operationId, phase: state?.phase ?? null,
+          message: 'Another deployment process owns this operation. Wait for it to finish.' };
+      }
+    }
+    return { status: 'interrupted', operationId: owner?.operationId ?? state?.operationId ?? null,
+      phase: state?.phase ?? null,
+      message: 'Interrupted deployment lock retained. Inspect owned child processes and recovery state before continuing.' };
+  }
+  if (state?.phase === 'preflight-refused') {
+    return {
+      status: 'preflight-refused', operationId: state.operationId, phase: state.phase,
+      message: 'Deployment was refused before downtime or source mutation. Inspect the admission failure before retrying.',
+    };
+  }
+  if (state?.phase === 'already-current') {
+    return { status: 'already-current', operationId: state.operationId, phase: state.phase,
+      message: 'The accepted deployment was reverified without downtime or a new backup.' };
+  }
+  if (state?.phase === 'prior-runtime-restored') {
+    return {
+      status: 'prior-runtime-restored', operationId: state.operationId, phase: state.phase,
+      message: 'The update failed, but the prior runtime was restarted and verified. No new deployment was accepted.',
+    };
+  }
+  if (state !== null && !completedDeploymentPhase(state.phase)) {
+    return { status: state.phase === 'activation-unverified' ? 'unverified' : 'interrupted',
+      operationId: state.operationId, phase: state.phase,
+      message: 'Inspect the incomplete deployment and use its verification or recovery command before another update.' };
+  }
+  return { status: 'idle', operationId: state?.operationId ?? null, phase: state?.phase ?? null,
+    message: 'No interrupted deployment operation recorded.' };
+}

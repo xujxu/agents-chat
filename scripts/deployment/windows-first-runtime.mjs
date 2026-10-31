@@ -1,0 +1,370 @@
+import { createHash } from 'node:crypto';
+import { realpath } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual as same } from 'node:util';
+import { assertLockOwner, captureLockOwner, loadState, requireNoServiceMaintenance } from './state.mjs';
+import { externalWorkerDirectory, readWorkerFile } from './worker-files.mjs';
+import { assertWindowsFirstInstallScope } from './windows-first-install.mjs';
+import { assertWindowsFirstConfiguration } from './windows-configuration.mjs';
+import { readWorkerOperation } from './worker-operation.mjs';
+import { readWorkerJournal } from './worker-journal.mjs';
+import { captureWorkerFields } from './worker-identity.mjs';
+import { processIdentity } from './process-identity.mjs';
+import { windowsControllerTransport } from './windows-controller-transport.mjs';
+import { captureActivatedRuntime, captureTaskListener, windowsTaskCompletionSteps } from './windows-task-controller.mjs';
+import { waitWindowsReadiness } from './windows-readiness.mjs';
+import { windowsConfigurationIdentity } from './windows-deployment-acceptance.mjs';
+import { captureWindowsFirstDeploymentIdentity } from './windows-first-deployment-identity.mjs';
+
+const script = fileURLToPath(new URL('./windows-first-runtime.ps1', import.meta.url));
+const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+const operational = new Set(['PATH', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'TEMP', 'TMP', 'HOME', 'NEXT_TELEMETRY_DISABLED']);
+function refused(cause) {
+  return Object.assign(new Error('First Windows runtime preparation refused; retain its bundle and any inhibited task evidence.', { cause }), {
+    code: 'DEPLOYMENT_WINDOWS_FIRST_RUNTIME_REFUSED', runtimeAuthority: false,
+  });
+}
+
+export async function prepareWindowsFirstRuntime({
+  scope, configuration, control, lock: supplied, built, node, pwsh, environment = {}, port, signal,
+}) {
+  let bridge;
+  let closed = false;
+  try {
+    signal?.throwIfAborted();
+    const observed = await assertWindowsFirstInstallScope(scope, { fresh: false, signal });
+    const lock = captureLockOwner(supplied);
+    const project = observed.project;
+    if (process.platform !== 'win32' || Number(process.versions.node.split('.')[0]) !== 24
+      || lock.project !== project || pwsh !== scope.identity.pwsh
+      || control !== path.join(path.dirname(project), `.${path.basename(project)}.deployment`)
+      || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(lock.operationId)
+      || !Number.isSafeInteger(port) || port < 1 || port > 65535
+      || typeof node !== 'string' || !path.isAbsolute(node) || await realpath(node) !== await realpath(process.execPath)) {
+      throw new Error('Original first-runtime project, controller tools and port are required.');
+    }
+    await externalWorkerDirectory(path.dirname(script), project);
+    await externalWorkerDirectory(control, project);
+    await assertWindowsFirstConfiguration(configuration, { scope, signal });
+    const effective = configuration.buildEnvironment(environment);
+    const startup = Object.freeze({
+      ...Object.fromEntries(Object.entries(effective).filter(([key]) => operational.has(key))),
+      ...configuration.startupEnvironment(),
+    });
+    const state = await loadState(control);
+    if (state?.project !== project || state.operationId !== lock.operationId || state.operation !== 'deploy'
+      || state.priorRuntime !== 'absent' || state.runtimeIdentity !== 'first-install-absent' || state.backupId !== null
+      || state.phase !== 'configuring' || state.previousPhase !== 'building' || state.startedAt !== lock.createdAt
+      || state.errorCode !== null || built?.sourceCommit !== state.targetCommit
+      || typeof built.source?.check !== 'function' || typeof built.artifacts?.check !== 'function') {
+      throw new Error('First runtime requires its original configuring phase and exact build.');
+    }
+    const deploymentIdentity = captureWindowsFirstDeploymentIdentity({
+      source: built.source.record.commit, build: built.artifacts.identity.build,
+      dependencies: built.artifacts.identity.dependencies, config: windowsConfigurationIdentity(configuration),
+    });
+    if (deploymentIdentity.source !== state.targetCommit) throw new Error('First build identity differs from the original target.');
+    const workers = await readWorkerOperation(control);
+    if (workers.at(-1)?.phase !== 'sealed' || !same(workers[0].lock, lock)) {
+      throw new Error('First runtime requires the original sealed worker operation.');
+    }
+    for (const record of workers.filter(record => record.phase === 'enrolled')) {
+      const receipts = await readWorkerJournal(control, {
+        project, operationId: lock.operationId, workerId: record.workerId, controllerIdentity: lock.processIdentity,
+      });
+      if (receipts.at(-1)?.phase !== 'settled') throw new Error('First-runtime workers are not settled.');
+    }
+    let activationPrepared = false;
+    let activatingState;
+    let completionPrepared = false;
+    let acceptedState;
+    const authority = async requestSignal => {
+      requestSignal?.throwIfAborted();
+      await assertLockOwner(control, lock);
+      await requireNoServiceMaintenance(control);
+      const current = await loadState(control);
+      if (acceptedState) {
+        if (!same(current, acceptedState)) throw new Error('Observed first-acceptance state changed.');
+      } else if (activatingState) {
+        if (!same(current, activatingState)) {
+          if (!completionPrepared || current?.phase !== 'accepted' || current.previousPhase !== 'activating'
+            || Date.parse(current.updatedAt) < Date.parse(activatingState.updatedAt)
+            || !same({ ...current, phase: activatingState.phase, previousPhase: activatingState.previousPhase,
+              updatedAt: activatingState.updatedAt }, activatingState)) {
+            throw new Error('First completion requires the exact original activating successor.');
+          }
+          acceptedState = current;
+        }
+      } else if (!same(current, state)) {
+        if (!activationPrepared || current?.phase !== 'activating' || current.previousPhase !== 'configuring'
+          || !same({ ...current, phase: state.phase, previousPhase: state.previousPhase, updatedAt: state.updatedAt }, state)) {
+          throw new Error('First activation requires the exact original configuring successor.');
+        }
+        activatingState = current;
+      }
+      if (!same(await readWorkerOperation(control), workers)) {
+        throw new Error('Original first-runtime authority changed.');
+      }
+      await assertWindowsFirstConfiguration(configuration, { scope, signal: requestSignal });
+      await built.source.check({ signal: requestSignal });
+      await built.artifacts.check({ signal: requestSignal });
+    };
+    await authority(signal);
+    const next = path.join(project, 'node_modules/next/dist/bin/next');
+    await readWorkerFile(next, 1024 * 1024);
+    const lockBytes = await readWorkerFile(path.join(control, 'lock/owner.json'), 65536, { privateMode: true });
+    const stateBytes = await readWorkerFile(path.join(control, 'state.json'), 65536, { privateMode: true });
+    if (!same(JSON.parse(lockBytes), lock) || !same(JSON.parse(stateBytes), state)) throw new Error('Publication authority changed.');
+    const directory = path.join(control, `first-runtime-${lock.operationId}`);
+    bridge = windowsControllerTransport({
+      pwsh, refused, label: 'Native first-runtime publisher',
+      args: ['-NoProfile', '-NonInteractive', '-File', script, '-Project', project, '-Control', control, '-TaskName', observed.taskName,
+        '-Node', node, '-Port', String(port), '-LockSha256', digest(lockBytes), '-StateSha256', digest(stateBytes),
+        '-ControllerPid', String(process.pid), '-ControllerIdentity', lock.processIdentity],
+    });
+    await bridge.wire.send({ id: 1, method: 'publish', environment: startup });
+    const ready = captureWorkerFields(await bridge.wire.receive({ signal, timeoutMs: 60000 }),
+      ['type', 'pid', 'processIdentity', 'controllerIdentity', 'directory', 'configuration', 'sha256'], 'first runtime');
+    if (ready.type !== 'ready' || ready.pid !== bridge.child.pid || ready.controllerIdentity !== lock.processIdentity
+      || typeof ready.processIdentity !== 'string' || !ready.processIdentity
+      || ready.processIdentity !== await processIdentity(bridge.child.pid) || ready.directory !== directory
+      || ready.configuration !== path.join(directory, 'configuration.json')
+      || typeof ready.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(ready.sha256)) {
+      throw new Error('Original first-runtime publication differs.');
+    }
+    const bundle = Object.freeze({ directory, configuration: ready.configuration, sha256: ready.sha256 });
+    const bytes = await readWorkerFile(bundle.configuration, 1024 * 1024, { privateMode: true });
+    const published = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    if (digest(bytes) !== bundle.sha256 || !same(published.command, {
+      file: node, args: [next, 'start', '--hostname', '127.0.0.1', '--port', String(port)], cwd: project, environment: startup,
+    })) throw new Error('Published first-runtime command differs.');
+    await authority(signal);
+    await assertWindowsFirstInstallScope(scope, { fresh: false, signal });
+    let sequence = 1;
+    let busy = false;
+    let failure;
+    let registered = false;
+    let registeredTask;
+    let activated = false;
+    let activeRuntime;
+    let retainedListener;
+    let completionActivatingStateSha256;
+    let completionStep;
+    let completed = false;
+    let registering = false;
+    let preparingCompletion = false;
+    const captureCompletionProof = (value, stateSha256) => {
+      const expected = {
+        version: 1, phase: 'complete', status: 'first-runtime-completed',
+        project, operationId: lock.operationId, taskName: observed.taskName,
+        controllerPid: ready.pid, controllerIdentity: ready.processIdentity,
+        lockSha256: digest(lockBytes), activatingStateSha256: completionActivatingStateSha256,
+        stateSha256, configuration: bundle.configuration, configurationSha256: bundle.sha256,
+        runtime: activeRuntime, permanentDefinition: registeredTask.permanentDefinition,
+        securityDescriptor: registeredTask.securityDescriptor, enabled: true, lease: 'released',
+        port, providers: configuration.providers, listener: retainedListener,
+      };
+      const proof = captureWorkerFields(value, [...Object.keys(expected), 'definition', 'previousSha256'],
+        'first-runtime completion');
+      const { definition, previousSha256, ...actual } = proof;
+      if (!same(actual, expected) || typeof definition !== 'string' || definition.length < 1
+        || definition.length > 65536 || definition.includes('\0')
+        || typeof previousSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(previousSha256)) {
+        throw new Error('Original first-runtime completion differs.');
+      }
+      return Object.freeze(proof);
+    };
+    const request = async (method, requestSignal, options = {}) => {
+      if (busy || closed) throw failure ?? refused(new Error('Original first-runtime publication is busy or closed.'));
+      busy = true;
+      try {
+        if (method !== 'close') await authority(requestSignal);
+        const completionStateSha256 = ['prepare-completion', 'complete', 'advance-completion'].includes(method)
+          ? digest(await readWorkerFile(path.join(control, 'state.json'), 65536, { privateMode: true })) : undefined;
+        const id = ++sequence;
+        await bridge.wire.send({ id, method, ...options });
+        const reply = captureWorkerFields(await bridge.wire.receive({
+          signal: requestSignal, timeoutMs: ['activate', 'close', 'complete'].includes(method) ? 120000 : 30000,
+        }),
+          ['id', 'type', 'processIdentity', 'value'], 'first-runtime reply');
+        if (reply.id !== id || reply.type !== 'reply' || reply.processIdentity !== ready.processIdentity
+          || !['register-task', 'prepare-activation', 'activate', 'listener', 'prepare-completion', 'complete', 'advance-completion'].includes(method) && reply.value !== method) {
+          throw new Error('Unexpected first-runtime acknowledgement.');
+        }
+        if (method === 'register-task') {
+          const task = captureWorkerFields(reply.value, [
+            'status', 'runtimeAuthority', 'project', 'operationId', 'taskName', 'accountSid', 'logonType', 'triggerType',
+            'controllerPid', 'controllerIdentity', 'configuration', 'configurationSha256', 'definition', 'permanentDefinition',
+            'securityDescriptor', 'taskFileSha256', 'taskFileDev', 'taskFileIno', 'taskFileSecurityDescriptor',
+          ], 'first-task registration');
+          if (task.status !== 'first-task-prepared' || task.runtimeAuthority !== false || task.project !== project
+            || task.operationId !== lock.operationId || task.taskName !== observed.taskName || task.accountSid !== observed.accountSid
+            || task.logonType !== options.logonType || task.triggerType !== options.triggerType
+            || task.controllerPid !== ready.pid || task.controllerIdentity !== ready.processIdentity
+            || task.configuration !== bundle.configuration || task.configurationSha256 !== bundle.sha256
+            || typeof task.taskFileSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(task.taskFileSha256)
+            || ![task.taskFileDev, task.taskFileIno].every(value => typeof value === 'string' && /^[0-9]{1,20}$/.test(value))
+            || ![task.definition, task.permanentDefinition, task.securityDescriptor, task.taskFileSecurityDescriptor]
+              .every(value => typeof value === 'string' && value.length > 0 && value.length <= 65536 && !value.includes('\0'))) {
+            throw new Error('First-task registration differs from the original publisher.');
+          }
+          await authority(requestSignal);
+          return Object.freeze(task);
+        }
+        if (method === 'prepare-activation') {
+          const receipt = captureWorkerFields(reply.value, [
+            'status', 'runtimeAuthority', 'project', 'operationId', 'taskName', 'controllerPid', 'controllerIdentity',
+            'lockSha256', 'configuringStateSha256', 'configuration', 'configurationSha256', 'taskFileSha256',
+          ], 'first-activation handoff');
+          if (!same(receipt, {
+            status: 'first-activation-prepared', runtimeAuthority: false, project, operationId: lock.operationId,
+            taskName: observed.taskName, controllerPid: ready.pid, controllerIdentity: ready.processIdentity,
+            lockSha256: digest(lockBytes), configuringStateSha256: digest(stateBytes),
+            configuration: bundle.configuration, configurationSha256: bundle.sha256, taskFileSha256: registeredTask.taskFileSha256,
+          })) throw new Error('Original first-activation handoff differs.');
+          activationPrepared = true;
+          await authority(requestSignal);
+          return Object.freeze(receipt);
+        }
+        if (method === 'activate') {
+          const active = captureWorkerFields(reply.value, [
+            'status', 'applicationHealthy', 'taskName', 'controllerPid', 'controllerIdentity', 'configurationSha256', 'runtime',
+          ], 'first-runtime activation');
+          const runtime = captureActivatedRuntime(active.runtime);
+          if (active.status !== 'first-runtime-running' || active.applicationHealthy !== false
+            || active.taskName !== observed.taskName || active.controllerPid !== ready.pid
+            || active.controllerIdentity !== ready.processIdentity || active.configurationSha256 !== bundle.sha256
+            || runtime.pid === ready.pid
+            || runtime.identity !== await processIdentity(runtime.pid)
+            || runtime.configurationSha256 !== bundle.sha256) {
+            throw new Error('First-runtime ownership differs from its original controller.');
+          }
+          await authority(requestSignal);
+          activated = true;
+          activeRuntime = Object.freeze(runtime);
+          return Object.freeze({ ...active, runtime: activeRuntime });
+        }
+        if (method === 'listener') {
+          const listener = captureTaskListener(reply.value, activeRuntime, port);
+          if (listener.status === 'retained') retainedListener = listener;
+          return listener;
+        }
+        if (method === 'prepare-completion') {
+          const receipt = captureWorkerFields(reply.value, [
+            'status', 'runtimeAuthority', 'project', 'operationId', 'taskName', 'controllerPid', 'controllerIdentity',
+            'lockSha256', 'activatingStateSha256', 'configuration', 'configurationSha256',
+            'generation', 'port', 'providers', 'listener', 'deploymentIdentity',
+          ], 'first-completion handoff');
+          if (!same(receipt, {
+            status: 'first-completion-prepared', runtimeAuthority: false, project, operationId: lock.operationId,
+            taskName: observed.taskName, controllerPid: ready.pid, controllerIdentity: ready.processIdentity,
+            lockSha256: digest(lockBytes), activatingStateSha256: completionStateSha256,
+            configuration: bundle.configuration, configurationSha256: bundle.sha256,
+            generation: activeRuntime.generation, port, providers: configuration.providers, listener: retainedListener,
+            deploymentIdentity,
+          })) throw new Error('Original first-completion handoff differs.');
+          completionPrepared = true;
+          completionActivatingStateSha256 = completionStateSha256;
+          completionStep = 'prepared';
+          await authority(requestSignal);
+          return Object.freeze({ ...receipt, deploymentIdentity });
+        }
+        if (method === 'complete') {
+          const proof = captureCompletionProof(reply.value, completionStateSha256);
+          await authority(requestSignal);
+          completed = true;
+          completionStep = 'complete';
+          return proof;
+        }
+        if (method === 'advance-completion') {
+          const progress = captureWorkerFields(reply.value, ['step', 'proof'], 'first-runtime completion step');
+          const expected = windowsTaskCompletionSteps[windowsTaskCompletionSteps.indexOf(completionStep) + 1];
+          if (!windowsTaskCompletionSteps.includes(completionStep) || progress.step !== expected) {
+            throw new Error('Original first-completion step acknowledgement differs.');
+          }
+          if (progress.step === 'complete') captureCompletionProof(progress.proof, completionStateSha256);
+          else if (progress.proof !== null) throw new Error('Incomplete first-runtime step returned a completion proof.');
+          await authority(requestSignal);
+          completionStep = progress.step;
+          completed = completionStep === 'complete';
+          return completionStep;
+        }
+        if (method === 'close') {
+          const result = await bridge.waitForExit();
+          if (result.code !== 0 || result.signal !== null) throw new Error('First-runtime publisher did not close cleanly.');
+          closed = true;
+          bridge.wire.close();
+        }
+      } catch (cause) {
+        closed = true;
+        failure = await bridge.abandon(cause);
+        throw failure;
+      } finally { busy = false; }
+    };
+    const verifyReadiness = async ({ waitSeconds = 120, signal: requestSignal } = {}) => {
+      if (closed || busy || !activated) throw refused(new Error('First-runtime readiness requires its original active owner.'));
+      return waitWindowsReadiness({
+        context: {
+          listener: ({ signal: listenerSignal }) => request('listener', listenerSignal),
+          check: ({ signal: checkSignal }) => request('check', checkSignal),
+        },
+        port, providers: configuration.providers, waitSeconds, signal: requestSignal,
+      });
+    };
+    const completionRequest = async (method, { signal: requestSignal } = {}) => {
+      if (closed || busy || !completionPrepared || completed || (await loadState(control))?.phase !== 'accepted') {
+        throw refused(new Error('First completion requires its unused accepted authority.'));
+      }
+      return request(method, requestSignal);
+    };
+    return Object.freeze({
+      status: 'runtime-prepared', runtimeAuthority: false, bundle,
+      checkFiles: ({ signal: requestSignal } = {}) => request('check', requestSignal),
+      registerTask: async ({ logonType = 'Interactive', triggerType = 'AtLogOn', signal: requestSignal } = {}) => {
+        if (closed || busy || registered || registering || !['Interactive', 'S4U'].includes(logonType)
+          || !['AtLogOn', 'AtStartup'].includes(triggerType)) {
+          throw refused(new Error('Unsupported, repeated or unavailable first-task registration.'));
+        }
+        registering = true;
+        try {
+          await assertWindowsFirstInstallScope(scope, { fresh: false, signal: requestSignal });
+          const task = await request('register-task', requestSignal, { logonType, triggerType });
+          registered = true;
+          registeredTask = task;
+          return task;
+        } finally { registering = false; }
+      },
+      prepareActivation: async ({ signal: requestSignal } = {}) => {
+        if (closed || busy || !registered || activationPrepared) {
+          throw refused(new Error('First task is not ready for activation handoff.'));
+        }
+        return request('prepare-activation', requestSignal);
+      },
+      activate: async ({ signal: requestSignal } = {}) => {
+        if (closed || busy || !activationPrepared || activated || (await loadState(control))?.phase !== 'activating') {
+          throw refused(new Error('First-runtime startup requires its unused activating authority.'));
+        }
+        return request('activate', requestSignal);
+      },
+      verifyReadiness,
+      prepareCompletion: async ({ waitSeconds = 120, signal: requestSignal } = {}) => {
+        if (closed || busy || !activated || completionPrepared || preparingCompletion) {
+          throw refused(new Error('First completion requires its original unused active authority.'));
+        }
+        preparingCompletion = true;
+        try {
+          await verifyReadiness({ waitSeconds, signal: requestSignal });
+          return await request('prepare-completion', requestSignal, { providers: configuration.providers, deploymentIdentity });
+        } finally { preparingCompletion = false; }
+      },
+      complete: options => completionRequest('complete', options),
+      advanceCompletion: options => completionRequest('advance-completion', options),
+      close: async () => { if (!closed) await request('close'); },
+    });
+  } catch (cause) {
+    if (!bridge) throw refused(cause);
+    closed = true;
+    throw await bridge.abandon(cause);
+  }
+}

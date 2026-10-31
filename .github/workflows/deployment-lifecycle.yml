@@ -1,0 +1,1210 @@
+name: Deployment lifecycle
+
+on:
+  push:
+    branches: [feat/deployment-backup]
+    paths:
+      - 'scripts/deploy*'
+      - 'scripts/update*'
+      - 'scripts/restore*'
+      - 'scripts/deployment/**'
+      - 'scripts/start.ps1'
+      - 'scripts/service-watchdog.ps1'
+      - 'scripts/install-scheduled-task.ps1'
+      - 'tests/deployment-*'
+      - 'tests/Windows*.cs'
+      - '.github/workflows/deployment-lifecycle.yml'
+  pull_request:
+    paths:
+      - 'scripts/deploy*'
+      - 'scripts/update*'
+      - 'scripts/restore*'
+      - 'scripts/deployment/**'
+      - 'scripts/start.ps1'
+      - 'scripts/service-watchdog.ps1'
+      - 'scripts/install-scheduled-task.ps1'
+      - 'tests/deployment-*'
+      - 'tests/Windows*.cs'
+      - '.github/workflows/deployment-lifecycle.yml'
+  workflow_dispatch:
+    inputs:
+      windows_restore_only:
+        description: Run only native Windows snapshot and restoration contracts
+        type: boolean
+        default: false
+      windows_contracts_only:
+        description: With windows_restore_only, select the complete Windows Contracts job instead
+        type: boolean
+        default: false
+      windows_application_only:
+        description: Run only the real Windows application lifecycle (takes precedence)
+        type: boolean
+        default: false
+      windows_live_only:
+        description: With windows_application_only, omit the unrelated first-install suites
+        type: boolean
+        default: false
+      windows_failed_application_only:
+        description: With application/live flags, run only the actual failed-update application phase
+        type: boolean
+        default: false
+      windows_commands_only:
+        description: With windows_application_only, run native command contracts without application builds
+        type: boolean
+        default: false
+      windows_history_only:
+        description: With application/live/commands flags and failed scenario, run one actual stopped-history recovery fixture
+        type: boolean
+        default: false
+      windows_restore_scenario:
+        description: With the paired Windows live selector, choose the actual saved restore scenario
+        type: choice
+        options: [complete, cancelled, failed, crash, cold-receipt, cold-state, cold-completion, cold-start, cold-startup, cold-launch, cold-enabled, cold-requested, cold-registered, cold-unlaunched, offline]
+        default: complete
+      windows_receipt_only:
+        description: With both Windows command flags, select first-receipt integration and saved dependency tests
+        type: boolean
+        default: false
+      windows_cold_started_only:
+        description: With Windows application/live/command flags, run only earlier-startup native recovery
+        type: boolean
+        default: false
+      windows_cold_startup_step:
+        description: Earlier-startup native interruption boundary
+        type: choice
+        options: [started, requested, registered, enabled]
+        default: started
+      windows_first_application_only:
+        description: With both Windows command flags, run only the actual first-application core
+        type: boolean
+        default: false
+      windows_first_public_only:
+        description: With first-application-only and both command flags, select only public first NoTunnel deployment
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deployment-lifecycle-${{ github.ref }}${{ inputs.windows_first_application_only && '-windows-first-application' || inputs.windows_application_only && inputs.windows_live_only && '-windows-live' || inputs.windows_application_only && inputs.windows_commands_only && inputs.windows_receipt_only && '-windows-receipts' || inputs.windows_application_only && inputs.windows_commands_only && '-windows-commands' || inputs.windows_application_only && '-windows-application' || inputs.windows_restore_only && '-windows-restore' || '' }}${{ inputs.windows_first_public_only && '-public-first' || '' }}${{ inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && '-commands' || '' }}${{ inputs.windows_cold_started_only && format('-cold-{0}', inputs.windows_cold_startup_step || 'started') || '' }}${{ inputs.windows_restore_only && inputs.windows_contracts_only && '-contracts' || '' }}${{ inputs.windows_application_only && inputs.windows_live_only && inputs.windows_failed_application_only && '-failed-application-only' || '' }}${{ inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && inputs.windows_history_only && inputs.windows_restore_scenario == 'failed' && '-history-only' || '' }}
+  cancel-in-progress: false
+
+jobs:
+  linux-first-build:
+    if: ${{ !inputs.windows_restore_only && !inputs.windows_application_only }}
+    name: Native Linux first-install build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Create isolated first-install runtime account
+        id: first_runtime_account
+        run: sudo useradd --create-home --user-group --shell /usr/sbin/nologin agents-chat-test
+      - name: Verify fresh build, activation and retirement recovery
+        run: |
+          sudo git config --system --add safe.directory "$GITHUB_WORKSPACE"
+          sudo env DEPLOYMENT_TEST_REAL_FIRST_BUILD=1 "$(command -v node)" --test tests/deployment-linux-first-build.test.mjs tests/deployment-linux-first-unit.test.mjs tests/deployment-linux-first-recovery.test.mjs
+      - name: Remove isolated first-install runtime account
+        if: always() && steps.first_runtime_account.outcome == 'success'
+        run: sudo userdel --remove agents-chat-test
+
+  linux-deployment:
+    if: ${{ !inputs.windows_restore_only && !inputs.windows_application_only }}
+    name: Native Linux deployment (${{ matrix.scenario }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [synthetic, current, historical, rebuild, command, inplace, fresh, first-failure, inactive, failed]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Update running fixture into actual application with owned source build
+        if: matrix.scenario != 'fresh' && matrix.scenario != 'first-failure'
+        run: |
+          sudo git config --system --add safe.directory "$GITHUB_WORKSPACE"
+          pattern='scenario=${{ matrix.scenario }}'
+          if [ '${{ matrix.scenario }}' = synthetic ]; then
+            pattern="$pattern|^native deployment (refuses|restores prior|retains)"
+          fi
+          sudo env DEPLOYMENT_TEST_REAL_DEPLOYMENT=1 "$(command -v node)" --test "--test-name-pattern=$pattern" tests/deployment-linux-deployment.test.mjs
+      - name: Create isolated public-lifecycle runtime account
+        if: matrix.scenario == 'fresh' || matrix.scenario == 'first-failure'
+        id: fresh_runtime_account
+        run: sudo useradd --create-home --user-group --shell /usr/sbin/nologin agents-chat-test
+      - name: Verify public first install, two updates and saved restoration
+        if: matrix.scenario == 'fresh'
+        run: |
+          sudo git config --system --add safe.directory "$GITHUB_WORKSPACE"
+          sudo env DEPLOYMENT_TEST_REAL_FIRST_LIFECYCLE=1 "$(command -v node)" --test tests/deployment-linux-first-lifecycle.test.mjs
+      - name: Verify public first-install failure and no-backup recovery refusal
+        if: matrix.scenario == 'first-failure'
+        run: |
+          sudo git config --system --add safe.directory "$GITHUB_WORKSPACE"
+          sudo env DEPLOYMENT_TEST_REAL_FIRST_FAILURE=1 "$(command -v node)" --test tests/deployment-linux-first-failure.test.mjs
+      - name: Remove isolated public-lifecycle runtime account
+        if: always() && steps.fresh_runtime_account.outcome == 'success'
+        run: sudo userdel --remove agents-chat-test
+
+  application-build:
+    if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !(inputs.windows_application_only && (inputs.windows_commands_only || inputs.windows_live_only)) }}
+    name: Owned application build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(inputs.windows_application_only && '["windows-2022"]' || '["ubuntu-24.04","windows-2022"]') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Build actual source with Linux native ownership
+        if: runner.os == 'Linux'
+        run: |
+          sudo git config --system --add safe.directory "$GITHUB_WORKSPACE"
+          sudo env DEPLOYMENT_TEST_REAL_BUILD=1 "DEPLOYMENT_TEST_GIT=$(command -v git)" "DEPLOYMENT_TEST_NPM_CLI=$(readlink -f "$(command -v npm)")" "$(command -v node)" --test --test-name-pattern="^actual application source installs and builds" tests/deployment-native-operation.test.mjs
+      - name: Build actual source with Windows native ownership
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:DEPLOYMENT_TEST_REAL_BUILD = '1'
+          $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
+          $env:DEPLOYMENT_TEST_GIT = (Get-Command git).Source
+          $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node).Source) 'node_modules/npm/bin/npm-cli.js'
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-native-operation.test.mjs') -NamePattern '^actual application source installs and builds'
+
+  windows-cold-started-recovery:
+    if: ${{ (!inputs.windows_application_only && !inputs.windows_restore_only) || (inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && (inputs.windows_restore_scenario == 'complete' || inputs.windows_cold_started_only)) }}
+    name: Native Windows earlier-startup recovery (${{ inputs.windows_cold_startup_step || 'started' }})
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify original enabled task policy definitions
+        shell: pwsh
+        run: ./tests/deployment-windows-cold-policy-definition.ps1
+      - name: Verify original startup recovery and archival
+        if: ${{ inputs.windows_restore_scenario != 'failed' }}
+        shell: pwsh
+        env:
+          COLD_STARTUP_STEP: ${{ inputs.windows_cold_startup_step || 'started' }}
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-restore -StoppedProof -ColdStartupCrash -ColdStartupStep $env:COLD_STARTUP_STEP
+
+  windows-stopped-history:
+    if: ${{ inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && inputs.windows_history_only && inputs.windows_restore_scenario == 'failed' }}
+    name: Native Windows stopped-history archival and saved takeover (${{ matrix.history_shard }})
+    runs-on: windows-2022
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        history_shard: [baseline, successor, restart, commitment, state, release, takeover, completion, postwrite, postintent, firstwrite, firstadmit, firstroute, firstupdate, firstcloseout, firstrepeat]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify native exclusive directory retirement before history takeover
+        shell: pwsh
+        run: ./tests/deployment-windows-private-file.ps1
+      - name: Verify actual stopped-history deletion, finalization and saved-entry takeover
+        shell: pwsh
+        env:
+          DEPLOYMENT_TEST_HISTORY_SHARD: ${{ matrix.history_shard }}
+        run: |
+          $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
+          & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition -InactiveCompletionRecovery -InactiveCompletionRecoveryStep release-requested -ExternalInactiveRuntime -InactiveRollbackCrashStep task-restore-requested | Tee-Object -Variable historyOutput
+          $historyExitCode = $LASTEXITCODE
+          $historyOutput | Where-Object { $_ -is [string] -and $_.StartsWith('PASS: ') } |
+            ConvertTo-Json -AsArray | Set-Content -LiteralPath "${{ runner.temp }}/history-${{ matrix.history_shard }}.json" -Encoding utf8
+          if ($historyExitCode -ne 0) { throw 'Stopped-history native archival or saved-entry takeover failed.' }
+      - name: Preserve actual shard receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stopped-history-${{ matrix.history_shard }}
+          path: ${{ runner.temp }}/history-${{ matrix.history_shard }}.json
+          if-no-files-found: error
+
+  windows-stopped-history-acceptance:
+    if: ${{ inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && inputs.windows_history_only && inputs.windows_restore_scenario == 'failed' }}
+    name: Stopped-history acceptance (all boundaries)
+    needs: windows-stopped-history
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: stopped-history-*
+          path: history-receipts
+          merge-multiple: true
+      - name: Require every actual stopped-history receipt across all native shards
+        shell: pwsh
+        run: |
+          $historyOutput = foreach ($shard in @('baseline', 'successor', 'restart', 'commitment', 'state', 'release', 'takeover', 'completion', 'postwrite', 'postintent', 'firstwrite', 'firstadmit', 'firstroute', 'firstupdate', 'firstcloseout', 'firstrepeat')) {
+            $file = "history-receipts/history-$shard.json"
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing stopped-history shard: $shard" }
+            Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
+          }
+          foreach ($receipt in @(
+            'PASS: actual history writer death preserves its archived prefix and a distinct fresh actor completes exact native archival',
+            'PASS: death after final intent archival retains sealed evidence for a distinct fresh read-only actor',
+            'PASS: the exact verified saved entry resumes stopped history archival after actual actor death',
+            'PASS: completion publisher death preserves original receipt bytes and identity for a distinct fresh actor',
+            'PASS: native stopped-history preparation derives exact archive and live prospective owner without publication',
+            'PASS: native stopped-history preparation publishes one exact create-only record without lock authority',
+            'PASS: actual prepared publisher death retains its exact record and a distinct actor cannot claim lock authority',
+            'PASS: native retired prepared observation pins exact evidence after actual actor death without lock authority',
+            'PASS: native abandoned handoff publication seals one exact dead attempt without replacing evidence or granting lock authority',
+            'PASS: actual abandoned publisher death retains exact terminal evidence and a third actor cannot claim lock authority',
+            'PASS: native abandoned handoff observation revalidates exact terminal and prepared evidence under a third actor without lock authority',
+            'PASS: production retained native preparation bridge publishes descriptor-only evidence under original admission without lock authority',
+            'PASS: controlled preparation reopen retains exact evidence for its original live owner and rejects a fresh actor',
+            'PASS: native handoff commit publishes exact new owner lock and immutable receipt while preserving old state and ordinary refusal gates',
+            'PASS: first-attempt committed handoff publishes its exact state-transition intent for the live committed owner while copied foreign duplicate and write authority remain refused',
+            'PASS: actual handoff directory publisher death preserves an empty exact lock and ordinary refusal',
+            'PASS: actual handoff owner publisher death preserves exact prepared owner evidence without committed authority',
+            'PASS: actual committed handoff publisher death preserves exact receipt and blocks ordinary continuation',
+            'PASS: actual first-attempt state writer death preserves the exact written preflight transition for a distinct observer without lock runtime or admission authority',
+            'PASS: handoff-aware inactive admission publishes only the exact live first-attempt owner written preflight binding through the shared native verifier while copied foreign ordinary and duplicate admission remain refused',
+            'PASS: production stopped-history update admission composes preparation commit state intent preflight write and handoff-aware admission for one live owner while lock release with handoff evidence remains refused',
+            'PASS: public update routes archived stopped history through the first-attempt handoff into the inactive runner which refuses an unresolved target before downtime while retaining the handoff lock and admission and deploy stays refused',
+            'PASS: first-attempt routed update of archived stopped history reaches its accepted inactive transaction with sealed worker evidence and retained handoff for a distinct closeout',
+            'PASS: public closeout of an accepted first-attempt stopped-history update retires its task receipts workers handoff records and lock through the inactive authority while accepted state and runtime remain exact',
+            'PASS: closed-out accepted update of archived stopped history supersedes the retained archive so a later public update takes the running-task path and refuses an unresolved target before downtime while the archive stays exact',
+            'PASS: native dead committed handoff observation pins exact lock and original archive under a distinct actor without authority',
+            'PASS: native lock retirement intent binds exact dead committed lock without deleting evidence or granting continuation',
+            'PASS: actual lock retirement intent publisher death preserves exact evidence for a distinct third actor without cleanup authority',
+            'PASS: native retired lock intent observation revalidates exact creator death and unchanged committed lock without mutation',
+            'PASS: native exact dead handoff owner retirement deletes only its pinned owner under immutable intent',
+            'PASS: actual owner retirement executor death leaves an exact empty directory for a fresh native partial-cleanup observer',
+            'PASS: native exact handoff directory retirement deletes only its original empty directory under immutable intent',
+            'PASS: fresh native directory-retired observation and idempotent retry preserve immutable evidence and reject replacement directories',
+            'PASS: actual directory retirement executor death leaves exact immutable evidence for a distinct fifth native actor without authority',
+            'PASS: native lock retirement settlement seals one exact terminal without changing evidence or granting continuation',
+            'PASS: actual lock settlement publisher death preserves exact terminal evidence for a distinct sixth native actor without continuation authority',
+            'PASS: fresh native successor preparation derives a distinct live owner from settled evidence without publication or authority',
+            'PASS: native successor publication retains every predecessor and creates one exact preparation without continuation authority',
+            'PASS: actual successor publisher death preserves five exact records for a distinct seventh native observer without continuation authority',
+            'PASS: native successor abandonment seals only the exact dead preparation and preserves every predecessor without continuation authority',
+            'PASS: actual successor abandonment publisher death preserves six exact records for a distinct ninth native observer without continuation authority',
+            'PASS: native restart preparation derives a fresh live owner bound to settled six-record evidence without publication or authority',
+            'PASS: native restart publication creates one exact seventh preparation while duplicate publication and ordinary authority remain refused',
+            'PASS: actual fresh restart publisher death preserves seven exact records for a distinct eleventh native observer without continuation authority',
+            'PASS: native restart lock directory publication pins only its exact fresh live preparation without owner committed or state authority',
+            'PASS: actual fresh restart directory publisher death preserves the exact incomplete directory and seven records without continuation authority',
+            'PASS: native restart owner publication pins only its exact fresh live owner while ordinary authority and duplicate publication remain refused',
+            'PASS: actual fresh restart owner publisher death preserves its exact owner directory and seven records without committed authority',
+            'PASS: native restart commitment pins its exact live owner and eighth record while copied evidence ordinary authority and duplicate publication remain refused',
+            'PASS: actual fresh restart committed publisher death preserves its exact eighth record owner directory and seven records without state authority',
+            'PASS: native restart state intent binds exact old and next preflight state after its eighth record without writing state or granting authority',
+            'PASS: native restart state write publishes exactly its ninth-record next state through one acknowledged stage without runtime lock or task authority',
+            'PASS: ordinary inactive task admission refuses the exact live restart owner written preflight while handoff evidence remains without publishing maintenance',
+            'PASS: handoff-aware inactive admission publishes only the exact live restart owner written preflight binding through the shared native verifier while copied foreign ordinary and duplicate admission remain refused',
+            'PASS: handoff-aware inactive admission begins the existing inactive transaction for the exact live restart owner and reaches its copying snapshot stage while copied scopes and duplicate consumers remain refused',
+            'PASS: handoff-aware inactive transaction snapshots rotates and prepares activation with its distinct operation bundle and proved task definition while copied contexts and duplicate preparation remain refused',
+            'PASS: handoff-aware inactive transaction replaces the inhibited task with its operation bundle and records the proved original definition while copied contexts and duplicate replacement remain refused',
+            'PASS: handoff-aware inactive transaction starts one distinct guarded runtime from its operation bundle and settles it on close while copied contexts and duplicate startup remain refused',
+            'PASS: handoff-aware inactive startup readiness verifies HTTP providers only through its retained original Job listener while premature and foreign ports remain refused',
+            'PASS: handoff-aware inactive transaction completes with accepted state and permanent task policy through its original guarded lease while forged and foreign-digest completion remain refused and same-digest completion replays idempotently',
+            'PASS: handoff-aware completed operation is observable through the read-only inactive completion proof after its owner exits while the active proof remains refused',
+            'PASS: handoff-aware completed operation prepares its exact inactive retirement intent and checkpoint with the archived retired runtime while copied proofs remain refused',
+            'PASS: handoff-aware completed operation retires each exact task receipt through its distinct inactive retirement authority while handoff evidence and accepted state remain exact',
+            'PASS: actual restart state writer death preserves its written state nine records owner and directory for a distinct observer without authority',
+            'PASS: distinct restart committed observer proves eight records dead owner and directory without state lock or task authority',
+            'PASS: distinct restart state observer resolves original state only through its ninth record and proves the exact written state without lock or task authority',
+            'PASS: ordinary reconciliation reports nine exact handoff records as three attempts while staying blocked without authority',
+            'PASS: native live restart owner releases only its exact committed lock before any state write while original state and eight records remain exact without authority',
+            'PASS: native live restart owner releases only its exact committed lock after its acknowledged state write while nine records and written state remain exact without authority',
+            'PASS: actual post-write restart releaser death preserves eleven records and written state for a distinct observer without authority',
+            'PASS: ordinary reconciliation reports the post-write released restart attempt as a state transition while staying blocked without authority',
+            'PASS: actual restart releaser death after exact lock release preserves ten records and original state for a distinct observer without authority',
+            'PASS: ordinary reconciliation reports the released restart attempt as lock-settled while staying blocked without authority',
+            'PASS: distinct restart lock retirer proves the committed owner dead and publishes only its exact retirement intent while lock and original state remain without authority',
+            'PASS: ordinary reconciliation reports the dead restart attempt as lock-retiring while staying blocked without authority',
+            'PASS: actual restart lock retirer death preserves its exact intent dead owner and directory for a distinct observer without deletion authority',
+            'PASS: actual restart releaser death after its exact release intent lets distinct fresh actors retire and settle only the dead owner lock without authority',
+            'PASS: actual post-write restart releaser death after its exact release intent preserves ten records written state owner and directory and refuses archive-only lock retirement without authority',
+            'PASS: ordinary reconciliation reports the dead post-write release intent as a state transition while staying blocked without authority',
+            'PASS: distinct restart lock retirement observer proves the retirer and owner dead from the exact intent and refuses a duplicate without authority',
+            'PASS: distinct restart lock owner retirer deletes only the dead owner file from the exact intent and preserves its empty directory without authority',
+            'PASS: fresh restart lock retirement observer takes over the owner-retired stage from the exact intent and retires only its empty directory without authority',
+            'PASS: fresh restart lock retirement observer takes over the absent directory from the exact intent and publishes only its exact settlement without authority',
+            'PASS: fresh restart lock retirement observer takes over the settled stage from its exact record and refuses a duplicate settlement without authority',
+            'PASS: ordinary reconciliation reports the settled dead restart retirement as lock-settled while staying blocked without authority'
+          )) {
+            if ($historyOutput -cnotcontains $receipt) { throw "Missing stopped-history acceptance receipt: $receipt" }
+          }
+
+  windows-live-deployment:
+    if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !inputs.windows_first_application_only && !(inputs.windows_application_only && inputs.windows_live_only && inputs.windows_failed_application_only) && !(inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && inputs.windows_cold_started_only) && !(inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && inputs.windows_history_only && inputs.windows_restore_scenario == 'failed') }}
+    name: ${{ matrix.scenario == 'cancelled' && 'Actual Windows restore cancellation' || matrix.scenario == 'failed' && 'Actual Windows restore failure' || matrix.scenario == 'crashed' && 'Actual Windows restore crash' || matrix.scenario == 'copy-crashed' && 'Actual Windows file-copy restore crash' || matrix.scenario == 'offline' && 'Actual Windows restore egress denial' || 'Actual Windows live deployment' }}
+    runs-on: windows-2022
+    env:
+      # Stopped and released-prefix recovery reach the stopped-history boundaries; the sharded
+      # stopped-history job covers the later boundaries because each shard needs a fresh fixture.
+      DEPLOYMENT_TEST_HISTORY_SHARD: baseline
+    timeout-minutes: ${{ inputs.windows_application_only && inputs.windows_commands_only && ((matrix.scenario == 'complete' || contains(fromJSON('["cold-startup","cold-launch","cold-enabled","cold-requested","cold-registered","cold-unlaunched"]'), inputs.windows_restore_scenario)) && 185 || matrix.scenario == 'copy-crashed' && 140 || 115) || (matrix.scenario == 'complete' || contains(fromJSON('["cold-startup","cold-launch","cold-enabled","cold-requested","cold-registered","cold-unlaunched"]'), inputs.windows_restore_scenario)) && 300 || matrix.scenario == 'copy-crashed' && 255 || 230 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: ${{ fromJSON(inputs.windows_restore_scenario == 'cancelled' && '["cancelled"]' || inputs.windows_restore_scenario == 'failed' && '["failed"]' || inputs.windows_restore_scenario == 'crash' && '["crashed","copy-crashed"]' || contains(fromJSON('["cold-receipt","cold-state","cold-completion","cold-start","cold-startup","cold-launch","cold-enabled","cold-requested","cold-registered","cold-unlaunched"]'), inputs.windows_restore_scenario) && '["copy-crashed"]' || inputs.windows_restore_scenario == 'offline' && '["offline"]' || inputs.windows_application_only && '["complete"]' || '["complete","cancelled","failed","crashed","copy-crashed","offline"]') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify scoped restore egress denial and cleanup
+        if: matrix.scenario == 'offline'
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          . ./tests/deployment-windows-restore-egress.ps1
+          $guard = $null
+          try {
+            $guard = Enable-WindowsRestoreEgressBlock -Node (Get-Command node).Source -Pwsh (Get-Command pwsh).Source -Git (Get-Command git).Source
+          } finally {
+            if ($guard) { Disable-WindowsRestoreEgressBlock $guard }
+          }
+          & (Get-Command node).Source ./tests/deployment-windows-egress-probe.mjs allowed $guard.Address
+          if ($LASTEXITCODE -ne 0) { throw 'External connectivity was not restored after firewall fixture cleanup.' }
+      - name: Verify saved worker dependencies and transport failure contracts
+        shell: pwsh
+        run: |
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-saved-worker.test.mjs', 'tests/deployment-worker-wire.test.mjs')
+          if ($LASTEXITCODE -ne 0) { throw 'Saved worker dependency or transport failure contracts failed.' }
+      - name: Verify native Windows command contracts
+        shell: pwsh
+        run: |
+          $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
+          node --test tests/deployment-diagnostics.test.mjs tests/deployment-process-identity.test.mjs tests/deployment-windows-command.test.mjs tests/deployment-windows-command-entry.test.mjs tests/deployment-windows-inactive-task.test.mjs tests/deployment-cold-activation-state.test.mjs tests/deployment-cold-policy-history.test.mjs tests/deployment-cold-runtime-completion.test.mjs tests/deployment-cold-retirement.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Native process identity or command admission contracts failed.' }
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-retirement-recovery.test.mjs') -NamePattern '^recovery manifest'
+          if ($LASTEXITCODE -ne 0) { throw 'Saved recovery manifest budgets failed.' }
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-state.test.mjs') -NamePattern '^(inactive-rollback-|INACTIVE-ROLLBACK-)'
+          if ($LASTEXITCODE -ne 0) { throw 'Stopped rollback cleanup admission fences failed.' }
+          & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-cold-policy-definition.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Cold task policy executable binding contracts failed.' }
+          & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-private-archive.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Native private journal archival contracts failed.' }
+          & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-controller-capture.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Native controller capture contracts failed.' }
+          & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-command-supervisor.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Native supervisor protocol contracts failed.' }
+          & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-public-command.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Public Windows command contracts failed.' }
+      - name: Verify stopped rollback interruption and actual cleanup
+        shell: pwsh
+        run: |
+          $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
+          foreach ($step in @('task-restore-requested', 'task-registered', 'task-restored')) {
+            & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition -InactiveCompletionRecovery -InactiveCompletionRecoveryStep release-requested -ExternalInactiveRuntime -InactiveRollbackCrashStep $step
+            if ($LASTEXITCODE -ne 0) { throw "Inactive Windows external-runtime rollback failed at $step." }
+          }
+      - name: Verify inactive task observation and released-prefix recovery
+        shell: pwsh
+        run: |
+          $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
+          & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition
+          if ($LASTEXITCODE -ne 0) { throw 'Inactive Windows task observation contracts failed.' }
+          & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition -InactiveCompletion
+          if ($LASTEXITCODE -ne 0) { throw 'Inactive Windows task completion contracts failed.' }
+          foreach ($step in @('release-requested', 'lease-released', 'released', 'policy-restore-requested', 'permanent-policy-applied')) {
+            & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition -InactiveCompletionRecovery -InactiveCompletionRecoveryStep $step
+            if ($LASTEXITCODE -ne 0) { throw "Inactive Windows completion recovery failed at $step." }
+          }
+      - name: Verify native recovery and original restore regressions
+        shell: pwsh
+        run: |
+          $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
+          & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-private-runner.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Private Windows test runner diagnostics failed.' }
+          & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-process-lifetime.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Windows fixture process lifetime observation failed.' }
+          & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario guarded-owner-exit
+          if ($LASTEXITCODE -ne 0) { throw 'Guarded launch journal owner-death contract failed.' }
+          & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-runtime-host.ps1 -Scenario guarded-release
+          if ($LASTEXITCODE -ne 0) { throw 'Guarded launch journal release contract failed.' }
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-receipt.test.mjs')
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-retirement-recovery.test.mjs', 'tests/deployment-windows-restore-entry.test.mjs', 'tests/deployment-windows-restore-invocation.test.mjs') -NamePattern '^(recovery manifest admits bounded inventories|saved recovery bundle closes module dependencies|saved Windows restore entry|public Windows restore invocation)'
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-windows-project-policy.test.mjs')
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-windows-combined-restore.test.mjs') -NamePattern '^Windows combined restoration (uses explicit PowerShell|preserves inherited private Git root policy)'
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-restore-project.test.mjs') -NamePattern '^Windows (project restoration preserves an eligible|unsupported saved ownership)'
+      - name: Verify public task-option refusals in Windows PowerShell
+        if: ${{ inputs.windows_application_only && inputs.windows_commands_only }}
+        shell: powershell
+        run: ./tests/deployment-windows-task-options.ps1
+      - name: Verify native create-only first-task registration
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: ./tests/deployment-windows-first-task.ps1
+      - name: Verify public routing and legacy startup contracts
+        if: ${{ inputs.windows_application_only && inputs.windows_commands_only }}
+        shell: powershell
+        run: |
+          node tests/deploy-script-scheduled-task.test.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node tests/start-script-healthcheck.test.js
+          exit $LASTEXITCODE
+      - name: Update actual application and verify saved restore outcome
+        if: ${{ !(inputs.windows_application_only && inputs.windows_commands_only) }}
+        shell: pwsh
+        run: |
+          $env:DEPLOYMENT_TEST_REAL_BUILD = '1'
+          $env:DEPLOYMENT_TEST_WINDOWS_LIVE = '1'
+          $env:DEPLOYMENT_TEST_WINDOWS_RESTORE_SCENARIO = '${{ matrix.scenario }}'
+          $env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY = '${{ inputs.windows_restore_scenario == 'cold-unlaunched' && 'unlaunched' || inputs.windows_restore_scenario == 'cold-requested' && 'requested' || inputs.windows_restore_scenario == 'cold-registered' && 'registered' || inputs.windows_restore_scenario == 'cold-enabled' && 'enabled' || inputs.windows_restore_scenario == 'cold-launch' && 'launch' || inputs.windows_restore_scenario == 'cold-startup' && 'startup' || inputs.windows_restore_scenario == 'cold-start' && 'start' || inputs.windows_restore_scenario == 'cold-completion' && 'completion' || inputs.windows_restore_scenario == 'cold-state' && 'state' || inputs.windows_restore_scenario == 'cold-receipt' && 'receipt' || 'terminal' }}'
+          $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
+          $env:DEPLOYMENT_TEST_GIT = (Get-Command git).Source
+          $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node).Source) 'node_modules/npm/bin/npm-cli.js'
+          $timeoutSeconds = if ($env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY -in @('startup', 'launch', 'enabled', 'requested', 'registered', 'unlaunched')) { 10500 } elseif ($env:DEPLOYMENT_TEST_WINDOWS_RESTORE_SCENARIO -eq 'copy-crashed') { 7800 } else { 6300 }
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-native-operation.test.mjs') -NamePattern '^actual application source installs and builds' -TimeoutSeconds $timeoutSeconds
+
+  windows-live-stopped-proof:
+    # Split from the live deployment job so the complete scenario stays inside its budget.
+    if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !inputs.windows_first_application_only && !(inputs.windows_application_only && inputs.windows_live_only && inputs.windows_failed_application_only) && !(inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && inputs.windows_cold_started_only) && !(inputs.windows_application_only && inputs.windows_live_only && inputs.windows_commands_only && inputs.windows_history_only && inputs.windows_restore_scenario == 'failed') && (!inputs.windows_restore_scenario || inputs.windows_restore_scenario == 'complete') }}
+    name: Actual Windows stopped restore evidence
+    runs-on: windows-2022
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify stopped restore evidence after original controller exit
+        shell: pwsh
+        run: |
+          ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-restore -StoppedProof
+          ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-restore -StoppedProof -ColdActivationCrash
+          ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-proof-restore
+          ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement-restore
+      - name: Verify unacknowledged cold launch recovery and original journal archival
+        shell: pwsh
+        run: |
+          ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-restore -StoppedProof -ColdStartupCrash
+
+  windows-failed-application:
+    if: ${{ inputs.windows_application_only && inputs.windows_live_only && inputs.windows_failed_application_only }}
+    name: Actual Windows failed-update application phase
+    runs-on: windows-2022
+    timeout-minutes: 115
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Update actual application and verify failed saved restore outcome
+        shell: pwsh
+        run: |
+          $env:DEPLOYMENT_TEST_REAL_BUILD = '1'
+          $env:DEPLOYMENT_TEST_WINDOWS_LIVE = '1'
+          $env:DEPLOYMENT_TEST_WINDOWS_RESTORE_SCENARIO = 'failed'
+          $env:DEPLOYMENT_TEST_WINDOWS_COLD_ENTRY = 'terminal'
+          $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
+          $env:DEPLOYMENT_TEST_GIT = (Get-Command git).Source
+          $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node).Source) 'node_modules/npm/bin/npm-cli.js'
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-native-operation.test.mjs') -NamePattern '^actual application source installs and builds' -TimeoutSeconds 6300
+
+  windows-first-native:
+    if: ${{ (inputs.windows_application_only || !inputs.windows_restore_only) && !inputs.windows_first_application_only && !(inputs.windows_application_only && inputs.windows_live_only) }}
+    name: Native Windows first deployment (${{ matrix.shard }})
+    runs-on: windows-2022
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [foundations, cold-receipts, cold-saved]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Inspect genuinely fresh Windows installations
+        shell: pwsh
+        env:
+          DEPLOYMENT_TEST_RECEIPT_ONLY: ${{ inputs.windows_receipt_only }}
+          DEPLOYMENT_TEST_COMMANDS_ONLY: ${{ inputs.windows_application_only && inputs.windows_commands_only }}
+          DEPLOYMENT_TEST_FIRST_SHARD: ${{ matrix.shard }}
+        run: |
+          $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
+          $env:DEPLOYMENT_TEST_GIT = (Get-Command git.exe -CommandType Application | Select-Object -First 1).Source
+          $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node.exe -CommandType Application | Select-Object -First 1).Source) 'node_modules/npm/bin/npm-cli.js'
+          $pattern = '^(Windows first-install|saved recovery bundle closes module dependencies)'
+          $tests = @('tests/deployment-windows-first-install.test.mjs', 'tests/deployment-windows-first-build.test.mjs', 'tests/deployment-windows-first-runtime.test.mjs', 'tests/deployment-windows-first-activation.test.mjs', 'tests/deployment-windows-first-readiness.test.mjs', 'tests/deployment-windows-first-completion.test.mjs', 'tests/deployment-windows-first-crash.test.mjs', 'tests/deployment-retirement-recovery.test.mjs')
+          if ($env:DEPLOYMENT_TEST_RECEIPT_ONLY -eq 'true') {
+            if ($env:DEPLOYMENT_TEST_COMMANDS_ONLY -ne 'true') { throw 'Receipt selection requires both Windows command-only flags.' }
+            $pattern = '.*\((deployment-receipt|deployment-receipt-default-policy|cold-proof|cold-receipt-proof|cold-first-receipt-publication|cold-first-retirement|cold-first-retirement-actor-loss|cold-first-saved-closeout|cold-first-saved-receipt-publication|cold-first-saved-(?:lease-released|permanent-policy-applied|enable-applied))\)$|^saved recovery bundle closes module dependencies'
+            $tests = @('tests/deployment-windows-first-completion.test.mjs', 'tests/deployment-windows-first-crash.test.mjs', 'tests/deployment-retirement-recovery.test.mjs')
+          }
+          $coldReceipts = '\((?:cold-receipt-proof|cold-first-[^)]*)\)$'
+          $coldSaved = '\(cold-first-saved-[^)]*\)$'
+          $pattern = if ($env:DEPLOYMENT_TEST_FIRST_SHARD -eq 'cold-receipts') {
+            "^(?=.*$coldReceipts)(?!.*$coldSaved)(?:$pattern)"
+          } elseif ($env:DEPLOYMENT_TEST_FIRST_SHARD -eq 'cold-saved') {
+            "^(?=.*$coldSaved)(?:$pattern)"
+          } else {
+            "^(?!.*$coldReceipts)(?:$pattern)"
+          }
+          $requiredName = if ($env:DEPLOYMENT_TEST_FIRST_SHARD -eq 'cold-receipts') {
+            'Windows first-install abrupt actor death preserves the exact original lease boundary (cold-first-retirement-actor-loss)'
+          } elseif ($env:DEPLOYMENT_TEST_FIRST_SHARD -eq 'cold-saved') {
+            'Windows first-install abrupt actor death preserves the exact original lease boundary (cold-first-saved-closeout)'
+          } else {
+            'Windows first-install completion preserves original-runtime handoff or settles its exact interrupted instance (deployment-receipt)'
+          }
+          if ($requiredName -cnotmatch $pattern) { throw 'First-install selection omits its required retirement or receipt case.' }
+          ./tests/deployment-windows-private-tests.ps1 -Tests $tests -NamePattern $pattern -TimeoutSeconds 2400
+
+  windows-first-application:
+    if: ${{ inputs.windows_first_application_only || ((inputs.windows_application_only || !inputs.windows_restore_only) && !(inputs.windows_application_only && (inputs.windows_commands_only || inputs.windows_live_only))) }}
+    name: Actual Windows first deployment core (${{ matrix.scenario }})
+    runs-on: windows-2022
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: ${{ fromJSON(inputs.windows_first_public_only && '["public-first"]' || '["normal", "receipt-loss", "default-policy", "public-first"]') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Deploy actual fresh application and run its saved finalizer
+        shell: pwsh
+        env:
+          DEPLOYMENT_TEST_FIRST_ONLY: ${{ inputs.windows_first_application_only }}
+          DEPLOYMENT_TEST_FIRST_PUBLIC_ONLY: ${{ inputs.windows_first_public_only }}
+          DEPLOYMENT_TEST_WINDOWS_FIRST_RECEIPT_LOSS: ${{ matrix.scenario == 'receipt-loss' && '1' || '0' }}
+          DEPLOYMENT_TEST_WINDOWS_FIRST_DEFAULT_POLICY: ${{ matrix.scenario == 'default-policy' && '1' || '0' }}
+          DEPLOYMENT_TEST_WINDOWS_FIRST_PUBLIC: ${{ matrix.scenario == 'public-first' && '1' || '0' }}
+          DEPLOYMENT_TEST_COMMANDS_ONLY: ${{ inputs.windows_application_only && inputs.windows_commands_only }}
+        run: |
+          node --test tests/deployment-windows-first-application-crash.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'First-application crash observer contracts failed.' }
+          if ($env:DEPLOYMENT_TEST_FIRST_ONLY -eq 'true' -and $env:DEPLOYMENT_TEST_COMMANDS_ONLY -ne 'true') {
+            throw 'First-application selection requires both Windows command-only flags.'
+          }
+          if ($env:DEPLOYMENT_TEST_FIRST_PUBLIC_ONLY -eq 'true' -and $env:DEPLOYMENT_TEST_FIRST_ONLY -ne 'true') {
+            throw 'Public-first selection requires first-application-only selection.'
+          }
+          $env:DEPLOYMENT_TEST_WINDOWS_FIRST_APPLICATION = '1'
+          $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
+          $env:DEPLOYMENT_TEST_GIT = (Get-Command git.exe -CommandType Application | Select-Object -First 1).Source
+          $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node.exe -CommandType Application | Select-Object -First 1).Source) 'node_modules/npm/bin/npm-cli.js'
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-windows-first-deployment.test.mjs')
+
+  database-admission:
+    if: ${{ !inputs.windows_restore_only && !inputs.windows_application_only }}
+    name: Database admission (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --no-audit --no-fund
+      - name: Inspect actual historical databases without initialization
+        run: node --test tests/deployment-database-compatibility.test.mjs tests/deployment-target-compatibility.test.mjs tests/deployment-data-content.test.mjs tests/deployment-dotenv-compatibility.test.mjs tests/deployment-database-command.test.mjs tests/deployment-legacy-configuration.test.mjs
+
+  linux-data-admission:
+    if: ${{ !inputs.windows_restore_only && !inputs.windows_application_only }}
+    name: Native Linux database admission
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --no-audit --no-fund
+      - name: Inspect databases under the installed account and settle blocked bindings
+        run: |
+          sudo git config --system --add safe.directory "$GITHUB_WORKSPACE"
+          sudo "$(command -v node)" --test tests/deployment-linux-data-worker.test.mjs tests/deployment-linux-compatibility.test.mjs tests/deployment-linux-snapshot.test.mjs tests/deployment-linux-readiness.test.mjs tests/deployment-linux-restore.test.mjs tests/deployment-linux-cold-restore.test.mjs tests/deployment-linux-acceptance.test.mjs
+
+  windows-restore:
+    if: ${{ !inputs.windows_application_only && !(inputs.windows_restore_only && inputs.windows_contracts_only) }}
+    name: Native Windows snapshot and restoration
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Retain internal junction metadata without following foreign reparse points
+        shell: pwsh
+        run: |
+          ./tests/deployment-windows-private-tests.ps1 -Tests @(
+            'tests/deployment-windows-source-reparse.test.mjs',
+            'tests/deployment-snapshot-copy.test.mjs',
+            'tests/deployment-windows-junction-snapshot.test.mjs'
+          )
+      - name: Capture native Windows snapshots and restore project and Git state
+        shell: pwsh
+        run: |
+          ./tests/deployment-windows-private-tests.ps1 -Tests @(
+            'tests/deployment-restore-project.test.mjs',
+            'tests/deployment-git-objects.test.mjs',
+            'tests/deployment-git-metadata.test.mjs',
+            'tests/deployment-windows-git-journal.test.mjs',
+            'tests/deployment-windows-external-snapshot.test.mjs',
+            'tests/deployment-windows-external-restore.test.mjs',
+            'tests/deployment-windows-runtime-relocation.test.mjs',
+            'tests/deployment-windows-combined-restore.test.mjs'
+          )
+
+  contracts:
+    if: ${{ !inputs.windows_application_only && (!inputs.windows_restore_only || inputs.windows_contracts_only) }}
+    name: Contracts (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ matrix.os == 'windows-2022' && 25 || 10 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(inputs.windows_restore_only && inputs.windows_contracts_only && '["windows-2022"]' || '["ubuntu-24.04","windows-2022"]') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run behavioral contracts
+        if: runner.os == 'Linux'
+        run: >-
+          node --test
+          tests/deployment-state.test.mjs
+          tests/deployment-process-identity.test.mjs
+          tests/deployment-windows-command.test.mjs
+          tests/deployment-windows-command-entry.test.mjs
+          tests/deployment-cli.test.mjs
+          tests/deployment-snapshot.test.mjs
+          tests/deployment-snapshot-copy.test.mjs
+          tests/deployment-snapshot-scope.test.mjs
+          tests/deployment-snapshot-external.test.mjs
+          tests/deployment-transaction.test.mjs
+          tests/deployment-restore-transaction.test.mjs
+          tests/deployment-restore-project.test.mjs
+          tests/deployment-restore-external.test.mjs
+          tests/deployment-source.test.mjs
+          tests/deployment-npm-command.test.mjs
+          tests/deployment-build-artifacts.test.mjs
+          tests/deployment-receipt.test.mjs
+          tests/deployment-git-metadata.test.mjs
+          tests/deployment-git-objects.test.mjs
+          tests/deployment-update-policy.test.mjs
+          tests/deployment-stage-runner.test.mjs
+          tests/deployment-worker-errors.test.mjs
+          tests/deployment-owned-worker.test.mjs
+          tests/deployment-worker-journal.test.mjs
+          tests/deployment-saved-worker.test.mjs
+          tests/deployment-worker-wire.test.mjs
+          tests/deployment-worker-operation.test.mjs
+          tests/deployment-worker-retirement.test.mjs
+          tests/deployment-retirement-recovery.test.mjs
+          tests/deployment-configuration-files.test.mjs
+          tests/deployment-snapshot-configuration.test.mjs
+          tests/deployment-runtime-version.test.mjs
+          tests/deployment-diagnostics.test.mjs
+          tests/deployment-cold-activation-state.test.mjs
+          tests/deployment-cold-runtime-completion.test.mjs
+          tests/deployment-cold-retirement.test.mjs
+      - name: Run private Windows behavioral contracts
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./tests/deployment-windows-private-tests.ps1 -Tests @(
+            'tests/deployment-state.test.mjs',
+            'tests/deployment-process-identity.test.mjs',
+            'tests/deployment-windows-command.test.mjs',
+            'tests/deployment-windows-command-entry.test.mjs',
+            'tests/deployment-windows-inactive-task.test.mjs',
+            'tests/deployment-cli.test.mjs',
+            'tests/deployment-snapshot.test.mjs',
+            'tests/deployment-snapshot-copy.test.mjs',
+            'tests/deployment-snapshot-scope.test.mjs',
+            'tests/deployment-snapshot-external.test.mjs',
+            'tests/deployment-transaction.test.mjs',
+            'tests/deployment-restore-transaction.test.mjs',
+            'tests/deployment-restore-external.test.mjs',
+            'tests/deployment-source.test.mjs',
+            'tests/deployment-npm-command.test.mjs',
+            'tests/deployment-build-artifacts.test.mjs',
+            'tests/deployment-receipt.test.mjs',
+            'tests/deployment-update-policy.test.mjs',
+            'tests/deployment-stage-runner.test.mjs',
+            'tests/deployment-worker-errors.test.mjs',
+            'tests/deployment-owned-worker.test.mjs',
+            'tests/deployment-worker-journal.test.mjs',
+            'tests/deployment-saved-worker.test.mjs',
+            'tests/deployment-worker-wire.test.mjs',
+            'tests/deployment-worker-operation.test.mjs',
+            'tests/deployment-worker-retirement.test.mjs',
+            'tests/deployment-retirement-recovery.test.mjs',
+            'tests/deployment-configuration-files.test.mjs',
+            'tests/deployment-snapshot-configuration.test.mjs',
+            'tests/deployment-runtime-version.test.mjs',
+            'tests/deployment-diagnostics.test.mjs',
+            'tests/deployment-cold-activation-state.test.mjs',
+            'tests/deployment-cold-runtime-completion.test.mjs',
+            'tests/deployment-cold-retirement.test.mjs'
+          )
+      - name: Verify native prospective handoff owner identity
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-handoff-owner.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Native handoff owner identity contracts failed.' }
+      - name: Verify native prepared handoff JSON binding
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & (Get-Command pwsh).Source -NoProfile -NonInteractive -File ./tests/deployment-windows-handoff-json.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Native handoff JSON binding contracts failed.' }
+      - name: Probe Windows cold retirement stability
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
+            Write-Host "Cold retirement diagnostic sample $attempt"
+            ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-retirement-recovery.test.mjs') -NamePattern 'independent saved recovery finishes|cold worker retirement preserves'
+          }
+
+  linux-native:
+    if: ${{ !inputs.windows_restore_only && !inputs.windows_application_only }}
+    name: Native Linux worker domain
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Characterize retained cgroup observation
+        run: sudo "$(command -v node)" tests/deployment-linux-domain-probe.mjs
+      - name: Retain installed unit source identities
+        run: sudo "$(command -v node)" --test tests/deployment-linux-service-sources.test.mjs
+      - name: Observe initially inactive and failed service identities
+        run: sudo "$(command -v node)" --test tests/deployment-linux-inactive-service.test.mjs
+      - name: Maintain initially stopped service authority
+        run: sudo "$(command -v node)" --test tests/deployment-linux-inactive-maintenance.test.mjs
+      - name: Restore initially stopped services after controller death
+        run: sudo "$(command -v node)" --test tests/deployment-linux-inactive-cold-restore.test.mjs
+      - name: Inspect configuration without a running service process
+        run: sudo "$(command -v node)" --test tests/deployment-linux-inactive-configuration.test.mjs
+      - name: Discover retained inactive runtime executables
+        run: sudo "$(command -v node)" --test tests/deployment-linux-inactive-discovery.test.mjs
+      - name: Restore actual Git commit-graph layouts with privileged file ownership
+        run: sudo "$(command -v node)" --test tests/deployment-git-objects.test.mjs
+      - name: Exercise actual saved-engine systemd workers
+        run: sudo env "DEPLOYMENT_TEST_GIT=$(command -v git)" "DEPLOYMENT_TEST_NPM_CLI=$(readlink -f "$(command -v npm)")" "$(command -v node)" --test tests/deployment-linux-worker.test.mjs tests/deployment-native-operation.test.mjs tests/deployment-linux-runtime.test.mjs tests/deployment-linux-service.test.mjs tests/deployment-linux-configuration.test.mjs tests/deployment-controller-capture.test.mjs tests/deployment-linux-restore-invocation.test.mjs tests/deployment-recovery-engine-retention.test.mjs tests/deployment-linux-first-install.test.mjs
+
+  linux-service-recovery:
+    if: ${{ !inputs.windows_restore_only && !inputs.windows_application_only }}
+    name: Native Linux service recovery
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Recover interrupted actual service retirement
+        run: sudo "$(command -v node)" --test tests/deployment-recovery-admission.test.mjs tests/deployment-linux-service-recovery.test.mjs tests/deployment-linux-cold-service.test.mjs
+
+  linux-service-resumption:
+    if: ${{ !inputs.windows_restore_only && !inputs.windows_application_only }}
+    name: Native Linux service recovery resumption
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Resume interrupted actual service recovery and unlock
+        run: sudo "$(command -v node)" --test tests/deployment-linux-service-resumption.test.mjs
+
+  linux-worker-handoff:
+    if: ${{ !inputs.windows_restore_only && !inputs.windows_application_only }}
+    name: Native Linux retirement handoff
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Recover interrupted live worker retirement
+        run: sudo "$(command -v node)" --test tests/deployment-linux-worker-handoff.test.mjs
+
+  windows-native:
+    if: ${{ !inputs.windows_restore_only && !inputs.windows_application_only }}
+    name: Native Windows Job ownership
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Exercise explicit Job and gated launcher
+        shell: pwsh
+        run: ./tests/deployment-windows-job.ps1
+      - name: Exercise saved Windows coordinator and receipts
+        shell: pwsh
+        run: |
+          $env:DEPLOYMENT_TEST_PWSH = (Get-Command pwsh).Source
+          $env:DEPLOYMENT_TEST_NPM_CLI = Join-Path (Split-Path (Get-Command node).Source) 'node_modules/npm/bin/npm-cli.js'
+          $env:DEPLOYMENT_TEST_GIT = (Get-Command git).Source
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-windows-worker.test.mjs', 'tests/deployment-native-operation.test.mjs')
+
+  windows-task-options:
+    if: ${{ !inputs.windows_restore_only && !inputs.windows_application_only }}
+    name: Native Windows task options
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run production private controller with literal stdio and original Job settlement
+        shell: pwsh
+        run: ./tests/deployment-windows-controller-process.ps1
+      - name: Publish private installed runtime bundle without source ACL repair
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-bundle.ps1
+      - name: Publish disabled replacement with original transaction authority
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-replace
+      - name: Probe private Node file creation with a distinct original-Job child token
+        shell: pwsh
+        run: ./tests/deployment-windows-controller-token.ps1
+      - name: Verify portable Scheduled Task and child parameters with PowerShell 5.1
+        shell: powershell
+        run: ./tests/deployment-windows-task-options.ps1
+      - name: Preserve existing deployment and startup regressions
+        shell: powershell
+        run: |
+          node tests/deploy-script-scheduled-task.test.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node tests/start-script-healthcheck.test.js
+          exit $LASTEXITCODE
+      - name: Observe real task definitions without adopting process ownership
+        shell: powershell
+        run: node --test tests/deployment-windows-task-inspection.test.mjs
+      - name: Bind runtime control transport to the actual Scheduled Task owner
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-pipe.ps1
+      - name: Retain original task-side runtime Job across controller connections
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-domain.ps1
+      - name: Retain private runtime configuration files and permissions
+        shell: pwsh
+        run: ./tests/deployment-windows-private-file.ps1
+      - name: Run installed private runtime host under an actual Scheduled Task
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1
+      - name: Refuse changed installed runtime configuration and settle original ownership
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario configuration-change
+      - name: Verify native restart inhibition around original managed owner settlement
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario task-inhibition
+      - name: Retain durable original task stop authority and private receipts
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario durable-stop
+      - name: Close Node task maintenance without releasing inhibition
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario node-close
+      - name: Preserve stopped task evidence after original Node controller exits
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario node-exit
+      - name: Bind native task maintenance to private Node transaction state
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-close
+      - name: Preserve native transaction inhibition after Node controller exits
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-exit
+      - name: Refuse changed original native task transaction state
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-changed-state
+      - name: Bind native task maintenance to original restore-phase authority
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-restore
+      - name: Refuse original task retirement before activation phase
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-retire-refused
+      - name: Retire original stopped task owner with durable transaction authority
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-retire
+      - name: Retire original task owner for restore activation
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-retire-restore
+      - name: Refuse replacement before original retirement
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-replace-early
+      - name: Publish disabled replacement for restore
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-replace-restore
+      - name: Refuse changed replacement configuration before task mutation
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-replace-refused
+      - name: Refuse Scheduler expansion in replacement paths
+        shell: pwsh
+        run: |
+          ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-replace-variable
+          ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-replace-argument
+
+  windows-runtime-activation:
+    if: ${{ !inputs.windows_restore_only && !inputs.windows_application_only }}
+    name: Native Windows activation lease
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Authenticate original lease release without changing runtime ownership
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario guarded-release
+      - name: Complete healthy native update and release original activation lease
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete
+      - name: Complete healthy native restore with retained task permissions
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-restore
+      - name: Preserve originally disabled policy after healthy native completion
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-disabled
+      - name: Refuse changed terminal state before permanent task policy
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-changed-state
+      - name: Retain and release original activation controller with bounded lifetime
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-lease.ps1
+      - name: Retain native IPv4 listener bind time and original Job ownership
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario listener-v4
+      - name: Retain native dual-stack listener bind time and original Job ownership
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario listener-v6
+      - name: Refuse independent wildcard bindings in the same original process
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario listener-independent-pair
+      - name: Activate exact guarded replacement in the native update transaction
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate
+      - name: Bind Windows HTTP readiness to retained native listener and activation authority
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-readiness
+      - name: Activate exact guarded replacement with restored task permissions
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-restore
+      - name: Settle unreleased transaction activation after original controller exit
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-exit
+      - name: Refuse changed activation-state evidence and settle its guarded generation
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-state-change
+      - name: Refuse activation before original retirement and replacement
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-early
+      - name: Settle unverified task and original Job after controller exit
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario guarded-owner-exit
+
+  windows-completion-proof:
+    if: ${{ !inputs.windows_restore_only && !inputs.windows_application_only }}
+    name: Native Windows completed task proof
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Require exclusive native Windows admission and crash release
+        shell: pwsh
+        run: ./tests/deployment-windows-private-admission.ps1
+      - name: Require original-controller-bound Windows admission
+        shell: pwsh
+        run: ./tests/deployment-windows-admission-bridge.ps1
+      - name: Require shared admission at Windows ownership entrypoints
+        shell: pwsh
+        run: ./tests/deployment-windows-admission-state.ps1
+      - name: Reopen completed original task evidence in a fresh native process
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-proof
+      - name: Reopen completed restore evidence with original custom task permissions
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-proof-restore
+      - name: Reopen originally disabled completed task without changing its policy
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-proof-disabled
+
+  windows-completion-recovery:
+    if: ${{ !inputs.windows_restore_only && !inputs.windows_application_only }}
+    name: Native Windows completion recovery (${{ matrix.scenario }}, ${{ matrix.crash }})
+    runs-on: windows-2022
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - scenario: transaction-activate-complete-recovery
+            crash: release-requested
+          - scenario: transaction-activate-complete-recovery
+            crash: lease-released
+          - scenario: transaction-activate-complete-recovery-restore
+            crash: permanent-policy-applied
+          - scenario: transaction-activate-complete-recovery
+            crash: enable-applied
+          - scenario: transaction-activate-complete-recovery-disabled
+            crash: enable-applied
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Recover or refuse after genuine completion actor death
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario '${{ matrix.scenario }}' -CrashStep '${{ matrix.crash }}'
+
+  windows-managed-discovery:
+    if: ${{ !inputs.windows_application_only && !(inputs.windows_restore_only && inputs.windows_contracts_only) }}
+    name: Native Windows managed discovery (${{ matrix.scenario }})
+    runs-on: windows-2022
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: ${{ fromJSON(inputs.windows_restore_only && '["transaction-activate-complete-retirement"]' || '["transaction-activate-complete-retirement","transaction-activate-complete-retirement-restore","transaction-activate-complete-retirement-disabled"]') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Capture actual admission and discover the runtime after final unlock
+        shell: pwsh
+        run: |
+          $sourceBuild = '${{ matrix.scenario }}' -ceq 'transaction-activate-complete-retirement'
+          ./tests/deployment-windows-runtime-host.ps1 -Scenario '${{ matrix.scenario }}' -DiscoverManagedTask -DiscoveredAdmission -OwnedSourceBuild:$sourceBuild
+      - name: Capture private Windows controller outside mutable source
+        if: matrix.scenario == 'transaction-activate-complete-retirement'
+        shell: pwsh
+        run: ./tests/deployment-windows-controller-capture.ps1
+
+  windows-completed-closeout:
+    if: ${{ !inputs.windows_application_only && !(inputs.windows_restore_only && inputs.windows_contracts_only) }}
+    name: Native Windows completed deployment closeout
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify identity-bound private evidence archival and retirement
+        shell: pwsh
+        run: ./tests/deployment-windows-private-file.ps1
+      - name: Preserve original failure context through native recovery callbacks
+        shell: pwsh
+        run: node --test tests/deployment-transaction.test.mjs
+      - name: Diagnose independent cold recovery alongside native worker retirement
+        shell: pwsh
+        run: |
+          ./tests/deployment-windows-private-tests.ps1 -Tests @('tests/deployment-retirement-recovery.test.mjs', 'tests/deployment-worker-retirement.test.mjs') -NamePattern '^(independent saved recovery finishes partial retirement|cold worker retirement preserves failed-update evidence|completed live operation retires only worker artifacts|final marker deletion failure)'
+      - name: Close completed Windows deployment through its saved entry
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement -CompletedCloseout
+      - name: Resume completed Windows restore from partial receipt retirement
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement-restore -CompletedCloseout
+
+  windows-prior-runtime-recovery:
+    if: ${{ !inputs.windows_application_only && !(inputs.windows_restore_only && inputs.windows_contracts_only) }}
+    name: Native Windows prior runtime recovery (${{ matrix.phase }})
+    runs-on: windows-2022
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        phase: [copying, backup-ready, source-selected, changed-configuration]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Recover only before source mutation and retain the original failure
+        shell: pwsh
+        run: |
+          if ('${{ matrix.phase }}' -ceq 'source-selected') {
+            ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-retire-refused -PriorRuntimeRecovery source-selected
+          } elseif ('${{ matrix.phase }}' -ceq 'changed-configuration') {
+            ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-replace-refused -PriorRuntimeRecovery copying
+          } else {
+            ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement -CompletedCloseout -PriorRuntimeRecovery '${{ matrix.phase }}'
+          }
+
+  windows-task-retirement:
+    if: ${{ !inputs.windows_restore_only && !inputs.windows_application_only }}
+    name: Native Windows task receipt retirement
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Retire original update receipts and recover after controller loss
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement
+      - name: Retire original restore receipts with retained native policy
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement-restore
+      - name: Retire disabled-task receipts without enabling automation
+        shell: pwsh
+        run: ./tests/deployment-windows-runtime-host.ps1 -Scenario transaction-activate-complete-retirement-disabled

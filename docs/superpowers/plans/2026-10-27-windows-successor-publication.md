@@ -1,0 +1,242 @@
+# Native Successor Publication Implementation Plan
+
+> **For agentic workers:** Execute inline as already selected. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Publish exactly one fresh successor preparation while retaining every predecessor record and granting no lock or runtime authority.
+
+**Architecture:** Reuse the accepted native successor derivation and add a separate publisher role. Extend only its retained context's namespace with a strictly rederived fifth file; ordinary four-record readers continue to refuse it. A nonrecursive binding helper is required because namespace verification cannot call the full settlement getter that invokes namespace verification.
+
+**Tech Stack:** PowerShell native retained files, strict JSON binding, Node.js interruption fixtures, GitHub Actions only.
+
+---
+
+### Task 1: Publication contract first
+
+**Files:**
+- Create: `tests/deployment-windows-history-handoff-successor-publication.ps1`
+- Modify: `tests/deployment-windows-history-handoff-committed-observation.ps1`
+- Modify: `tests/deployment-windows-lock-settlement-observation.mjs`
+- Modify: `.github/workflows/deployment-lifecycle.yml`
+
+- [x] Accept derivation `c5ea3f08`: focused `40476262515` /
+  `122095142472` passed all 29 actual required receipts; same-SHA
+  Contracts `40476266395` / `122095156418` passed.
+- [ ] Add fixture-only `PublishSuccessor`, requiring `PrepareSuccessor`.
+  First derive and verify the full preparation, then load the missing
+  publication module. Require independent publisher-role refusal before
+  mutation, publish under the separate role, inspect the exact bounded
+  observation and refuse a duplicate publication without changing bytes.
+- [ ] Require the actual fifth file's hash/length/dev/ino and strict JSON
+  to match native derivation. Reuse the original preparation assertions,
+  add the fifth file to unchanged evidence checks, keep ordinary
+  acquire/release refused and the lock absent, and require plain
+  four-record reopening to refuse the unexpected successor.
+- [ ] Require the 30th actual receipt:
+
+```text
+PASS: native successor publication retains every predecessor and creates one exact preparation without continuation authority
+```
+
+Push test-only and inspect focused Actions failure on missing
+`windows-stopped-history-handoff-successor-publication.ps1`, not a timeout
+or an earlier failure.
+
+### Task 2: Nonrecursive binding and create-only publication
+
+**Files:**
+- Modify: `scripts/deployment/windows-stopped-history-handoff-successor.ps1`
+- Create: `scripts/deployment/windows-stopped-history-handoff-successor-publication.ps1`
+- Modify: `scripts/deployment/windows-stopped-history-handoff-committed-observation.ps1`
+
+- [ ] Extract `Get-AgentsChatStoppedHistoryHandoffSuccessorBinding` with the
+  current scalar parameters and unchanged role, GUID, owner, time, size and
+  original-binding checks. Derive predecessor descriptors directly from
+  retained native files after strict terminal assertion. Read the original
+  fourteen-field template only from the actual pinned prepared file;
+  validate its exact schema and derive the previous state timestamp from
+  its pinned `oldState` bytes. Replace only phase, attempt and native live
+  owner, then add predecessor descriptors. It must not call full settlement
+  observation, namespace verification or `Get-AgentsChatStoppedHistoryHandoffBinding`:
+  the latter opens state files and runs full cleanup, which is not an
+  appropriate callback for repeated namespace assertions. Keep
+  `Get-AgentsChatStoppedHistoryHandoffSuccessorRecord` as the full getter:
+  validate scalar inputs through the binding helper, recheck full settlement,
+  rederive the binding and recheck full settlement again before returning.
+  The full settlement getter still invokes the existing retired prepared
+  binding verifier, which rederives actual task/state/configuration/runtime
+  evidence. Thus the template is not trusted caller JSON or a replacement
+  for original native proof, and namespace assertions add no state handles.
+- [ ] Add `Assert-AgentsChatStoppedHistoryHandoffSuccessorPrepared(Context)`.
+  Require both independent preparer/publisher roles and retained successor
+  file/request. Match actual descriptor and strict fifteen-field JSON
+  against the nonrecursive binding helper, including actual live owner and
+  predecessor descriptors.
+- [ ] Add this namespace branch after the terminal assertion:
+
+```powershell
+if ($Context.ContainsKey('HistoryHandoffSuccessorPrepared')) {
+    Assert-AgentsChatStoppedHistoryHandoffSuccessorPrepared $Context
+    $names += $Context.HistoryHandoffSuccessorPrepared.Descriptor.path
+}
+```
+
+Do not change ordinary bootstrap schemas or accept a caller's extra
+filename list. Only a retained publisher scope can verify the fifth file
+in this increment.
+- [ ] Implement `Publish-AgentsChatStoppedHistoryHandoffSuccessorPrepared`
+  with the same scalar parameters as the existing record factory.
+  Require `HistoryHandoffSuccessorPublisher` before mutation. Refuse an
+  already-retained successor, derive the record through the full getter,
+  verify the physical absent lock immediately before create-only
+  `WindowsPrivateFile.Publish`, and retain `File`, `Descriptor`, `Request`.
+  Twice recheck complete settlement plus strict successor binding.
+  Return only the native descriptor; poison publication failures and
+  preserve every file.
+- [ ] Implement `Get-AgentsChatStoppedHistoryHandoffSuccessorPreparedObservation`
+  with context/controller parameters. Recheck full settlement and strict
+  successor binding twice. Return exactly:
+
+```powershell
+[ordered]@{
+    status='successor-prepared'
+    attemptId=$record.attemptId
+    previousAttemptId=$record.predecessor.attemptId
+    previousOperationId=$record.previousOperationId
+    project=$record.project
+    prepared=$Context.HistoryHandoffSuccessorPrepared.Descriptor
+    predecessor=$record.predecessor
+    runtimeAuthority=$false
+    lockAuthority=$false
+}
+```
+
+- [ ] Push implementation and require same-SHA focused history plus
+  Windows Contracts; inspect all 30 actual receipts and persist evidence.
+
+### Next boundary
+
+Actual successor-publisher death and explicit five-record native reopening
+must pass before new-lock publication. Neither this fifth file nor its
+prospective owner is a continuation capability. State continuity, release,
+public routing and actual repeat application lifecycle remain unimplemented.
+
+## Fixture budget correction before valid red
+
+Test-only `90134a4fa0b957dafc22385a8270a0e1a9e467c9`, focused run
+`40479237413`, job `122105078348`, timed out in the sixth actor at
+`2026-10-27T09:46:44.4788061Z`. It combined all accepted settlement
+negative cases, derivation and the added publication invocation in the
+existing 120-second takeover budget. This is not accepted publication red.
+
+Keep all checks but separate responsibilities: a sixth
+`check-lock-settled-history` actor runs settlement proof and derivation,
+checks unchanged evidence and ordinary refusal, then exits without deleting
+records or restoring the archive fixture. A seventh
+`resume-lock-settled-history` actor independently reopens the full native
+settlement and runs publication, duplicate/refusal checks and original
+fixture restoration. Both actors retain their individual 120-second host
+budgets, native invocations retain 45 seconds, and all bridge-death waits
+remain 15 seconds. Push this fixture split with the native publication
+module still absent; require actual missing-module red before implementation.
+
+Accepted split-actor red: `201374614797ae4029f57476686edc4959d599a1`,
+focused run `40483783166`, job `122120379623`. The sixth actor's preparation
+and actual terminal-publisher-death receipts passed at
+`2026-10-27T10:09:54Z`. The separate seventh actor reached publication and
+failed on missing `windows-stopped-history-handoff-successor-publication.ps1`
+at `2026-10-27T10:10:28.8665440Z`. No time budget or assertion was relaxed.
+
+## Nullable prepared template correction
+
+Implementation `adbfadc1161f8daf5fd98cc058cfe0ff958e29bc` passed Windows
+Contracts run `40486888306`, job `122130808817`, but focused run
+`40486884215`, job `122130795123`, failed at the valid successor derivation
+with `Unsupported retirement JSON value.` at `2026-10-27T10:43:18Z`.
+The original native prepared record intentionally contains
+`observation.runtime=null`; the reused retirement converter rejects null
+by default.
+
+Add an explicit, recursively propagated `AllowNull` switch to that
+converter/reader, enabled only when decoding the pinned prepared template.
+Keep default rejection and duplicate-key rejection unchanged. Add focused
+fixture checks for nested null preservation, unchanged default refusal and
+duplicate refusal in nullable mode. Do not replace strict parsing with
+PowerShell's permissive JSON conversion or weaken original native binding.
+This failed focused run is not accepted publication evidence.
+
+## Remove repeated preparation from the publication fixture
+
+Nullable fix `cc4d6dcdbdf6c8219e1bbb62502d449b476984c6` passed Contracts
+`40491137818` / `122145084093`. Focused `40491133396` /
+`122145067695` passed the sixth actor's complete derivation and settlement
+proof at `2026-10-27T11:11:33Z`, but the seventh actor's
+`-PrepareSuccessor -PublishSuccessor` invocation was killed by the unchanged
+45-second subprocess timeout.
+
+The publication fixture repeated the complete preparation test (already
+accepted in the sixth actor), then the actual publisher independently
+derived and rechecked the same binding again. Dispatch preparation-only
+and publication testing separately. The publication fixture supplies fresh
+scalar inputs directly to the real publisher, compares the actual
+published file to those exact inputs, and retains the native observation,
+duplicate refusal and JS full-record/evidence checks. All preparation
+negative cases stay in the sixth actor. No production proof, assertion or
+45/120/15-second budget is removed or extended.
+
+## Diagnose the remaining bounded publication failure
+
+Fixture deduplication `a5f44cc2a26c1ea4234cc4fa9dac73bfd22703e3`
+passed Contracts `40495109806` / `122158489888`. Focused
+`40495106116` / `122158476831` retained the accepted preparation and
+terminal-publisher-death receipts at `2026-10-27T11:42:46Z`, but the
+publication invocation again reached the unchanged 45-second timeout at
+`11:43:48Z` with empty stdout/stderr. Publication remains unaccepted.
+
+Add test-only timestamped function-entry tracing via command breakpoints,
+enabled only by a per-invocation temporary trace path. On failure the Node
+fixture prints that trace; on success stdout remains the exact JSON response
+and stderr remains empty. Always remove the temporary trace. This diagnostic
+increment changes no production code, proof or time budget. Determine the
+actual slow phase before choosing the next correction; nested native proof
+passes are a hypothesis, not yet measured evidence.
+
+## Measured fixture-only bootstrap duplication
+
+Diagnostic `f3e6a951843b53ce0a8819d0dd31a4147269022f`, run
+`40498781338` / job `122170894698`, confirmed entry to the publication
+fixture at `2026-10-27T12:12:30.4684223Z` and successful return from the
+real native publisher at `12:12:53.3581648Z`. The 45-second invocation
+ended at `12:13:00Z` before the subsequent observation returned. The
+publisher itself completes; the combined bootstrap, publication and
+additional observation exceed one invocation's budget. Command breakpoint
+tracing produced no entries and is removed; retain explicit phase tracing.
+
+Only the publication fixture now opens the committed observation directly
+with explicit retirement and terminal descriptors. That existing native
+opener initializes and pins all four records and runs its full committed
+proof. The fixture no longer wraps that bootstrap in a terminal getter and
+then repeats the same terminal getter immediately before invoking the
+publisher, which already performs complete terminal proofs before and
+after publication. The actual publisher's two full pre-publication proofs,
+two post-publication proofs, independent observation's two full proofs,
+duplicate refusal, every JS assertion and the 45/120/15-second budgets
+remain unchanged. Preparation-only and read-only observation fixtures keep
+their original bootstrap and observation paths. This correction is still
+subject to same-SHA Actions acceptance.
+
+## Accepted publication evidence
+
+Accepted implementation and fixture SHA:
+`68fc679aecb93ebf8a5345e7f166434118dbbc8b`.
+Focused run `40502416532`, job `122183125994`, succeeded. Every one of
+the 30 required receipts from this exact SHA's workflow matched actual
+timestamped `Z PASS:` output, not echoed source. The successor publication
+receipt occurred at `2026-10-27T12:40:42.3012929Z`.
+Same-SHA Windows Contracts `40502421454`, job `122183141640`, succeeded.
+Both job logs are retained in the session artifacts.
+
+This accepts create-only fifth-file publication with preserved predecessors,
+native live-owner binding, independent role refusal, unchanged state,
+ordinary acquire/release refusal and false continuation authority. It does
+not accept successor-publisher death, a five-record fresh observer, fresh
+lock admission or production continuation.

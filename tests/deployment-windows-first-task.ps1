@@ -1,0 +1,149 @@
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+$helper = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../scripts/deployment/windows-first-task.ps1'))
+if (-not (Test-Path -LiteralPath $helper)) { throw 'Missing native create-only first-task registration.' }
+. $helper
+. (Join-Path (Split-Path $helper) 'windows-first-task-registration.ps1')
+function Assert([bool]$Condition, [string]$Message) {
+    if (-not $Condition) { throw $Message }
+}
+$settings = '<Settings xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Enabled>false</Enabled><AllowStartOnDemand>true</AllowStartOnDemand><Priority>7</Priority><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy></Settings>'
+$expected = ([xml]$settings).DocumentElement
+$normalized = ([xml]'<Settings xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><Enabled>false</Enabled></Settings>').DocumentElement
+Confirm-AgentsChatFirstTaskSettings $expected $normalized
+$enabled = ([xml]$settings.Replace('<Enabled>false</Enabled>', '<Enabled>true</Enabled>')).DocumentElement
+$implicitEnabled = ([xml]$normalized.OuterXml.Replace('<Enabled>false</Enabled>', '')).DocumentElement
+Confirm-AgentsChatFirstTaskSettings $enabled $implicitEnabled
+foreach ($invalid in @(
+    $settings.Replace('<Enabled>false</Enabled>', '<Enabled>true</Enabled>'),
+    $settings.Replace('<Enabled>false</Enabled>', ''),
+    $settings.Replace('<Priority>7</Priority>', '<Priority>6</Priority>'),
+    $settings.Replace('</Settings>', '<Enabled>false</Enabled></Settings>'),
+    $settings.Replace('</Settings>', '<Unexpected>true</Unexpected></Settings>')
+)) {
+    $refused = $false
+    try { Confirm-AgentsChatFirstTaskSettings $expected ([xml]$invalid).DocumentElement }
+    catch { $refused = $true }
+    Assert $refused 'First-task settings normalization accepted a changed, missing or duplicate policy field.'
+}
+Write-Output 'PASS: first-task settings normalization admits only native ordering and known omitted defaults.'
+$restartBefore = [xml]'<Settings xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><RestartOnFailure><Interval>PT1M</Interval><Count>3</Count></RestartOnFailure></Settings>'
+$restartAfter = [xml]'<Settings xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><RestartOnFailure xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Count>3</Count><Interval>PT1M</Interval></RestartOnFailure></Settings>'
+Confirm-AgentsChatFirstTaskSettings $restartBefore.DocumentElement $restartAfter.DocumentElement
+foreach ($changed in @(
+    $restartAfter.OuterXml.Replace('<Count>3</Count>', '<Count>4</Count>'),
+    $restartAfter.OuterXml.Replace('PT1M', 'PT2M'),
+    $restartAfter.OuterXml.Replace('<Count>3</Count>', ''),
+    $restartAfter.OuterXml.Replace('</RestartOnFailure>', '<Count>3</Count></RestartOnFailure>')
+)) {
+    $refused = $false
+    try { Confirm-AgentsChatFirstTaskSettings $restartBefore.DocumentElement ([xml]$changed).DocumentElement }
+    catch { $refused = $true }
+    Assert $refused 'First-task restart normalization accepted changed, missing or duplicate policy.'
+}
+Write-Output 'PASS: first-task restart policy preserves exact values across field ordering and namespace placement.'
+$before = [xml]'<Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task" version="1.2"><Actions><Exec><Command>original</Command></Exec></Actions></Task>'
+$after = [xml]'<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Actions xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Exec><Command>original</Command></Exec></Actions></Task>'
+Confirm-AgentsChatFirstTaskXml $before.DocumentElement $after.DocumentElement
+$ordered = [xml]$before.OuterXml.Replace('<Actions>', '<Triggers /><Actions>')
+$reordered = [xml]$after.OuterXml.Replace('</Actions>', '</Actions><Triggers />')
+Confirm-AgentsChatFirstTaskXml $ordered.DocumentElement $reordered.DocumentElement
+foreach ($changed in @(
+    $after.OuterXml.Replace('original', 'changed'),
+    $after.OuterXml.Replace('version="1.2"', 'version="1.3"'),
+    $after.OuterXml.Replace('<Exec>', '<Exec extra="true">'),
+    $after.OuterXml.Replace('<Command>original</Command>', '')
+)) {
+    $refused = $false
+    try { Confirm-AgentsChatFirstTaskXml $before.DocumentElement ([xml]$changed).DocumentElement }
+    catch { $refused = $true }
+    Assert $refused 'First-task XML comparison accepted changed policy content.'
+}
+Write-Output 'PASS: first-task XML comparison preserves all content while ignoring namespace declaration placement.'
+foreach ($kind in @('BootTrigger', 'LogonTrigger')) {
+    $enabled = [xml]"<$kind xmlns=`"http://schemas.microsoft.com/windows/2004/02/mit/task`"><Enabled>true</Enabled></$kind>"
+    $implicit = [xml]"<$kind xmlns=`"http://schemas.microsoft.com/windows/2004/02/mit/task`" />"
+    Confirm-AgentsChatFirstTaskXml $enabled.DocumentElement $implicit.DocumentElement
+    foreach ($pair in @(
+        @{ Before=$enabled.OuterXml.Replace('true', 'false'); After=$implicit.OuterXml },
+        @{ Before=$enabled.OuterXml; After=$enabled.OuterXml.Replace('true', 'false') },
+        @{ Before=$enabled.OuterXml; After=$enabled.OuterXml.Replace('</Enabled>', '</Enabled><Enabled>true</Enabled>') },
+        @{ Before=$enabled.OuterXml.Replace('<Enabled>', '<Enabled extra="true">'); After=$implicit.OuterXml }
+    )) {
+        $refused = $false
+        try { Confirm-AgentsChatFirstTaskXml ([xml]$pair.Before).DocumentElement ([xml]$pair.After).DocumentElement }
+        catch { $refused = $true }
+        Assert $refused 'First-task trigger normalization accepted disabled, duplicate or attributed enabled policy.'
+    }
+}
+Write-Output 'PASS: native trigger normalization admits only an omitted Enabled=true default.'
+$scheduler = New-Object -ComObject 'Schedule.Service'
+$scheduler.Connect()
+$folder = $scheduler.GetFolder('\')
+$sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$pwsh = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+foreach ($logon in @(2, 3)) {
+    $name = "Agents-First-Atomic-Test-$([guid]::NewGuid())"
+    $registered = $false
+    try {
+        $definition = $scheduler.NewTask(0)
+        $definition.RegistrationInfo.Description = 'Inert first-task atomic registration fixture.'
+        $definition.Principal.UserId = $sid
+        $definition.Principal.LogonType = $logon
+        $definition.Principal.RunLevel = 1
+        $definition.Settings.Enabled = $false
+        $definition.Settings.MultipleInstances = 2
+        $definition.Settings.AllowDemandStart = $true
+        $definition.Settings.ExecutionTimeLimit = 'PT0S'
+        $action = $definition.Actions.Create(0)
+        $action.Path = $pwsh
+        $action.Arguments = '-NoProfile -NonInteractive -Command "exit 0"'
+        $action.WorkingDirectory = $PSScriptRoot
+        foreach ($policy in @('enabled', 'trigger', 'restart', 'run-level', 'multiple-instances', 'demand-start', 'extra-action')) {
+            $invalid = $scheduler.NewTask(0)
+            $invalid.XmlText = $definition.XmlText
+            switch ($policy) {
+                'enabled' { $invalid.Settings.Enabled = $true }
+                'trigger' { $null = $invalid.Triggers.Create(9) }
+                'restart' { $invalid.Settings.RestartInterval = 'PT1M'; $invalid.Settings.RestartCount = 1 }
+                'run-level' { $invalid.Principal.RunLevel = 0 }
+                'multiple-instances' { $invalid.Settings.MultipleInstances = 1 }
+                'demand-start' { $invalid.Settings.AllowDemandStart = $false }
+                'extra-action' { $extra = $invalid.Actions.Create(0); $extra.Path = $pwsh }
+            }
+            $refused = $false
+            try {
+                $null = Register-AgentsChatFirstTask -Folder $folder -TaskName $name -Definition $invalid
+                $registered = $true
+            } catch { $refused = $true }
+            Assert $refused "First-task creation must refuse unsupported policy before registration: $policy"
+            $absent = $false
+            try { $null = $folder.GetTask($name) }
+            catch {
+                if ($_.Exception.GetBaseException().HResult -ne -2147024894) { throw }
+                $absent = $true
+            }
+            Assert $absent "Rejected first-task definition was registered: $policy"
+        }
+        $created = Register-AgentsChatFirstTask -Folder $folder -TaskName $name -Definition $definition
+        $registered = $true
+        Assert (-not $created.Enabled -and $created.GetInstances(0).Count -eq 0) 'First task was not created inhibited.'
+        $before = [string]$created.Xml
+        $security = [string]$created.GetSecurityDescriptor(7)
+        $definition.RegistrationInfo.Description = 'Must not replace the registered first task.'
+        $refused = $false
+        try {
+            $null = Register-AgentsChatFirstTask -Folder $folder -TaskName $name.ToUpperInvariant() -Definition $definition
+        } catch {
+            if ($_.Exception.GetBaseException().HResult -ne -2147024713) { throw }
+            $refused = $true
+        }
+        Assert $refused 'Native create-only registration replaced an existing task.'
+        $current = $folder.GetTask($name)
+        Assert ([string]$current.Xml -ceq $before -and [string]$current.GetSecurityDescriptor(7) -ceq $security -and
+            -not $current.Enabled -and $current.GetInstances(0).Count -eq 0) 'Competing registration altered the original task.'
+        Write-Output "PASS: native first-task create-only registration preserves existing definition and security; logon=$logon"
+    } finally {
+        if ($registered) { $folder.DeleteTask($name, 0) }
+    }
+}

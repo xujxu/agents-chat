@@ -1,0 +1,137 @@
+function New-AgentsChatManagedTaskAdmission {
+    param(
+        [hashtable]$Context, [string]$Control, [string]$LockSha256, [string]$StateSha256,
+        [int]$ControllerPid, [string]$ControllerIdentity, [switch]$Inactive, $Handoff
+    )
+    $files = [Collections.Generic.List[IDisposable]]::new()
+    $failure = $proof = $null
+    try {
+        if ($null -ne $Handoff -and -not $Inactive) { throw 'Handoff-aware admission requires an inactive observer.' }
+        $project = $Context.Project
+        if ($Control -cnotmatch '^[A-Za-z]:\\' -or [IO.Path]::GetFullPath($Control) -cne $Control -or
+            $Control -match '[\x00\r\n]' -or $Control.Length -gt 4096 -or
+            $LockSha256 -cnotmatch '^[a-f0-9]{64}$' -or $StateSha256 -cnotmatch '^[a-f0-9]{64}$' -or
+            [string]::Equals($project, $Control, [StringComparison]::OrdinalIgnoreCase) -or
+            $Control.StartsWith($project.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) -or
+            $project.StartsWith($Control.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Admission control must be canonical and external to the managed project.'
+        }
+        $files.Add([Deployment.WindowsPrivateFile]::OpenDirectory($Control))
+        $files.Add([Deployment.WindowsPrivateFile]::OpenDirectory((Join-Path $Control 'lock')))
+        foreach ($entry in @('recovery-lock', 'task-maintenance', 'task-retirement.json',
+            'task-retirement-checkpoint.json', 'worker-retirement.json', 'live-retirement.json',
+            'cold-restore-complete.json')) {
+            if (Test-Path -LiteralPath (Join-Path $Control $entry)) { throw "Existing admission or recovery evidence: $entry." }
+        }
+        $evidence = $false
+        foreach ($entry in [IO.Directory]::EnumerateFileSystemEntries($Control)) {
+            $name = [IO.Path]::GetFileName($entry).ToLowerInvariant()
+            if ($name.StartsWith('inactive-handoff-') -and $name.EndsWith('.json')) {
+                $evidence = $true
+            }
+        }
+        if ($evidence -and $null -eq $Handoff) {
+            throw 'Stopped-history handoff evidence requires its handoff-aware admission.'
+        }
+        if (-not $evidence -and $null -ne $Handoff) {
+            throw 'Handoff-aware admission requires its stopped-history handoff evidence.'
+        }
+        $lockPath = Join-Path $Control 'lock/owner.json'
+        $statePath = Join-Path $Control 'state.json'
+        foreach ($file in @($lockPath, $statePath)) {
+            if ((Get-Item -LiteralPath $file -Force).Length -gt 65536) { throw 'Oversized admission state.' }
+        }
+        $owner = [Deployment.WindowsPrivateFile]::Open($lockPath, $LockSha256)
+        $files.Add($owner)
+        $fields = Read-AgentsChatMaintenanceFields ($owner.ReadText()) @(
+            'version', 'token', 'project', 'operationId', 'pid', 'processIdentity', 'createdAt')
+        $operationId = $fields.operationId.GetString()
+        Assert-AgentsChatCompletionGuid ($fields.token.GetString())
+        Assert-AgentsChatCompletionGuid $operationId
+        if ($fields.version.GetInt32() -ne 1 -or $fields.project.GetString() -cne $project -or
+            $fields.pid.GetInt32() -ne $ControllerPid -or
+            $fields.processIdentity.GetString() -cne $ControllerIdentity -or
+            [Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity) {
+            throw 'Admission requires the actual original live Node lock owner.'
+        }
+        $stateFile = [Deployment.WindowsPrivateFile]::Open($statePath, $StateSha256)
+        $files.Add($stateFile)
+        $runtime = if ($Inactive) { $Context.RetiredRuntime } else { $Context.Runtime }
+        $state = ConvertFrom-AgentsChatTaskTransactionState @{
+            Project=$project; OperationId=$operationId; Generation=$runtime.generation
+            StartedAt=$fields.createdAt.GetString()
+        } ($stateFile.ReadText()) -InactivePreflight:$Inactive
+        $phase = if ($state.operation -ceq 'restore') { 'restore-preflight' } else { 'preflight' }
+        if ($state.phase -cne $phase -or $null -ne $state.previousPhase) {
+            throw 'Admission requires original preflight state.'
+        }
+        if ($Inactive) { $null = Assert-AgentsChatInactiveTask $Context }
+        else { $null = Assert-AgentsChatManagedTask $Context }
+        if ($null -ne $Handoff) {
+            $proof = Open-AgentsChatStoppedHistoryHandoffAdmissionProof $Control $ControllerPid $ControllerIdentity `
+                $LockSha256 $StateSha256 $Handoff
+        }
+        foreach ($file in $files) { $file.Check() }
+        $record = if ($Inactive) { [ordered]@{
+            version=2; kind='inactive'; operationId=$operationId
+            controllerPid=$ControllerPid; controllerIdentity=$ControllerIdentity
+            taskName=$Context.TaskName
+            definition=$(if ($Context.ContainsKey('ProvedDefinition')) { $Context.ProvedDefinition } else { $Context.NativeDefinition })
+            securityDescriptor=$Context.SecurityDescriptor
+            configuration=$Context.Configuration; configurationSha256=$Context.ConfigurationSha256
+            retiredRuntime=[pscustomobject]$runtime
+        } } else { [ordered]@{
+            version=1; operationId=$operationId
+            controllerPid=$ControllerPid; controllerIdentity=$ControllerIdentity
+            taskName=$Context.TaskName; definition=$Context.NativeDefinition
+            securityDescriptor=$Context.SecurityDescriptor
+            configuration=$Context.Configuration; configurationSha256=$Context.ConfigurationSha256
+            readySha256=$Context.Runtime.readySha256; ownerPid=$Context.Runtime.pid
+            ownerIdentity=$Context.Runtime.identity; generation=$Context.Runtime.generation
+            instanceGuid=$Context.Runtime.instanceGuid
+        } }
+        $directory = Join-Path $Control 'task-maintenance'
+        $files.Add([Deployment.WindowsPrivateFile]::CreateDirectory($directory))
+        $path = Join-Path $directory 'admission.json'
+        $published = [Deployment.WindowsPrivateFile]::Publish($path, ($record | ConvertTo-Json -Depth 8 -Compress))
+        $files.Add($published)
+        if ($Inactive) { $null = Assert-AgentsChatInactiveTask $Context }
+        else { $null = Assert-AgentsChatManagedTask $Context }
+        if ($null -ne $proof) {
+            Assert-AgentsChatStoppedHistoryHandoffAdmissionProofRetained $proof $ControllerPid $ControllerIdentity
+        }
+        foreach ($file in $files) { $file.Check() }
+        if ([Deployment.WindowsWorkerJob]::ProcessIdentity($ControllerPid) -cne $ControllerIdentity -or
+            (Test-Path -LiteralPath (Join-Path $Control 'recovery-lock'))) { throw 'Admission ownership changed.' }
+        if ($Inactive) {
+            $Context.AdmissionControl = $Control
+            $Context.AdmissionState = $state
+            $Context.AdmissionSha256 = $published.Sha256
+            $Context.AdmissionControllerPid = $ControllerPid
+            $Context.AdmissionControllerIdentity = $ControllerIdentity
+            foreach ($file in $files) {
+                if (-not [object]::ReferenceEquals($file, $stateFile)) { $Context.Files.Add($file) }
+            }
+            $files.Clear()
+            $files.Add($stateFile)
+        }
+        return [pscustomobject]@{ admission=$path; sha256=$published.Sha256 }
+    } catch {
+        $failure = $_.Exception
+        throw
+    } finally {
+        $failures = [Collections.Generic.List[Exception]]::new()
+        if ($failure) { $failures.Add($failure) }
+        if ($null -ne $proof) {
+            try { Close-AgentsChatTaskCompletionProof $proof }
+            catch { $failures.Add($_.Exception) }
+        }
+        for ($index = $files.Count - 1; $index -ge 0; $index--) {
+            try { $files[$index].Dispose() }
+            catch { $failures.Add($_.Exception) }
+        }
+        if ($failures.Count -gt $(if ($failure) { 1 } else { 0 })) {
+            throw [AggregateException]::new('Admission capture and handle release failed; retain evidence.', $failures)
+        }
+    }
+}

@@ -2,31 +2,47 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 
-const scriptPath = path.resolve(__dirname, '..', 'scripts', 'deploy.ps1');
-const script = fs.readFileSync(scriptPath, 'utf8');
+const scripts = path.resolve(__dirname, '..', 'scripts');
+const read = (file) => fs.readFileSync(path.join(scripts, file), 'utf8');
 
-function includesAll(...needles) {
+function includesAll(script, ...needles) {
   return needles.every((needle) => script.includes(needle));
 }
 
+for (const operation of ['deploy', 'update']) {
+  const script = read(`${operation}.ps1`);
+  assert(
+    includesAll(script, 'deployment/windows-public-command.ps1', `Invoke-WindowsPublicCommand -Operation ${operation}`,
+      '-Options $PSBoundParameters', '$ProjectDir', '$TaskName', '$WaitSeconds', '$Status', '$Json'),
+    `${operation}.ps1 should delegate explicit public options to the shared command boundary`
+  );
+  assert(
+    !/Stop-Process|Stop-Port3000Processes|Unregister-ScheduledTask|Start-ScheduledTask|npm install|npm run build/.test(script),
+    `${operation}.ps1 must not bypass owned deployment with port-wide cleanup, task mutation or direct builds`
+  );
+  assert(
+    !/WatchdogLog|LastWriteTimeUtc|LastRunTime/.test(script),
+    `${operation}.ps1 must not use log timestamps or Scheduler timestamps as readiness authority`
+  );
+}
+
+const command = read('deployment/windows-public-command.ps1');
 assert(
-  includesAll('$ExpectedWatchdogScript', 'Join-Path $PSScriptRoot \'service-watchdog.ps1\'', 'WorkingDirectory'),
-  'deploy.ps1 should validate that the Scheduled Task action points to scripts/service-watchdog.ps1 with the expected working directory'
+  includesAll(command, 'windows-public-context.mjs', 'windows-command-supervisor.ps1',
+    '-PrepareDirectories', '-ReturnOutcome', '$code = $supervised.Code', '$result = $supervised.Result'),
+  'public mutations should use the private supervisor and preserve its original outcome and exit code'
+);
+assert(
+  includesAll(command, "$context.operation -ceq 'status'", 'windows-command-entry.mjs',
+    'DEPLOYMENT_COMMAND_MODE_UNSUPPORTED'),
+  'read-only status and unsupported modes should use the explicit command admission boundary'
 );
 
+const admission = read('deployment/windows-deployment-command.mjs');
 assert(
-  includesAll('$watchdogLogLastWriteBefore', '$watchdogLogUpdated', 'LastWriteTimeUtc'),
-  'deploy.ps1 should require a fresh watchdog log update instead of treating stale logs as proof that the task started'
+  includesAll(admission, 'inspectWindowsManagedTask({ project, taskName, pwsh, signal })',
+    'runWindowsLiveDeployment({', 'scope, control, lock, node, npmCli, git, pwsh'),
+  'the transaction must receive the observed managed-task scope rather than unrelated process or log evidence'
 );
 
-assert(
-  includesAll('Installing npm dependencies', 'npm install --no-audit --no-fund', "throw 'npm install failed'"),
-  'deploy.ps1 should install npm dependencies before restarting the Scheduled Task'
-);
-
-assert(
-  !script.includes('if ((Test-Path $WatchdogLog) -or ($task -and $task.State -eq \'Running\') -or ($taskInfo -and $taskInfo.LastRunTime -ne $lastRunBefore))'),
-  'deploy.ps1 should not treat an existing stale watchdog log or LastRunTime change alone as a successful task start'
-);
-
-console.log('deploy.ps1 scheduled task validation checks passed');
+console.log('public Windows command delegation checks passed; native suites verify task ownership and readiness');

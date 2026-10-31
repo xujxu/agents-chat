@@ -1,14 +1,15 @@
-# Installs Agents-Chat as a Scheduled Task running as the wulei user.
+# Installs Agents-Chat as a Scheduled Task running as the selected user.
 # This uses the service-watchdog.ps1 wrapper, so start.ps1 is restarted if it exits.
 
 param(
     [string]$TaskName = 'Agents-Chat-Startup',
     [string]$ProjectDir = (Split-Path -Parent $PSScriptRoot),
-    [string]$UserId = 'FAREAST\wulei',
+    [string]$UserId = ([Security.Principal.WindowsIdentity]::GetCurrent().Name),
     [ValidateSet('Interactive', 'S4U')]
     [string]$LogonType = 'Interactive',
     [ValidateSet('AtLogOn', 'AtStartup')]
-    [string]$TriggerType = 'AtLogOn'
+    [string]$TriggerType = 'AtLogOn',
+    [switch]$NoTunnel
 )
 
 $ErrorActionPreference = 'Stop'
@@ -31,9 +32,11 @@ if (-not (Test-Path $WatchdogScript)) {
 # Do not let a previous graceful-stop marker prevent the watchdog loop.
 Remove-Item (Join-Path $ProjectDir '.service-stop') -Force -ErrorAction SilentlyContinue
 
+$ActionArguments = "-NoProfile -ExecutionPolicy Bypass -File `"$WatchdogScript`""
+if ($NoTunnel) { $ActionArguments += ' -NoTunnel' }
 $Action = New-ScheduledTaskAction `
     -Execute 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' `
-    -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$WatchdogScript`"" `
+    -Argument $ActionArguments `
     -WorkingDirectory $ProjectDir
 
 $Trigger = if ($TriggerType -eq 'AtStartup') {
@@ -61,7 +64,7 @@ Register-ScheduledTask `
     -Trigger $Trigger `
     -Principal $Principal `
     -Settings $Settings `
-    -Description 'Start Agents-Chat as wulei and watchdog start.ps1.' `
+    -Description 'Start Agents-Chat with the selected account and watchdog start.ps1.' `
     -Force | Out-Null
 
 $Task = Get-ScheduledTask -TaskName $TaskName

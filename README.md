@@ -133,48 +133,130 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-release.ps1
 
 ### Deployment (Windows Scheduled Task)
 
-For persistent deployment on a Windows machine, use `scripts\deploy.ps1` which manages a Scheduled Task that auto-starts the app on login/boot.
+The Windows scripts run the app as a managed Scheduled Task (default name
+`Agents-Chat-Startup`) that starts automatically on logon or boot. Every
+deploy/update takes a backup first, builds, checks readiness on port **3010**,
+and keeps enough state to restore or recover after a failure.
+
+> **Status:** this branch is still in development. Supported today: fresh
+> installs with `-NoTunnel`, updates/rebuilds of an existing running managed
+> task, and restore. Default-tunnel first installs, legacy watchdog/stopped-task
+> adoption and reboot recovery are not supported yet.
+
+**Prerequisites**
+
+- Elevated PowerShell **7.4+**
+- **Node.js 24** (with bundled npm) and Git on `PATH` (restore needs only Node.js)
+- For a first install: a fresh checkout with `.env.local` configured, and no
+  `.data`, `.next`, `node_modules`, registered task or earlier deployment state
+
+**Common tasks**
 
 ```powershell
-# Deploy (pulls latest code, restarts the service, waits for readiness)
-.\scripts\deploy.ps1
+# Help and read-only status
+pwsh -NoProfile -File .\scripts\update.ps1 -Help
+pwsh -NoProfile -File .\scripts\update.ps1 -ProjectDir C:\apps\agents-chat -Status -Json
 
-# Deploy without git pull
-.\scripts\deploy.ps1 -SkipGitPull
+# First deployment (fresh checkout)
+pwsh -NoProfile -File .\scripts\deploy.ps1 -ProjectDir C:\apps\agents-chat -NoTunnel -SkipGitPull -Json
 
-# Deploy with AtStartup trigger (runs even without login)
-.\scripts\deploy.ps1 -TaskTriggerType AtStartup -TaskLogonType S4U
+# Update an existing managed task (no-op if already current)
+pwsh -NoProfile -File .\scripts\update.ps1 -ProjectDir C:\apps\agents-chat -Json
 
-# Remove the scheduled task entirely
-.\scripts\deploy.ps1 -RemoveTask
+# Roll back / pin to a specific commit
+pwsh -NoProfile -File .\scripts\update.ps1 -ProjectDir C:\apps\agents-chat -Revision <full-commit-id>
+
+# Rebuild the current revision
+pwsh -NoProfile -File .\scripts\deploy.ps1 -ProjectDir C:\apps\agents-chat -SkipGitPull
+
+# Restore the retained backup (export newer data first — it will be replaced)
+pwsh -NoProfile -File .\scripts\restore.ps1 -ProjectDir C:\apps\agents-chat -AcceptDataLoss -Json
 ```
 
-The deploy script:
-1. Pulls latest code from git (unless `-SkipGitPull`)
-2. Stops the existing Scheduled Task and cleans up port 3000
-3. Restarts the task so the app rebuilds and serves again
-4. Waits up to 180s for `localhost:3000` to respond
+**`deploy.ps1` / `update.ps1` options**
 
-Logs are written to `logs/service-watchdog.log` and `logs/start-service-child.log`.
+| Option | Description |
+|---|---|
+| `-TaskName` | Scheduled Task name (default `Agents-Chat-Startup`) |
+| `-ProjectDir` | Installed checkout (default: the checkout containing the script) |
+| `-Revision` | Full local commit ID to deploy; cannot be combined with `-SkipGitPull` |
+| `-SkipGitPull` | Deploy the current checkout without fetching |
+| `-NoInstall` | Skip `npm install` (existing installs only) |
+| `-WaitSeconds` | Readiness wait, positive (default 180) |
+| `-TimeoutSeconds` | Per-stage timeout, positive (default 1800) |
+| `-NoTunnel` | First install only, without a tunnel |
+| `-TaskLogonType Interactive\|S4U` | First `-NoTunnel` install only (default `Interactive`) |
+| `-TaskTriggerType AtLogOn\|AtStartup` | First `-NoTunnel` install only (default `AtLogOn`) |
+| `-Status`, `-Json`, `-Help` | Read-only status, JSON output, usage |
+
+`-NoWait`, `-Verify`, `-DryRun`, `-RemoveTask` and `-UserId` are currently
+refused. An existing installation's account, logon mode, triggers and tunnel
+cannot be changed through update/deploy.
+
+`restore.ps1` accepts only `-TaskName`, `-ProjectDir`, `-AcceptDataLoss`,
+`-TimeoutSeconds`, `-Json` and `-Help`. It restores the saved build without
+reinstalling or rebuilding and keeps the backup. Run it from outside the
+installed checkout if that checkout's scripts are missing or damaged.
+
+**Files and recovery**
+
+- `.<project>.deployment` (sibling of the project): backup, state and saved
+  recovery engine. Do not delete it.
+- `.<project>.deployment-controllers`: temporary helper copies, removed after
+  a successful run.
+- A failed or interrupted operation keeps its lock and evidence. Re-run
+  `update.ps1` or `restore.ps1` to resume; **never delete the lock or recovery
+  files to bypass a refusal**.
+- If an earlier update of a stopped task was rolled back, run a plain
+  `update.ps1` to continue (`deploy.ps1` is refused in that state).
+- Inherited `NODE_OPTIONS`/`NODE_PATH` are ignored.
 
 ### Deployment (Linux systemd)
 
-For persistent deployment on Ubuntu/Debian, use `scripts/deploy.sh` — it installs the systemd unit on first run and updates the deployment on subsequent runs.
+The Linux scripts manage `agents-chat.service`. Like Windows, each operation
+backs up first, builds as the checkout owner, checks readiness on port **3010**,
+and keeps one complete backup for restore.
+
+> **Status:** this branch is still in development; don't use it on a live
+> installation yet. `--no-wait`/`--wait 0`, deferred verification and
+> `deploy.sh --dry-run` are refused.
+
+**Prerequisites**
+
+- Root (`sudo`), systemd, **Node.js 24**, `/usr/bin/git`
+- At least 2 GiB free for the build, plus space for the backup
+- For a first install: a clean checkout owned by a non-root, primary-group-only
+  account with a writable npm cache and a private `.env.local`; no existing
+  service, `.data`, `.next`, `node_modules` or deployment state
+
+**Common tasks**
 
 ```bash
-# First time on a machine (installs the unit, builds, enables auto-start, starts)
-sudo ./scripts/deploy.sh
+# Help and read-only status
+sudo ./scripts/deploy.sh --help
+sudo ./scripts/deploy.sh --project-dir /absolute/checkout --status --json
 
-# Subsequent updates: git pull + npm ci + build + restart + health check
-sudo ./scripts/deploy.sh
-sudo ./scripts/deploy.sh --no-pull          # rebuild + restart without git pull
-sudo ./scripts/deploy.sh --no-install       # skip npm ci (no dep changes)
-sudo ./scripts/deploy.sh --wait 0           # don't wait for health check (default 120s)
+# First deployment (fresh checkout)
+sudo ./scripts/deploy.sh --project-dir /absolute/checkout --no-pull
+
+# Preview an update (no changes made)
+sudo ./scripts/update.sh --project-dir /absolute/checkout --dry-run --json
+
+# Update (no-op if already current), or force a redeploy
+sudo ./scripts/update.sh --project-dir /absolute/checkout
+sudo ./scripts/deploy.sh --project-dir /absolute/checkout --no-pull
+
+# Restore the retained backup (export newer data first — it will be replaced)
+sudo ./scripts/restore.sh --project-dir /absolute/checkout --accept-data-loss
 ```
 
-The service runs as whoever invoked the script — `sudo ./scripts/deploy.sh` means everything (git, npm, the Node process) runs as `root`. If you want a different user, run the script directly as that user (you'll still need a separate path to grant systemctl access, e.g. polkit).
+Common flags: `--project-dir`, `--revision <commit>`, `--no-pull`,
+`--no-install` (existing installs only), `--wait SECONDS` (positive),
+`--timeout SECONDS` (per stage, default 1800), `--status`, `--json`, `--help`.
+`update.sh` works on running, inactive or failed services and uses the
+service's installed account, Node/npm and environment, not the caller's.
 
-Manage the service:
+**Manage the service**
 
 ```bash
 sudo systemctl status   agents-chat
@@ -183,21 +265,27 @@ sudo systemctl stop     agents-chat
 sudo journalctl -u agents-chat -f          # live log stream
 ```
 
-Environment variables are loaded from two files (later wins):
+**Configuration notes**
 
-1. **`.env.local`** in the project root — the same file Next.js reads. systemd loads it into the unit's environment so `npm start` sees `PORT`, `LOG_*`, etc. before Node starts.
-2. **`/etc/agents-chat.env`** (optional) — machine-level overrides that take precedence over `.env.local`.
+- Next.js reads `.env.production.local`, `.env.local`, `.env.production`,
+  then `.env`. New units do not load `/etc/agents-chat.env`; existing services
+  keep their `Environment`/`EnvironmentFile` settings.
+- The service must start with `npm start` using an external Node.js (not one
+  inside the project).
+- Readiness is fixed at port 3010; changing `PORT` does not change it.
 
-> systemd's `EnvironmentFile` parser accepts `KEY=value` or `KEY="value"` per line. It does **not** support `export KEY=...`, single quotes, or `${VAR}` interpolation. Keep `.env.local` to plain `KEY=VALUE` lines if you want the unit to read them.
+**Files and recovery**
 
-```bash
-sudo tee /etc/agents-chat.env > /dev/null <<EOF
-PORT=8080
-LOG_LEVEL=debug
-LOG_DIR=/var/log/agents-chat
-EOF
-sudo systemctl restart agents-chat
-```
+- `.<project>.deployment` (sibling of the project) holds the backup, state and
+  recovery engines (`recovery-engine*`). Do not delete it or any `.staging`
+  directories.
+- On failure the lock and evidence are kept; inspect with `--status --json`,
+  then re-run the command or `restore.sh`. Failed results include diagnostic
+  codes.
+- `restore.sh` reports `DEPLOYMENT_BACKUP_MISSING` when there is no backup
+  (for example after a failed first install).
+- A killed controller may leave `/tmp/agents-chat-controller-*`; it contains
+  only code and can be removed.
 
 ### Logging
 

@@ -1,0 +1,227 @@
+# Fresh Restart Owner Publication Implementation Plan
+
+> **For agentic workers:** Execute inline as already selected. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Publish only the exact live restart owner's create-only owner file inside its retained fresh directory, without committed or state authority.
+
+**Architecture:** Continue the existing approved bound-handoff design through a separate twentieth fixture boundary. Retain the same tenth Node and native bridge across preparation, directory creation and owner publication. Keep the earlier normal-directory duplicate refusal and actual incomplete-directory death boundaries unchanged.
+
+**Tech Stack:** PowerShell native retained file/directory handles, Node.js bounded transport, Windows GitHub Actions only.
+
+---
+
+### Task 1: Add a distinct owner-publication fixture
+
+**Files:**
+- Create: `tests/deployment-windows-history-handoff-restart-owner.ps1`
+- Create: `tests/deployment-windows-restart-owner-publication.mjs`
+- Modify: `tests/deployment-windows-history-handoff-committed-observation.ps1`
+- Modify: `tests/deployment-windows-restart-preparation.mjs`
+- Modify: `tests/deployment-windows-lost-runtime-session.mjs`
+- Modify: `tests/deployment-windows-inactive-task.ps1`
+- Create: `tests/deployment-windows-restart-owner-controller.ps1`
+- Modify: `.github/workflows/deployment-lifecycle.yml`
+
+- [ ] Add `restart-owner-history` after the nineteen existing boundaries.
+  Run all its ancestor publication/death/independent-readonly steps exactly
+  as for the normal fresh-directory path. Select
+  `resume-restart-owner-history` only after the ninth six-record observer.
+- [ ] Keep preparation and directory creation in the same live native
+  scope. Continue directory mode skips its duplicate poison only for this
+  new owner continuation; the original eighteenth mode still tests it.
+- [ ] After the actual directory response, emit
+  `INACTIVE_HISTORY_RESTART_DIRECTORY_LIVE` with actual Node/bridge
+  identities, the retained preparation descriptor and native directory
+  identity. Host checks those identities against the earlier live frame,
+  checks the exact empty directory and preparation digest, then sends:
+
+```text
+{"type":"publish-owner"}
+```
+
+- [ ] The native fixture accepts only that exact command, loads
+  `windows-stopped-history-handoff-restart-owner.ps1`, checks refusal
+  without its independent role, then publishes through
+  `Publish-AgentsChatStoppedHistoryHandoffRestartLockOwner`.
+- [ ] Require this exact result shape; each descriptor is the actual
+  pinned five-field `path/dev/ino/bytes/sha256` descriptor:
+
+```javascript
+{
+  status: 'restart-lock-owner',
+  attemptId: record.attemptId,
+  prepared: descriptor,
+  directory: directoryIdentity,
+  owner: ownerDescriptor,
+  runtimeAuthority: false,
+  lockAuthority: false,
+}
+```
+
+- [ ] Compare actual owner bytes to `JSON.stringify(record.newOwner)`,
+  all seven expected owner fields, native descriptor/hash/dev/ino and the
+  exact directory inventory `['owner.json']`. Native duplicate publication
+  must poison and retain the same owner/directory identities and bytes.
+- [ ] Ordinary readers/acquire/release remain refused while this exact
+  owner is actually live. Seven records, original state and completion
+  remain byte/identity-exact. Only fixture cleanup unlinks the verified
+  owner before removing the exact empty directory and seven records.
+- [ ] Keep every native/host command at 45 seconds, bridge exit at 15
+  seconds and each acknowledged host stage at 120 seconds. Owner adds a
+  third explicit stage, not a larger existing response timeout.
+- [ ] Commit/push the fixture with `[skip ci]`, then dispatch:
+
+```bash
+gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+  --ref feat/deployment-backup -f windows_application_only=true \
+  -f windows_live_only=true -f windows_commands_only=true \
+  -f windows_restore_scenario=failed -f windows_history_only=true
+```
+
+Expected valid red: missing native restart-owner module at the twentieth
+boundary, not a protocol timeout or fixture dependency failure.
+
+### Task 2: Publish and retain the exact native owner
+
+**Files:**
+- Create: `scripts/deployment/windows-stopped-history-handoff-restart-owner.ps1`
+- Modify: `scripts/deployment/windows-stopped-history-handoff-restart-lock.ps1`
+
+- [ ] Add the independent `HistoryHandoffRestartOwnerPublisher` role.
+  Derive owner bytes only from the retained seventh preparation's native
+  binding, never from JS JSON or the original retired owner's cache.
+- [ ] `Publish-AgentsChatStoppedHistoryHandoffRestartLockOwner` takes
+  `Context`, `ControllerPid`, `ControllerIdentity`. Require the actual
+  retained watched controller, no prior owner cache and the exact empty
+  pinned fresh directory. Fully observe the settled six-record ancestry,
+  publish `lock\owner.json` with `WindowsPrivateFile.Publish`, retain its
+  native file and descriptor, then fully reobserve ancestry and strict
+  fresh lock binding. Any failure poisons the scope and preserves evidence.
+- [ ] Extend the nonrecursive fresh-lock assertion only when both the
+  explicit owner-publisher role and retained actual owner file/descriptor
+  exist. Re-derive exact live owner bytes through the pinned preparation,
+  compare native file bytes/descriptor, require one lowercase `owner.json`
+  child, and recheck the directory handle. Empty mode still rejects all
+  children. Do not change the original retired lock cache or ordinary
+  maintenance gates.
+- [ ] No fresh committed record, snapshot, state intent, state write,
+  worker start, task mutation, release or dead-owner adoption is introduced.
+- [ ] Push implementation and dispatch focused plus same-SHA Contracts:
+
+```bash
+gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+  --ref feat/deployment-backup -f windows_application_only=true \
+  -f windows_live_only=true -f windows_commands_only=true \
+  -f windows_restore_scenario=failed -f windows_history_only=true
+gh workflow run deployment-lifecycle.yml -R xujxu/agents-chat \
+  --ref feat/deployment-backup -f windows_restore_only=true -f windows_contracts_only=true
+```
+
+- [ ] Match all 39 actual timestamped receipts, including:
+
+```text
+PASS: native restart owner publication pins only its exact fresh live owner while ordinary authority and duplicate publication remain refused
+```
+
+- [ ] Commit accepted evidence. Actual owner-publisher death remains the
+  next independent gate before fresh committed capability.
+
+### Aggregate-budget investigation
+
+At `92fba2725400c0d9e9d5c2ddcce006f96c06a014`, run `40636493388`,
+job `122644553806`, was cancelled by the 90-minute aggregate limit at
+`2026-10-28T06:41:16.3722229Z`. This is not a valid missing-module red.
+The prior normal directory receipt passed at `06:24:37.9444506Z` and
+actual incomplete-directory death passed at `06:33:09.7158996Z`.
+The new owner's ninth six-record observer passed at
+`06:39:32.7463905Z`, before cancellation during the final live fixture.
+No native 45-second response timeout was reported.
+
+- [ ] Split only the cumulative fixture scheduling into two native
+  Windows jobs: `baseline` covers history through original lock
+  settlement; `restart` covers successor preparation through fresh owner
+  publication. Both run their own complete runtime/task setup and every
+  selected boundary's full original ancestor/death chain.
+- [ ] Default direct fixture invocation still selects `all`; reject
+  unknown shard names. Earlier summary receipts are emitted only by the
+  baseline/all selection that actually runs their original boundaries.
+- [ ] Keep aggregate 90-minute and native/actor/exit bounds unchanged.
+  Preserve actual stdout receipt strings from each successful shard in
+  distinct artifacts. A dependent acceptance job requires both artifacts
+  and all 39 original exact receipts; neither shard alone can pass the
+  full acceptance gate.
+- [ ] Push and repeat the same focused dispatch to obtain valid owner
+  module red without repeating all twenty boundaries serially in one job.
+
+### Directory response investigation
+
+At `c379ae3c1ba3d2bb2c5d55619b6e6e58506e0c31`, run `40645799730`,
+baseline job `122674197094` passed. Restart job `122674197323` failed
+at `2026-10-28T07:35:44.6592170Z`, before the new owner boundary.
+The retained phase history now identifies `restart-directory-publication`:
+bootstrap began at `07:33:55.557Z`, preparation at `07:34:25.034Z`,
+and the directory request at `07:34:59.589Z`. Its 45-second receive
+expired with empty native stderr. This is not valid owner-module red.
+
+- [ ] Keep the production directory publisher completely unchanged,
+  including both full ancestor observations and continuous execution.
+  Add `tests/deployment-windows-restart-directory-progress.ps1`, a
+  function-local fixture facade over the original native ancestor getter.
+  It invokes the original getter with unchanged arguments and returns its
+  unchanged result, emitting a bounded frame only after that full native
+  observation succeeds. The facade disappears when its local scope exits.
+- [ ] Require exactly two frames, in `before` then `after` order, binding
+  native PID/start identity, control, controller and the complete original
+  six-record readonly observation. Compare both values against the actual
+  bootstrap observation; no frame grants directory or continuation authority.
+  No timer heartbeat, retry, extra mutation or consumer-controlled pause is
+  introduced. Missing, extra, malformed or out-of-order frames fail.
+- [ ] Give each of these explicit proof responses the existing 45-second
+  receive bound, then require the original final directory result. Keep
+  the host's 120-second whole-directory stage and 15-second bridge exit
+  bounds unchanged. If one full observation itself exceeds 45 seconds,
+  the new phase error must expose that instead of accepting it.
+- [ ] Repeat focused Actions and establish valid owner-module red before
+  any new production implementation.
+
+### Valid red and implementation
+
+At `e0d764e68b3534ccbf6f5cdfc696ff441990fab2`, run `40651612669`,
+baseline job `122692758098` passed. Restart job `122692757770`
+reached the twentieth actual live owner publication and failed at
+`2026-10-28T08:40:04.4774882Z` because
+`windows-stopped-history-handoff-restart-owner.ps1` did not exist.
+Both shard logs together match exactly the 38 previous required actual
+timestamped receipts; only the new owner receipt is missing.
+
+The normal directory receipt passed at `08:25:05.3708826Z` and actual
+incomplete-directory death at `08:32:49.2096298Z`. The twentieth directory
+proof's two successful observations took about 16.5 and 20 seconds, each
+within 45 seconds. The owner command was accepted at `08:40:04.342Z`
+and the missing-module refusal followed immediately, not a timeout.
+
+Implement the native owner publisher and strict owner-aware fresh-directory
+assertion. Rename the fixture-only progress helper to
+`tests/deployment-windows-restart-publication-progress.ps1` and share its
+two fixed observation frames between directory and owner publication.
+Their Node verifier is shared in
+`tests/deployment-windows-restart-publication-progress.mjs`.
+Owner invokes two full production ancestor observations too; require both
+actual readonly values in order with the same 45-second per-proof,
+120-second overall host-stage and 15-second bridge-exit limits.
+No production callbacks, proof elision or timing heartbeat are added.
+
+### Accepted evidence
+
+At `92a4df9f3dfc3b946d3342cd416c3ba63b59d512`, focused run
+`40658977858` passed both native shards: baseline job `122716942113`
+and restart job `122716942342`. Dependent all-boundaries acceptance job
+`122748580377` passed. Independently comparing the two raw native logs
+against that SHA's workflow matched all 39 actual timestamped receipts;
+the new owner receipt was emitted at `2026-10-28T09:58:02.5710240Z`.
+Same-SHA Windows Contracts run `40658981936`, job `122716954451`, passed.
+
+Exact live owner publication, strict independent-role refusal, duplicate
+preservation/poison and unchanged ordinary authority/state gates are
+accepted. Actual owner-publisher death, fresh committed capability,
+state continuity and public repeat lifecycle remain separate gates.
