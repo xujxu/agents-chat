@@ -40,7 +40,7 @@ function Invoke-Script($name, [int]$expect, [hashtable]$rest = @{}) {
 
 Step 'fixtures: Node 24 as the machine default'
 $nodeDir = Split-Path (Get-Command node).Source
-robocopy $nodeDir 'C:\Program Files\nodejs' /E /NFL /NDL /NJH /NJS /NP | Out-Null
+robocopy $nodeDir 'C:\Program Files\nodejs' /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) { Fail 'copying Node.js failed' }
 
 Step 'fixtures: bare origin and test commits'

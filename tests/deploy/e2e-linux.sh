@@ -105,8 +105,10 @@ for _ in $(seq 1 600); do
   sleep 0.5
 done
 [[ "$(state 's.pending && s.pending.step')" == health ]] || { cat "$T/crash.log"; fail "update never reached the health step"; }
-kill -9 "$pid"
+core=$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1])).pid' "$ROOT/deploy.lock")
+kill -9 "$core"
 wait "$pid" || true
+while kill -0 "$core" 2>/dev/null; do sleep 0.2; done
 
 step "7. re-run recovers; -NoWait marks the release unverified"
 d update --revision "$V3" --no-install --wait 0
