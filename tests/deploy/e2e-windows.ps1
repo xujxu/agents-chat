@@ -73,6 +73,8 @@ if ($t.Triggers[0].CimClass.CimClassName -ne 'MSFT_TaskBootTrigger') { Fail 'tri
 if ($t.Actions[0].Arguments -notmatch '-Tunnel None') { Fail "tunnel mode not kept: $($t.Actions[0].Arguments)" }
 if ($t.Actions[0].WorkingDirectory -ne "$Root\current") { Fail "task not re-pointed: $($t.Actions[0].WorkingDirectory)" }
 if (-not (Get-ChildItem "$Root\backups\migration-*\$Task.xml")) { Fail 'old task not backed up' }
+node "$Src\tests\deploy\check-release-links.mjs" "$Root\current" "$Root\shared"
+if ($LASTEXITCODE -ne 0) { Fail 'release links into the build folder' }
 
 Step '2. upgrade (reusing dependencies)'
 Invoke-Script update 0 @{ Revision = $C.V2; NoInstall = $true }

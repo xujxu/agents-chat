@@ -84,6 +84,7 @@ marker has "$ROOT/shared/.data/chats.db" m1 || fail "marker m1 missing after mig
 grep -q "^User=root" /etc/systemd/system/agents-chat.service || fail "unit User not kept"
 grep -q "^WorkingDirectory=$ROOT/current" /etc/systemd/system/agents-chat.service || fail "unit not re-pointed"
 ls "$ROOT"/backups/migration-*/agents-chat.service >/dev/null || fail "old unit not backed up"
+node tests/deploy/check-release-links.mjs "$ROOT/current" "$ROOT/shared" || fail "release links into the build folder"
 
 step "2. upgrade (reusing dependencies)"
 d update --revision "$V2" --no-install
