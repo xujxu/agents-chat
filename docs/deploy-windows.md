@@ -138,12 +138,17 @@ See [Agents](../README.md#agents) for other agents.
 
 ## 7. Optional: reach the app from other devices (Dev Tunnel)
 
+A [Dev Tunnel](https://learn.microsoft.com/azure/developer/dev-tunnels/overview)
+gives the app a fixed public `https://` address. Run these in a **normal**
+(not elevated) PowerShell, as the same Windows user the task runs as:
+
 ```powershell
 winget install --id Microsoft.devtunnel -e
-devtunnel user login
-devtunnel create agents-chat --allow-anonymous
+# Close and reopen PowerShell so devtunnel is on PATH
+devtunnel user login                              # sign in with a Microsoft or GitHub account
+devtunnel create agents-chat --allow-anonymous    # anyone with the URL reaches the sign-in page
 devtunnel port create agents-chat -p 3000
-devtunnel show agents-chat          # note the URL ending in -3000.<region>.devtunnels.ms
+devtunnel show agents-chat                        # copy the URL ending in -3000.<region>.devtunnels.ms
 ```
 
 Add both values to `C:\agents-chat\shared\.env.local`:
@@ -153,15 +158,30 @@ DEV_TUNNEL_NAME=agents-chat
 DEV_TUNNEL_URL=https://<id>-3000.<region>.devtunnels.ms
 ```
 
-Then switch the task to Dev Tunnel mode (elevated PowerShell):
+In tunnel mode the app replaces `NEXTAUTH_URL` in that file with `DEV_TUNNEL_URL`,
+so sign in through the tunnel URL from then on (also on this PC). If you use
+GitHub sign-in, change the OAuth app's callback URL to
+`https://<id>-3000.<region>.devtunnels.ms/api/auth/callback/github`
+(see [Optional: sign in with GitHub](#optional-sign-in-with-github)).
+
+Switch the task to tunnel mode and restart (elevated PowerShell):
 
 ```powershell
 C:\agents-chat\current\scripts\install-scheduled-task.ps1 -Tunnel DevTunnel -Port 3000
+Stop-ScheduledTask -TaskName Agents-Chat-Startup
+Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue |
+  Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force }
 Start-ScheduledTask -TaskName Agents-Chat-Startup
 ```
 
-In tunnel mode `start.ps1` sets `NEXTAUTH_URL` to the tunnel URL, so sign in
-through that URL.
+Check after about 30 seconds:
+
+```powershell
+Invoke-RestMethod https://<id>-3000.<region>.devtunnels.ms/api/health
+```
+
+Updates keep tunnel mode. To turn the tunnel off again, run the same commands with
+`-Tunnel None` and set `NEXTAUTH_URL=http://localhost:3000` in `.env.local`.
 
 ## 8. Day-to-day commands
 
@@ -225,6 +245,7 @@ Start-ScheduledTask -TaskName Agents-Chat-Startup
 |---|---|
 | `...deploy.ps1 cannot be loaded because running scripts is disabled` | Run `Set-ExecutionPolicy -Scope Process Bypass -Force` in that window first. |
 | `Preflight failed: Run elevated` | Open PowerShell with *Run as administrator*. |
+| Tunnel URL does not respond | Check `C:\agents-chat\shared\logs\start-service-child.log`. Run `devtunnel user show` as the task user; if signed out, run `devtunnel user login` again. Unused tunnels expire after 30 days: recreate it with the steps above. |
 | GitHub says *The redirect_uri is not associated with this application* | The OAuth app's callback URL does not match `NEXTAUTH_URL`; see [Optional: sign in with GitHub](#optional-sign-in-with-github). |
 | `Preflight failed: .env.local not found` | Create `C:\agents-chat\shared\.env.local` (step 3). |
 | `Preflight failed: A service/task with this name already exists` | An older Agents-Chat task exists. Migrate it with `-ImportFrom <old checkout>` instead, or remove it with `Unregister-ScheduledTask Agents-Chat-Startup`. |

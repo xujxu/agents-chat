@@ -64,7 +64,8 @@ if ($NoTunnel) {
     $DevTunnelName = $null
     $DevTunnelUrl = $null
 } else {
-    $AppId = Get-RequiredEnvValue -Values $DotEnv -Name "AZURE_AD_CLIENT_ID"
+    # Only Cloudflare mode updates the Entra app redirect URIs.
+    $AppId = if ($Cloudflare) { Get-RequiredEnvValue -Values $DotEnv -Name "AZURE_AD_CLIENT_ID" } else { $null }
     $DevTunnelName = Get-RequiredEnvValue -Values $DotEnv -Name "DEV_TUNNEL_NAME"
     $DevTunnelUrl = Get-RequiredEnvValue -Values $DotEnv -Name "DEV_TUNNEL_URL"
 }
