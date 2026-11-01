@@ -11,7 +11,7 @@ import {
 } from './state.mjs';
 import {
   SHARED_DIRS, SHARED_FILES, acquireLock, copyDir, dirBytes, ensureShared, exists, freeBytes, git,
-  hasCommand, inlineOutsideLinks, inspectLock, isWin, linkShared, listDirs, log, npm, readJson, readLink, removeLink,
+  hasCommand, inlineOutsideLinks, inspectLock, isWin, linkShared, listDirs, log, npm, readJson, readLink, removeLink, rename,
   replaceContents, replaceLink, run, sha256File, waitHealthy, waitPortFree, writeJson,
 } from './fsops.mjs';
 import { createLinuxService } from './service-linux.mjs';
@@ -189,7 +189,7 @@ function stage(sha) {
   fs.writeFileSync(path.join(dir, 'node-path.txt'), process.execPath);
   linkShared(dir, P.shared);
   fixOwner(dir);
-  fs.renameSync(dir, path.join(P.releases, id));
+  rename(dir, path.join(P.releases, id));
   log(`Staged release ${id}`);
   return id;
 }

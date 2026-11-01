@@ -84,8 +84,17 @@ or update forward to a fixed commit instead.
 
 ## Change settings without updating
 
-After editing `C:\agents-chat\shared\.env.local`, restart the app with a health
-check:
+After editing `C:\agents-chat\shared\.env.local`, restart the app. Quick restart
+(elevated PowerShell):
+
+```powershell
+Stop-ScheduledTask -TaskName Agents-Chat-Startup
+Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue |
+  Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force }
+Start-ScheduledTask -TaskName Agents-Chat-Startup
+```
+
+Or rebuild the running commit and restart it with a health check (slower):
 
 ```powershell
 .\scripts\deploy.ps1 -SkipGitPull -NoInstall

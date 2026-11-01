@@ -24,7 +24,19 @@ export function readJson(file, fallback) {
 export function writeJson(file, value) {
   const tmp = `${file}.tmp`;
   fs.writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`);
-  fs.renameSync(tmp, file);
+  rename(tmp, file);
+}
+
+// Windows may briefly lock new files (antivirus, indexer); retry for about a minute.
+export function rename(from, to) {
+  for (let delay = 100; ; delay *= 2) {
+    try {
+      return fs.renameSync(from, to);
+    } catch (err) {
+      if (!isWin || !['EPERM', 'EACCES', 'EBUSY'].includes(err.code) || delay > 30000) throw err;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delay);
+    }
+  }
 }
 
 export function exists(p) {
