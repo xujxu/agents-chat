@@ -37,7 +37,7 @@ Remove-Item (Join-Path $ProjectDir '.service-stop') -Force -ErrorAction Silently
 
 $Action = New-ScheduledTaskAction `
     -Execute 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' `
-    -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$WatchdogScript`" -Tunnel $Tunnel -Port $Port" `
+    -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$WatchdogScript`" -Tunnel $Tunnel -Port $Port" `
     -WorkingDirectory $ProjectDir
 
 $Trigger = if ($TriggerType -eq 'AtStartup') {

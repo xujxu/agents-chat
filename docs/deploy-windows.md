@@ -180,6 +180,28 @@ only keeps the deploy scripts themselves current. If an update fails its health
 check, the previous version and its chat data are put back automatically. See
 [Updating on Windows](update-windows.md) for all update and rollback options.
 
+## Optional: sign in with GitHub
+
+1. Open <https://github.com/settings/developers> → **OAuth Apps** → **New OAuth App**.
+2. Set **Homepage URL** to your `NEXTAUTH_URL` (for example `http://localhost:3000`) and
+   **Authorization callback URL** to `NEXTAUTH_URL` followed by
+   `/api/auth/callback/github` (for example `http://localhost:3000/api/auth/callback/github`).
+   Scheme, host and port must match `NEXTAUTH_URL` exactly.
+3. Register the app, then **Generate a new client secret**.
+4. Add these lines to `.env.local` (step 3) and restart the app:
+
+   ```
+   GITHUB_CLIENT_ID=<client id>
+   GITHUB_CLIENT_SECRET=<client secret>
+   GITHUB_ALLOWED_EMAILS=you@example.com
+   ```
+
+   To restart, see [Change settings without updating](update-windows.md#change-settings-without-updating).
+
+A GitHub OAuth app has a single callback URL. If you change `NEXTAUTH_URL` (for
+example to a tunnel or HTTPS address), update the callback URL as well, or create
+a separate OAuth app for each address.
+
 ## Run without signing in (optional)
 
 By default the app runs only while you are signed in to Windows. To run it from
@@ -203,6 +225,7 @@ Start-ScheduledTask -TaskName Agents-Chat-Startup
 |---|---|
 | `...deploy.ps1 cannot be loaded because running scripts is disabled` | Run `Set-ExecutionPolicy -Scope Process Bypass -Force` in that window first. |
 | `Preflight failed: Run elevated` | Open PowerShell with *Run as administrator*. |
+| GitHub says *The redirect_uri is not associated with this application* | The OAuth app's callback URL does not match `NEXTAUTH_URL`; see [Optional: sign in with GitHub](#optional-sign-in-with-github). |
 | `Preflight failed: .env.local not found` | Create `C:\agents-chat\shared\.env.local` (step 3). |
 | `Preflight failed: A service/task with this name already exists` | An older Agents-Chat task exists. Migrate it with `-ImportFrom <old checkout>` instead, or remove it with `Unregister-ScheduledTask Agents-Chat-Startup`. |
 | `Health check ... did not pass` | Read `C:\agents-chat\shared\logs\service-watchdog.log` and `start-service-child*.log`. A missing `NEXTAUTH_SECRET` or a port already in use (`Get-NetTCPConnection -LocalPort 3000`) are common causes. |

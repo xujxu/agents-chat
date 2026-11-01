@@ -178,10 +178,33 @@ sudo journalctl -u agents-chat -f                                  # follow the 
 
 See [Updating on Linux](update-linux.md) for all update and rollback options.
 
+## Optional: sign in with GitHub
+
+1. Open <https://github.com/settings/developers> → **OAuth Apps** → **New OAuth App**.
+2. Set **Homepage URL** to your `NEXTAUTH_URL` (for example `http://localhost:3010`) and
+   **Authorization callback URL** to `NEXTAUTH_URL` followed by
+   `/api/auth/callback/github` (for example `http://localhost:3010/api/auth/callback/github`).
+   Scheme, host and port must match `NEXTAUTH_URL` exactly.
+3. Register the app, then **Generate a new client secret**.
+4. Add these lines to `.env.local` (step 3) and restart the app:
+
+   ```
+   GITHUB_CLIENT_ID=<client id>
+   GITHUB_CLIENT_SECRET=<client secret>
+   GITHUB_ALLOWED_EMAILS=you@example.com
+   ```
+
+   To restart, run `sudo systemctl restart agents-chat`.
+
+A GitHub OAuth app has a single callback URL. If you change `NEXTAUTH_URL` (for
+example to a tunnel or HTTPS address), update the callback URL as well, or create
+a separate OAuth app for each address.
+
 ## Troubleshooting
 
 | Symptom | What to do |
 |---|---|
+| GitHub says *The redirect_uri is not associated with this application* | The OAuth app's callback URL does not match `NEXTAUTH_URL`; see [Optional: sign in with GitHub](#optional-sign-in-with-github). |
 | `Run with sudo` | Prefix the command with `sudo`. |
 | `Node.js 24 not found on PATH` | Install Node.js system-wide (step 1), or check `sudo node -v`. |
 | `Preflight failed: .env.local not found` | Create `/opt/agents-chat/shared/.env.local` (step 3). |
