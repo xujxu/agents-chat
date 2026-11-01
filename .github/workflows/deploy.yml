@@ -2,14 +2,18 @@ name: Deploy scripts
 
 on:
   push:
-    branches: [feat/simple-deploy]
-  pull_request:
-    paths:
+    branches: [main]
+    paths: &deploy-paths
       - 'scripts/**'
       - 'tests/deploy/**'
       - 'app/api/health/**'
       - 'middleware.ts'
+      - 'next.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/deploy.yml'
+  pull_request:
+    paths: *deploy-paths
   workflow_dispatch:
 
 concurrency:
