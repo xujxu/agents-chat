@@ -54,6 +54,26 @@ export function removeLink(p) {
   }
 }
 
+// Replace links that point outside `dir` with copies, so a release never uses
+// files in the build folder (on Windows, Next.js links packages via absolute junctions).
+export function inlineOutsideLinks(dir) {
+  const root = fs.realpathSync(dir);
+  const inside = (p) => p === root || p.startsWith(root + path.sep);
+  (function walk(d) {
+    for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, entry.name);
+      if (entry.isSymbolicLink()) {
+        const target = fs.realpathSync(p);
+        if (inside(target)) continue;
+        removeLink(p);
+        fs.cpSync(target, p, { recursive: true, dereference: true });
+      } else if (entry.isDirectory()) {
+        walk(p);
+      }
+    }
+  })(dir);
+}
+
 export function replaceLink(linkPath, target) {
   target = path.resolve(target);
   if (isWin) {

@@ -11,7 +11,7 @@ import {
 } from './state.mjs';
 import {
   SHARED_DIRS, SHARED_FILES, acquireLock, copyDir, dirBytes, ensureShared, exists, freeBytes, git,
-  hasCommand, inspectLock, isWin, linkShared, listDirs, log, npm, readJson, readLink, removeLink,
+  hasCommand, inlineOutsideLinks, inspectLock, isWin, linkShared, listDirs, log, npm, readJson, readLink, removeLink,
   replaceContents, replaceLink, run, sha256File, waitHealthy, waitPortFree, writeJson,
 } from './fsops.mjs';
 import { createLinuxService } from './service-linux.mjs';
@@ -176,6 +176,7 @@ function stage(sha) {
   const from = (p) => path.join(P.repo, p);
   removeRelease(dir);
   fs.cpSync(from('.next/standalone'), dir, { recursive: true, verbatimSymlinks: true });
+  inlineOutsideLinks(dir);
   for (const p of ['.next/static', 'public', 'scripts', 'setup-files']) {
     if (exists(from(p))) fs.cpSync(from(p), path.join(dir, p), { recursive: true });
   }
