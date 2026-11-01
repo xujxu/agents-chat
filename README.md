@@ -121,6 +121,8 @@ Exit codes: `0` succeeded, `1` failed (the previous version is running), `2` inv
 
 #### Windows (Scheduled Task)
 
+New to this? Follow the step-by-step guide: [First-time deployment on Windows 11](docs/deploy-windows.md).
+
 Run from an elevated PowerShell in a checkout of this repo. `-ProjectDir` can also be set with `$env:AGENTS_CHAT_PROJECT_DIR`.
 
 ```powershell
