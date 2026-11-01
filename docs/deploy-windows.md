@@ -19,23 +19,26 @@ The examples use these folders; you can choose others:
 
 ## 1. Install the prerequisites
 
-Open **PowerShell** (normal, not elevated) and install Git and Node.js 24:
+Open **PowerShell** (normal, not elevated) and install Git:
 
 ```powershell
 winget install --id Git.Git -e
-winget install --id OpenJS.NodeJS.LTS -e
 ```
+
+Install **Node.js 24** (the version the project is tested with): open
+<https://nodejs.org/dist/latest-v24.x/>, download `node-v24.*-x64.msi` and run it
+with the default options. It installs for all users in `C:\Program Files\nodejs`,
+which the background task uses. Do not use `winget install OpenJS.NodeJS.LTS`:
+that now installs Node.js 26, which the project does not support yet. If you
+already have another version, uninstall it first (`winget uninstall OpenJS.NodeJS.LTS`
+or **Settings → Apps**).
 
 Close and reopen PowerShell so the new `PATH` is picked up, then check the versions:
 
 ```powershell
 git --version
-node -v        # must be v24.x or newer
+node -v        # must be v24.x
 ```
-
-If `node -v` shows an older version, install Node.js 24 from <https://nodejs.org>
-instead (the Windows Installer `.msi`). Node.js must be installed for all users in
-`C:\Program Files\nodejs` (the default), because the background task uses that folder.
 
 You also need about 2 GB of free disk space on the drive that holds `C:\agents-chat`.
 

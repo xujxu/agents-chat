@@ -180,6 +180,7 @@ export function acquireLock(root) {
 
 const childEnv = () => ({
   ...process.env,
+  NEXT_TELEMETRY_DISABLED: '1',
   PATH: `${path.dirname(process.execPath)}${path.delimiter}${process.env.PATH ?? ''}`,
 });
 

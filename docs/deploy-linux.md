@@ -28,7 +28,7 @@ sudo apt-get update
 sudo apt-get install -y git curl ca-certificates
 curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt-get install -y nodejs
-node -v        # must be v24.x or newer
+node -v        # must be v24.x
 ```
 
 A Node.js installed with nvm, fnm or volta also works if the service runs as
