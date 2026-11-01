@@ -166,14 +166,16 @@ Run from `C:\src\agents-chat` in an elevated PowerShell (after
 `Set-ExecutionPolicy -Scope Process Bypass -Force`):
 
 ```powershell
+git pull                                                         # get the latest deploy scripts
 .\scripts\update.ps1  -ProjectDir C:\agents-chat               # build and switch to the latest main
 .\scripts\update.ps1  -ProjectDir C:\agents-chat -DryRun       # show what an update would do
 .\scripts\restore.ps1 -ProjectDir C:\agents-chat -AcceptDataLoss   # go back to the previous version and its data
 ```
 
-You do not need to `git pull` in `C:\src\agents-chat`; the scripts fetch into
-`C:\agents-chat\repo` themselves. If an update fails its health check, the
-previous version and its chat data are put back automatically.
+The app code is fetched into `C:\agents-chat\repo` by the scripts; `git pull`
+only keeps the deploy scripts themselves current. If an update fails its health
+check, the previous version and its chat data are put back automatically. See
+[Updating on Windows](update-windows.md) for all update and rollback options.
 
 ## Run without signing in (optional)
 

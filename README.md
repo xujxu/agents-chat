@@ -121,7 +121,7 @@ Exit codes: `0` succeeded, `1` failed (the previous version is running), `2` inv
 
 #### Windows (Scheduled Task)
 
-New to this? Follow the step-by-step guide: [First-time deployment on Windows 11](docs/deploy-windows.md).
+Step-by-step guides: [First-time deployment on Windows 11](docs/deploy-windows.md) · [Updating on Windows](docs/update-windows.md).
 
 Run from an elevated PowerShell in a checkout of this repo. `-ProjectDir` can also be set with `$env:AGENTS_CHAT_PROJECT_DIR`.
 
@@ -166,6 +166,8 @@ Run from an elevated PowerShell in a checkout of this repo. `-ProjectDir` can al
 With `-ImportFrom`, the task keeps its account, logon type, trigger and tunnel mode. The task runs `current\scripts\service-watchdog.ps1`, which runs `start.ps1 -NoBuild`. Logs are in `shared\logs\` (`service-watchdog.log`, `start-service-child*.log`, `server*.log`).
 
 #### Linux (systemd)
+
+Step-by-step guides: [First-time deployment on Linux](docs/deploy-linux.md) · [Updating on Linux](docs/update-linux.md).
 
 The same commands with kebab-case flags; `--project-dir` can also come from `AGENTS_CHAT_PROJECT_DIR`.
 
