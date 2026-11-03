@@ -35,7 +35,7 @@ assert(
 );
 
 assert(
-  includesAll('$AppPort = 3000', 'next start --port $AppPort'),
+  includesAll('[int]$Port = 3000', '$AppPort = $Port', 'next start --port $AppPort'),
   'start.ps1 should start Next.js on the same port it health-checks and exposes through the dev tunnel'
 );
 

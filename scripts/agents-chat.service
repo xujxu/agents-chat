@@ -1,3 +1,4 @@
+# Template rendered by scripts/deploy.sh (scripts/deploy/service-linux.mjs).
 [Unit]
 Description=Agents-Chat (Next.js multi-agent chat UI)
 Documentation=https://github.com/huanyingtianhe/agents-chat
@@ -8,22 +9,18 @@ Wants=network-online.target
 Type=simple
 User=__USER__
 Group=__GROUP__
-WorkingDirectory=__PROJECT_DIR__
+WorkingDirectory=__ROOT__/current
+Environment=PORT=__PORT__
+Environment=HOSTNAME=0.0.0.0
 
-# Load project env (KEY=VALUE per line). Leading '-' = file is optional.
-# Next.js also auto-loads .env.local at runtime; this line makes the same
-# values available to systemd / Node before the process starts.
-EnvironmentFile=-__PROJECT_DIR__/.env.local
-
+# Project env (KEY=VALUE per line). Leading '-' = file is optional.
+EnvironmentFile=-__ROOT__/shared/.env.local
 # Optional machine-level overrides (takes precedence over .env.local)
 EnvironmentFile=-/etc/agents-chat.env
 
 Environment=NODE_ENV=production
-Environment=PATH=__NODE_BIN_DIR__:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-
-# Absolute path required — systemd's PATH doesn't include nvm.
-# If npm lives elsewhere, override with: sudo systemctl edit agents-chat
-ExecStart=__NPM__ start
+# Runs server.js with the Node.js binary the release was built with.
+ExecStart=/bin/sh __ROOT__/current/scripts/run-release.sh
 
 Restart=on-failure
 RestartSec=10

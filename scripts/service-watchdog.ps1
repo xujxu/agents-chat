@@ -1,5 +1,11 @@
 # Agents-Chat Windows Service Watchdog
-# Runs under Windows Service Control Manager and keeps start.ps1 alive.
+# Runs from the Scheduled Task and keeps start.ps1 alive.
+# In a deployed release (server.js present) start.ps1 runs with -NoBuild.
+param(
+    [ValidateSet('DevTunnel', 'Cloudflare', 'None')]
+    [string]$Tunnel = 'DevTunnel',
+    [int]$Port = 3000
+)
 
 $ErrorActionPreference = 'Continue'
 
@@ -19,17 +25,17 @@ function Write-ServiceLog {
     "[$timestamp] $Message" | Tee-Object -FilePath $LogFile -Append
 }
 
-function Stop-Port3000Processes {
+function Stop-PortProcesses {
     try {
-        $oldPids = Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue |
+        $oldPids = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue |
             Select-Object -ExpandProperty OwningProcess -Unique |
             Where-Object { $_ -and $_ -ne 0 }
         foreach ($p in $oldPids) {
-            Write-ServiceLog "Stopping leftover process on port 3000: PID $p"
+            Write-ServiceLog "Stopping leftover process on port $Port`: PID $p"
             Stop-Process -Id $p -Force -ErrorAction SilentlyContinue
         }
     } catch {
-        Write-ServiceLog "Failed to inspect/stop port 3000 processes: $($_.Exception.Message)"
+        Write-ServiceLog "Failed to inspect/stop port $Port processes: $($_.Exception.Message)"
     }
 }
 
@@ -49,7 +55,7 @@ Write-ServiceLog 'Agents-Chat service watchdog starting...'
 Write-ServiceLog "User: $([Security.Principal.WindowsIdentity]::GetCurrent().Name)"
 Write-ServiceLog "ProjectDir: $ProjectDir"
 
-$env:PATH = "C:\Program Files\nodejs;C:\Users\wulei\AppData\Local\Microsoft\WinGet\Links;$env:PATH"
+$env:PATH = "C:\Program Files\nodejs;$env:LOCALAPPDATA\Microsoft\WinGet\Links;$env:PATH"
 $env:AGENTS_CHAT_SERVICE = '1'
 
 $restartDelay = $RestartDelaySeconds
@@ -67,13 +73,15 @@ while (-not (Test-Path $StopFile)) {
         continue
     }
 
-    Stop-Port3000Processes
+    Stop-PortProcesses
     Set-Location $ProjectDir
     Write-ServiceLog 'Launching start.ps1...'
 
     $childLog = Join-Path $LogDir 'start-service-child.log'
     $childErr = Join-Path $LogDir 'start-service-child.err.log'
-    $args = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $StartScript)
+    $args = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $StartScript, '-Port', $Port)
+    if (Test-Path (Join-Path $ProjectDir 'server.js')) { $args += '-NoBuild' }
+    if ($Tunnel -eq 'None') { $args += '-NoTunnel' } elseif ($Tunnel -eq 'Cloudflare') { $args += '-Cloudflare' }
     $proc = Start-Process -FilePath 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' `
         -ArgumentList $args `
         -WorkingDirectory $ProjectDir `
