@@ -168,10 +168,7 @@ Switch the task to tunnel mode and restart (elevated PowerShell):
 
 ```powershell
 C:\agents-chat\current\scripts\install-scheduled-task.ps1 -Tunnel DevTunnel -Port 3000
-Stop-ScheduledTask -TaskName Agents-Chat-Startup
-Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue |
-  Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force }
-Start-ScheduledTask -TaskName Agents-Chat-Startup
+C:\agents-chat\current\scripts\restart.ps1
 ```
 
 Check after about 30 seconds:
@@ -193,6 +190,7 @@ git pull                                                         # get the lates
 .\scripts\update.ps1  -ProjectDir C:\agents-chat               # build and switch to the latest main
 .\scripts\update.ps1  -ProjectDir C:\agents-chat -DryRun       # show what an update would do
 .\scripts\restore.ps1 -ProjectDir C:\agents-chat -AcceptDataLoss   # go back to the previous version and its data
+C:\agents-chat\current\scripts\restart.ps1                      # restart after editing shared\.env.local
 ```
 
 The app code is fetched into `C:\agents-chat\repo` by the scripts; `git pull`

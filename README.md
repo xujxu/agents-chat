@@ -145,6 +145,9 @@ Run from an elevated PowerShell in a checkout of this repo. `-ProjectDir` can al
 .\scripts\restore.ps1 -ProjectDir C:\agents-chat -AcceptDataLoss
 .\scripts\restore.ps1 -ProjectDir C:\agents-chat -Revision <sha> -AcceptDataLoss
 
+# Restart after editing shared\.env.local (Linux: sudo systemctl restart agents-chat)
+C:\agents-chat\current\scripts\restart.ps1
+
 # Rebuild the current commit, or remove the Scheduled Task (data and releases are kept)
 .\scripts\deploy.ps1 -ProjectDir C:\agents-chat -SkipGitPull
 .\scripts\deploy.ps1 -ProjectDir C:\agents-chat -RemoveTask
@@ -191,6 +194,7 @@ Environment variables are loaded from `shared/.env.local` and then `/etc/agents-
 
 ```bash
 sudo systemctl status agents-chat
+sudo systemctl restart agents-chat   # after editing shared/.env.local
 sudo journalctl -u agents-chat -f
 ```
 

@@ -84,15 +84,19 @@ or update forward to a fixed commit instead.
 
 ## Change settings without updating
 
-After editing `C:\agents-chat\shared\.env.local`, restart the app. Quick restart
-(elevated PowerShell):
+After editing `C:\agents-chat\shared\.env.local`, restart the app (elevated
+PowerShell):
 
 ```powershell
-Stop-ScheduledTask -TaskName Agents-Chat-Startup
-Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue |
-  Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force }
-Start-ScheduledTask -TaskName Agents-Chat-Startup
+C:\agents-chat\current\scripts\restart.ps1
 ```
+
+It stops the Scheduled Task and everything it started (watchdog, app and
+tunnel), starts it again, and waits up to 60 seconds for `/api/health`. The
+exit code is 0 when the app is healthy, 1 when it is not healthy yet (check
+`shared\logs\service-watchdog.log`), and 2 when the shell is not elevated or
+the task is missing. Use `-WaitSeconds 0` to skip the wait and `-TaskName` for
+a non-default task name.
 
 Or rebuild the running commit and restart it with a health check (slower):
 
