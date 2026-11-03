@@ -37,7 +37,7 @@ expectIncludes('Attached file(s):\\n${summary}', 'prompt text should include an 
 expectIncludes("if (!parsed || parsedMimeType !== mimeType || !isAllowedAttachmentMimeType(mimeType))", 'unsupported attachment MIME types should be rejected', attachmentSource);
 expectIncludes('attachments = normalizePromptAttachments(body?.attachments)', 'send action should read body.attachments', routeSource);
 expectIncludes('if (!text && attachments.length === 0)', 'attachment-only sends should be allowed while empty sends are rejected', routeSource);
-expectIncludes('sendPrompt(proc, sess, agentId, text, isAdmin, userId, chatHistory, chatId, messageId, attachments, requestedModelId)', 'sendPrompt should receive normalized attachments and requested model ID', routeSource);
+expectIncludes('sendPrompt(proc, sess, agentId, text, isAdmin, userId, chatHistory, chatId, messageId, attachments, requestedModelId, messageTs)', 'sendPrompt should receive normalized attachments and requested model ID', routeSource);
 expectIncludes('prompt: promptParts', 'initial session/prompt should use buildPromptParts output', routeSource);
 expectIncludes('prompt: buildPromptParts(retryText, attachments)', 'retry session/prompt should use buildPromptParts output', routeSource);
 

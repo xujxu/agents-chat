@@ -128,6 +128,10 @@ export function createAcpHandlers(ctx: AcpServiceContext) {
     const sendBody: Record<string, unknown> = {
       action: 'send', agentId, text: content, chatId: sendChatId, messageId: pendingId,
     };
+    const pendingMessage = (ctx.chatMessagesRef.current[sendChatId]
+      || (sendChatId === ctx.currentChatIdRef.current ? ctx.messagesRef.current : []))
+      .find((m) => m.id === pendingId);
+    if (pendingMessage?.ts) sendBody.messageTs = pendingMessage.ts;
     sendBody.modelId = ctx.getSelectedModelIdForAgent(agentId);
     if (promptAttachments.length > 0) sendBody.attachments = promptAttachments;
     if (ctx.needsContextRestoreRef.current) {

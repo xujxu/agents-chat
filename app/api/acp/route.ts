@@ -837,7 +837,7 @@ async function persistTurnSnapshot(turn: TurnState): Promise<void> {
     type: 'agent' as const,
     content,
     agentId: turn.agentId,
-    ts: turn.startedAt,
+    ts: turn.messageTs,
     pending: !turn.done,
     statusText: turn.done ? undefined : turn.statusText,
     ptyPhase: turn.done ? undefined : turn.phase,
@@ -894,8 +894,9 @@ function scheduleTurnRelease(sess: UserSession, turnChatKey: string, turn: TurnS
   }, 30_000);
 }
 
-function sendPrompt(proc: AgentProcess, sess: UserSession, agentId: string, prompt: string, isAdmin: boolean, userId: string, chatHistory?: { type: string; content: string; agentId?: string }[], chatId?: string, messageId?: string, attachments: PromptAttachment[] = [], requestedModelId?: string): TurnState {
+function sendPrompt(proc: AgentProcess, sess: UserSession, agentId: string, prompt: string, isAdmin: boolean, userId: string, chatHistory?: { type: string; content: string; agentId?: string }[], chatId?: string, messageId?: string, attachments: PromptAttachment[] = [], requestedModelId?: string, messageTs?: number): TurnState {
   const turnId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const startedAt = Date.now();
   const turn: TurnState = {
     id: turnId,
     messageId: messageId || `pending-${turnId}`,
@@ -904,7 +905,8 @@ function sendPrompt(proc: AgentProcess, sess: UserSession, agentId: string, prom
     chatId,
     sessionId: sess.sessionId ?? undefined,
     prompt,
-    startedAt: Date.now(),
+    startedAt,
+    messageTs: messageTs ?? startedAt,
     fullText: '',
     done: false,
     phase: 'thinking',
@@ -2136,6 +2138,11 @@ export async function POST(req: NextRequest) {
       let chatHistory = Array.isArray(body?.chatHistory) ? body.chatHistory as { type: string; content: string; agentId?: string }[] : undefined;
       const chatId = body?.chatId as string | undefined;
       const messageId = typeof body?.messageId === 'string' ? body.messageId : undefined;
+      // The client stamps the user prompt and the pending reply with its own clock; reuse it so a
+      // skewed server clock cannot sort the reply above its prompt.
+      const messageTs = typeof body?.messageTs === 'number' && Number.isFinite(body.messageTs) && body.messageTs > 0
+        ? body.messageTs
+        : undefined;
 
       if (!proc.ready) {
         if (!proc.booting) {
@@ -2211,7 +2218,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      const turn = sendPrompt(proc, sess, agentId, text, isAdmin, userId, chatHistory, chatId, messageId, attachments, requestedModelId);
+      const turn = sendPrompt(proc, sess, agentId, text, isAdmin, userId, chatHistory, chatId, messageId, attachments, requestedModelId, messageTs);
       return NextResponse.json({ ok: true, phase: sess.phase, sessionId: sess.sessionId, turn: serializeTurn(turn) });
     }
 
