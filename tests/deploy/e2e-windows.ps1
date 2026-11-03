@@ -94,6 +94,22 @@ Wait-Version $C.BASE
 if ((Marker has "$Root\shared\.data\chats.db" m1) -ne 0) { Fail 'marker m1 missing after restore' }
 if ((Marker has "$Root\shared\.data\chats.db" m2) -eq 0) { Fail 'marker m2 should be gone after restore' }
 
+Step '6. restart.ps1 replaces the watchdog and the app comes back'
+function Watchdogs {
+    @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" |
+        Where-Object { $_.CommandLine -match 'service-watchdog\.ps1' } |
+        ForEach-Object { $_.ProcessId })
+}
+$before = Watchdogs
+if (-not $before) { Fail 'no watchdog running before restart' }
+& "$Src\scripts\restart.ps1" -WaitSeconds 180
+if ($LASTEXITCODE -ne 0) { Fail "restart.ps1 exited $LASTEXITCODE" }
+Wait-Version $C.BASE 60
+$after = Watchdogs
+if (-not $after) { Fail 'no watchdog running after restart' }
+if ($after | Where-Object { $before -contains $_ }) { Fail "old watchdog still running: $before / $after" }
+if ((Get-ScheduledTask -TaskName $Task).State -eq 'Disabled') { Fail 'task left disabled' }
+
 Step '8. -RemoveTask keeps data'
 Invoke-Script deploy 0 @{ RemoveTask = $true }
 if (Get-ScheduledTask -TaskName $Task -ErrorAction SilentlyContinue) { Fail 'task still registered' }
