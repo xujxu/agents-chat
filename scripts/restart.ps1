@@ -24,19 +24,22 @@ $watchdog = if ($taskArgs -match '-File\s+"([^"]+)"') { $Matches[1] } else { $nu
 
 Write-Host "Stopping $TaskName (port $port)..."
 Disable-ScheduledTask -TaskName $TaskName | Out-Null
-if ($watchdog) {
-    $needle = $watchdog.ToLower()
-    Get-CimInstance Win32_Process -Filter "Name='powershell.exe' OR Name='pwsh.exe'" |
-        Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.ToLower().Contains($needle) } |
-        ForEach-Object { cmd.exe /c "taskkill /T /F /PID $($_.ProcessId) >nul 2>&1" }
+try {
+    if ($watchdog) {
+        $needle = $watchdog.ToLower()
+        Get-CimInstance Win32_Process -Filter "Name='powershell.exe' OR Name='pwsh.exe'" |
+            Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.ToLower().Contains($needle) } |
+            ForEach-Object { cmd.exe /c "taskkill /T /F /PID $($_.ProcessId) >nul 2>&1" }
+    }
+    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
+        Select-Object -ExpandProperty OwningProcess -Unique | Where-Object { $_ } |
+        ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
+} finally {
+    # Never leave the service disabled, even if stopping failed.
+    Write-Host "Starting $TaskName..."
+    Enable-ScheduledTask -TaskName $TaskName | Out-Null
 }
-Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
-    Select-Object -ExpandProperty OwningProcess -Unique | Where-Object { $_ } |
-    ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
-
-Write-Host "Starting $TaskName..."
-Enable-ScheduledTask -TaskName $TaskName | Out-Null
 Start-ScheduledTask -TaskName $TaskName
 
 if ($WaitSeconds -le 0) {
