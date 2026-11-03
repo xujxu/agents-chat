@@ -62,6 +62,8 @@ export type TurnState = {
   sessionId?: string;
   prompt: string;
   startedAt: number;
+  /** Sort timestamp for the persisted agent message, taken from the client clock so it orders after the user's prompt. */
+  messageTs: number;
   fullText: string;
   done: boolean;
   phase: TurnPhase;
