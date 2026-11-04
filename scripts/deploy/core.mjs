@@ -318,7 +318,7 @@ async function install() {
   const url = o.repo ?? git(['-C', SOURCE_ROOT, 'remote', 'get-url', 'origin']);
   ensureShared(P.shared);
   state.service = {
-    name: svc.name, port: port(), user: o.user ?? 'root',
+    name: svc.name, port: port(), user: isWin ? null : (o.user ?? 'root'),
     userId: o.user ?? null, logonType: o['logon-type'], triggerType: o['trigger-type'], tunnel: o.tunnel,
   };
   cloneRepo(url);
@@ -346,7 +346,7 @@ async function importFrom() {
   state.service = {
     name: svc.name,
     port: Number(o.port ?? settings.port ?? (isWin ? 3000 : 3010)),
-    user: settings.user ?? 'root',
+    user: isWin ? null : (settings.user ?? 'root'),
     userId: settings.userId ?? null,
     logonType: settings.logonType,
     triggerType: settings.triggerType,
@@ -432,8 +432,20 @@ function status() {
     lastResult: state.lastResult,
     releases: listDirs(P.releases),
     backups: listDirs(P.backups),
-    service: { ...state.service, exists: svc.exists() },
+    service: serviceStatus(),
   };
+}
+
+// On Windows `user` is a Linux-only field, and the task account comes from the task itself
+// (state.userId stays null when the installer defaulted to the account that ran it).
+function serviceStatus() {
+  const exists = svc.exists();
+  const service = { ...state.service, exists };
+  if (isWin) {
+    delete service.user;
+    if (exists) service.userId = svc.settings().userId ?? service.userId ?? null;
+  }
+  return service;
 }
 
 function dryRun(op, errors) {
