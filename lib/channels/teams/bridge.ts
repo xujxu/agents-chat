@@ -20,9 +20,9 @@ import {
 
 const logger = createLogger('teams-bot');
 
-const POLL_INTERVAL_MS = 1000;
+const POLL_INTERVAL_MS = 500;
 const MAX_TURN_MS = 2 * 60 * 60_000;
-const MAX_POLL_FAILURES = 15;
+const MAX_POLL_FAILURES = 30;
 const IDENTITY_TTL_MS = 60 * 60_000;
 const SESSION_TOKEN_TTL_S = 60 * 60;
 
@@ -262,14 +262,16 @@ async function runTurn(config: TeamsConfig, ref: ConversationRef, user: TeamsUse
     const agentMessageId = `teams-${randomUUID()}`;
     await appendMessageToChat(user.email, chat, { id: `teams-user-${randomUUID()}`, type: 'user', content: prompt, ts: userTs });
 
+    // Show progress right away: `send` can take several seconds while a cold agent process starts.
+    const streamer = new TeamsStreamer(config, ref);
+    const indicator = streamer.informative('Thinking…');
     const sent = await acp(config, user, { action: 'send', chatId: chat.id, text: prompt, messageId: agentMessageId, messageTs: userTs + 1 });
+    await indicator;
     if (!sent.data?.ok) {
-      await sendText(config, ref, describeSendError(config, sent));
+      await streamer.finish(describeSendError(config, sent));
       return;
     }
 
-    const streamer = new TeamsStreamer(config, ref);
-    await streamer.informative('Thinking…');
     await pollTurn(config, ref, user, state, chat.id, agentMessageId, streamer);
   } finally {
     state.running = false;

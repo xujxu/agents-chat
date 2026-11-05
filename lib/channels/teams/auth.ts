@@ -20,48 +20,37 @@ function getJwks(url: string): RemoteJwks {
   return jwks;
 }
 
-function entraIssuerTenant(issuer: string): string | null {
-  const match = /^https:\/\/(?:sts\.windows\.net\/([0-9a-f-]{36})\/|login\.microsoftonline\.com\/([0-9a-f-]{36})\/v2\.0)$/i.exec(issuer);
-  return match ? (match[1] || match[2]).toLowerCase() : null;
-}
-
 /**
- * Validate the Bearer token Bot Framework attaches to inbound activities.
- * Throws on any failure. Mirrors the checks done by the Microsoft 365 Agents SDK.
+ * Validate the bearer token the Bot Connector service attaches to inbound Teams activities.
+ * Throws on any failure.
+ *
+ * Only Bot Framework-issued tokens are accepted. Entra ID tokens are deliberately rejected: any app in a
+ * tenant can obtain an app-only Entra token whose audience is this bot, so they would not prove the
+ * request came from the Bot Connector service.
  */
 export async function verifyInboundToken(authHeader: string | null, config: TeamsConfig, activityServiceUrl: string | undefined): Promise<JWTPayload> {
   const match = /^Bearer\s+(.+)$/i.exec(authHeader || '');
   if (!match) throw new Error('missing_bearer_token');
   const token = match[1].trim();
 
-  const unverified = decodeJwt(token);
-  const issuer = typeof unverified.iss === 'string' ? unverified.iss : '';
-  let jwksUrl: string;
-  if (issuer === BOT_FRAMEWORK_ISSUER) {
-    jwksUrl = BOT_FRAMEWORK_JWKS;
-  } else {
-    const tenant = entraIssuerTenant(issuer);
-    const allowedTenants = new Set([config.tenantId.toLowerCase(), config.authTenant.toLowerCase()]);
-    if (!tenant || !allowedTenants.has(tenant)) throw new Error('untrusted_issuer');
-    jwksUrl = `https://login.microsoftonline.com/${tenant}/discovery/v2.0/keys`;
-  }
-
-  const { payload } = await jwtVerify(token, getJwks(jwksUrl), {
-    issuer,
+  const { payload } = await jwtVerify(token, getJwks(BOT_FRAMEWORK_JWKS), {
+    issuer: BOT_FRAMEWORK_ISSUER,
     audience: config.appId,
     algorithms: ['RS256'],
     clockTolerance: 300,
   });
 
+  // The serviceurl claim binds the token to the service URL the bot token will be sent to.
   const claimServiceUrl = (payload as Record<string, unknown>).serviceurl;
-  if (typeof claimServiceUrl === 'string' && activityServiceUrl
-    && claimServiceUrl.replace(/\/+$/, '').toLowerCase() !== activityServiceUrl.replace(/\/+$/, '').toLowerCase()) {
+  if (typeof claimServiceUrl !== 'string' || !activityServiceUrl
+    || claimServiceUrl.replace(/\/+$/, '').toLowerCase() !== activityServiceUrl.replace(/\/+$/, '').toLowerCase()) {
     throw new Error('service_url_mismatch');
   }
   return payload;
 }
 
-let cachedToken: { value: string; expiresAt: number; key: string } | null = null;
+/** `refreshAt`: time to fetch a new token; `expiresAt`: last moment the cached token may still be used. */
+let cachedToken: { value: string; refreshAt: number; expiresAt: number; key: string } | null = null;
 let pendingToken: Promise<string> | null = null;
 
 type TokenResult = { value: string; expiresAt: number };
@@ -130,21 +119,28 @@ export async function getBotAccessToken(config: TeamsConfig): Promise<string> {
   const key = config.tokenVault
     ? `kv|${config.tokenVault}|${config.tokenSecretName}|${config.appId}`
     : `${config.authTenant}|${config.appId}`;
-  if (cachedToken && cachedToken.key === key && cachedToken.expiresAt > Date.now()) return cachedToken.value;
-  if (pendingToken) return pendingToken;
+  const now = Date.now();
+  const cached = cachedToken && cachedToken.key === key ? cachedToken : null;
+  if (cached && cached.refreshAt > now) return cached.value;
+  if (cached && cached.expiresAt > now) {
+    // Still valid: refresh in the background so replies never wait on Key Vault / Entra.
+    refreshBotToken(config, key).catch(() => undefined);
+    return cached.value;
+  }
+  return refreshBotToken(config, key);
+}
 
+function refreshBotToken(config: TeamsConfig, key: string): Promise<string> {
+  if (pendingToken) return pendingToken;
   pendingToken = (async () => {
     const token = config.tokenVault ? await fetchTokenFromKeyVault(config) : await fetchTokenWithSecret(config);
+    const expiresAt = token.expiresAt - 5 * 60_000;
     // Re-read Key Vault every 10 minutes so rotated tokens are picked up well before expiry.
-    const refreshAt = config.tokenVault
-      ? Math.min(token.expiresAt - 5 * 60_000, Date.now() + 10 * 60_000)
-      : token.expiresAt - 5 * 60_000;
-    cachedToken = { value: token.value, key, expiresAt: Math.max(Date.now() + 30_000, refreshAt) };
+    const refreshAt = config.tokenVault ? Math.min(expiresAt, Date.now() + 10 * 60_000) : expiresAt - 5 * 60_000;
+    cachedToken = { value: token.value, key, refreshAt: Math.max(Date.now() + 30_000, refreshAt), expiresAt: Math.max(Date.now() + 30_000, expiresAt) };
     return token.value;
-  })();
-  try {
-    return await pendingToken;
-  } finally {
+  })().finally(() => {
     pendingToken = null;
-  }
+  });
+  return pendingToken;
 }

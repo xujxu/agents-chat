@@ -225,6 +225,32 @@ Files written under `$LOG_DIR`:
 
 On Linux, stdout/stderr are also captured by journald (`journalctl -u agents-chat`).
 
+## Third-party app integration
+
+### Microsoft Teams bot
+
+Step-by-step guide: [Microsoft Teams bot setup](docs/teams-bot.md).
+
+Expose one agent as a Teams bot. Users chat with it 1:1 in Teams, and replies stream back as the
+agent writes them. Each Teams user is mapped to their agents-chat account by email, so agent access
+and chat history match the web UI, where the conversations also appear.
+
+```mermaid
+flowchart LR
+  user([Teams user]) --> teams[Microsoft Teams] --> bfs[Bot Connector service]
+  bfs -->|"POST /api/teams/messages (signed JWT)"| bridge
+  subgraph host[agents-chat server]
+    bridge[Teams bridge] -->|"loopback /api/acp as the mapped user"| agent[[Agent]]
+  end
+  bridge -->|"streamed replies (bot token)"| bfs
+  kv[(Key Vault token<br/>optional)] -.-> bridge
+```
+
+The setup needs a public HTTPS messaging endpoint (reverse proxy or dev tunnel), a bot registered
+in the Teams Developer Portal, and a few `TEAMS_*` variables. The bot credential can be a client
+secret or, where the tenant blocks secrets, a Bot Framework token kept in Key Vault by a
+managed-identity job. The feature is off until it is configured.
+
 ## Features
 
 - **Multi-agent chat** — Talk to one ACP agent or mention multiple agents in one message.
@@ -253,6 +279,7 @@ On Linux, stdout/stderr are also captured by journald (`journalctl -u agents-cha
 - **Shared chats** — Generate a read-only share link for any conversation, with Open Graph image optimized for Teams previews.
 - **Mobile responsive** — Full-featured UI on phones and tablets with swipeable panels and touch-friendly controls. On mobile, the sidebar collapse button closes the navigation drawer; the header navigation button reopens the full Chats/Files tabs without changing the saved desktop collapse preference.
 - **Authentication** — Azure AD SSO, **GitHub OAuth**, or local credentials login; admin/user roles.
+- **Microsoft Teams bot** — Chat with a chosen agent from Teams 1:1 chats with streamed replies ([setup](docs/teams-bot.md)).
 
 ## Using the app
 
@@ -340,6 +367,7 @@ cp .env.example .env.local
 | `RELAY_SUBSCRIPTION_ID` | Optional | Azure subscription ID used by node setup ZIPs and relay node auto-discovery |
 | `RELAY_RESOURCE_GROUP` | Optional | Azure resource group used by node setup ZIPs and relay node auto-discovery |
 | `RELAY_NAMESPACE` | Optional | Azure Relay namespace name |
+| `TEAMS_*` | Optional | Microsoft Teams bot settings (`TEAMS_BOT_APP_ID`, `TEAMS_TENANT_ID`, `TEAMS_AGENT_ID`, and a credential). See [docs/teams-bot.md](docs/teams-bot.md#4-configure-agents-chat) |
 
 ### Agents
 
