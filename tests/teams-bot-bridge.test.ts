@@ -52,7 +52,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
 
 const config = {
   appId: 'bot-app', appSecret: 'test-secret', tokenVault: '', tokenSecretName: 'teams-bot-token',
-  tenantId: TENANT, authTenant: TENANT, agentId: 'teams', allowedUsers: [] as string[], internalBaseUrl: 'http://127.0.0.1:9',
+  tenantId: TENANT, authTenant: TENANT, agentId: 'teams', allowedUsers: ['alice@contoso.com', 'bob@contoso.com'], internalBaseUrl: 'http://127.0.0.1:9',
 };
 
 let seq = 0;
@@ -140,6 +140,19 @@ async function main() {
       assert.equal(r.acp.length, 0, from);
       assert.match(r.posts[0].text, /only members of this organization/, from);
     }
+
+    // Only users in TEAMS_ALLOWED_USERS may talk to the bot, in 1:1 and group chats.
+    r = await run(activity('29:carol', '<at>agent-xujx</at> hi', [botMention]));
+    assert.equal(r.acp.length, 0, 'carol (group)');
+    assert.match(r.posts[0].text, /carol@contoso\.com is not allowed to use this bot/);
+    r = await run(activity('29:carol', 'hi', [], 'personal', 'personal-carol'));
+    assert.equal(r.acp.length, 0, 'carol (1:1)');
+    assert.match(r.posts[0].text, /not allowed to use this bot/);
+
+    // Deny by default: an empty allow-list refuses everyone, including previously allowed users.
+    r = await (async () => { const start = calls.length; await handleActivity(activity('29:alice', 'hi', [], 'personal', 'personal-1'), { ...config, allowedUsers: [] }); return since(start); })();
+    assert.equal(r.acp.length, 0, 'empty allow-list');
+    assert.match(r.posts[0].text, /alice@contoso\.com is not allowed to use this bot/);
 
     // Team channels: silent unless mentioned, then a short notice.
     r = await run(activity('29:alice', 'hi', [], 'channel', 'channel-1'));

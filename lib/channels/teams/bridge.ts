@@ -154,8 +154,12 @@ async function handleMessage(activity: TeamsActivity, config: TeamsConfig, conve
     await sendText(config, ref, '⚠️ I could not determine your email address, so I cannot map you to an agents-chat account.');
     return;
   }
-  if (config.allowedUsers.length > 0 && !config.allowedUsers.includes(user.email)) {
-    logger.warn({ email: user.email }, 'Teams user is not in TEAMS_ALLOWED_USERS');
+  // Deny by default: an empty TEAMS_ALLOWED_USERS lets nobody in.
+  if (!config.allowedUsers.includes(user.email)) {
+    logger.warn(
+      { email: user.email },
+      config.allowedUsers.length ? 'Teams user is not in TEAMS_ALLOWED_USERS' : 'TEAMS_ALLOWED_USERS is empty; refusing all Teams users',
+    );
     await sendText(config, ref, `Sorry, ${user.email} is not allowed to use this bot.`);
     return;
   }

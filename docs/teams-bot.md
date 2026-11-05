@@ -124,12 +124,13 @@ Add these to `.env.local` (`shared/.env.local` for script deployments), then res
 | `TEAMS_BOT_TOKEN_SECRET` | no | Option B: secret name. Defaults to `teams-bot-token` |
 | `TEAMS_TENANT_ID` | yes | Tenant whose users may use the bot |
 | `TEAMS_AGENT_ID` | yes | Agent id that answers Teams messages |
-| `TEAMS_ALLOWED_USERS` | no | Comma-separated emails/UPNs allowed to use the bot. Empty means any user in the tenant |
+| `TEAMS_ALLOWED_USERS` | yes | Comma-separated emails/UPNs allowed to use the bot. Empty means **nobody**: everyone is refused |
 | `TEAMS_BOT_AUTH_TENANT` | no | Token tenant for option A. Defaults to `TEAMS_TENANT_ID`; use `botframework.com` for multi-tenant bots |
 | `TEAMS_INTERNAL_BASE_URL` | no | Loopback URL of this app. Defaults to `http://127.0.0.1:$PORT` (3000) |
 
 The feature stays off, and the endpoint returns `404`, until the app id, tenant, agent, and one
-credential are set. `NEXTAUTH_SECRET` must also be set, as it is for the web UI.
+credential are set. `NEXTAUTH_SECRET` must also be set, as it is for the web UI. Until
+`TEAMS_ALLOWED_USERS` lists at least one email, the bot replies "not allowed to use this bot" to everyone.
 
 Check the endpoint: an unsigned request must be rejected with `401`.
 
@@ -263,7 +264,8 @@ lasts about 24 hours, so a few failed runs cause no outage.
   allow-list, never to an arbitrary `serviceUrl`.
 - **User identity** comes from a server-to-server roster lookup, not from message content. The bridge
   acts with that user's normal agents-chat permissions; `ADMIN_EMAILS` decides the admin role exactly
-  as in the web UI. Set `TEAMS_ALLOWED_USERS` to limit who can use the bot.
+  as in the web UI. Access is deny-by-default: only emails listed in `TEAMS_ALLOWED_USERS` can use
+  the bot, in 1:1 and group chats; everyone else, including other members of a group chat, is refused.
 - **Session.** The bridge mints a short-lived (1 hour) NextAuth session token in memory and uses it
   only on the loopback call to `/api/acp`. It is never sent to Teams or written to disk.
 - **Credentials.** Option B stores no credential on the server or in Azure. Key Vault holds only the
@@ -295,7 +297,7 @@ Bot Connector with 250 ms round trips.
 | Logs show `bot_token_keyvault_failed: 403` | The service account lacks *Key Vault Secrets User* on the secret |
 | Logs show `bot_token_keyvault_expired` | The token job is failing. Run `az containerapp job execution list -g <rg> -n agent-bot-token -o table` |
 | "Could not determine your email address" | The Teams account has no email/UPN in the roster, for example a guest |
-| "not allowed to use this bot" | The user is not in `TEAMS_ALLOWED_USERS` |
+| "not allowed to use this bot" | The user is not in `TEAMS_ALLOWED_USERS`, or it is empty. Add the email shown in the message and restart |
 | "agent is not configured" / "do not have access" | Check `TEAMS_AGENT_ID` and the agent's sharing settings |
 
 ## Limitations
