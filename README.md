@@ -231,8 +231,8 @@ On Linux, stdout/stderr are also captured by journald (`journalctl -u agents-cha
 
 Step-by-step guide: [Microsoft Teams bot setup](docs/teams-bot.md).
 
-Expose one agent as a Teams bot. Users chat with it 1:1 in Teams, and replies stream back as the
-agent writes them. Each Teams user is mapped to their agents-chat account by email, so agent access
+Expose one agent as a Teams bot. Users chat with it 1:1 in Teams or @mention it in a group chat
+(it ignores all other group messages), and replies stream back as the agent writes them. Each Teams user is mapped to their agents-chat account by email, so agent access
 and chat history match the web UI, where the conversations also appear.
 
 ```mermaid
@@ -279,7 +279,7 @@ managed-identity job. The feature is off until it is configured.
 - **Shared chats** — Generate a read-only share link for any conversation, with Open Graph image optimized for Teams previews.
 - **Mobile responsive** — Full-featured UI on phones and tablets with swipeable panels and touch-friendly controls. On mobile, the sidebar collapse button closes the navigation drawer; the header navigation button reopens the full Chats/Files tabs without changing the saved desktop collapse preference.
 - **Authentication** — Azure AD SSO, **GitHub OAuth**, or local credentials login; admin/user roles.
-- **Microsoft Teams bot** — Chat with a chosen agent from Teams 1:1 chats with streamed replies ([setup](docs/teams-bot.md)).
+- **Microsoft Teams bot** — Chat with a chosen agent from Teams 1:1 chats, or @mention it in group chats, with streamed replies ([setup](docs/teams-bot.md)).
 
 ## Using the app
 

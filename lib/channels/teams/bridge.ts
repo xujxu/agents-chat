@@ -13,8 +13,10 @@ import {
   conversationSettingKey,
   formatUserRequest,
   isAllowedServiceUrl,
+  isBotMentioned,
   newTeamsChatId,
   parseCommand,
+  type TeamsEntity,
   type UserRequestLike,
 } from './util';
 
@@ -38,6 +40,7 @@ export type TeamsActivity = {
   channelData?: { tenant?: { id?: string } };
   membersAdded?: { id?: string }[];
   attachments?: { contentType?: string }[];
+  entities?: TeamsEntity[];
 };
 
 type TeamsUser = { email: string; name: string; aadObjectId: string };
@@ -69,6 +72,13 @@ const HELP_TEXT = [
   '- `/help` – show this help',
   '',
   'Anything else is sent to the agent. Conversations also appear in the agents-chat web UI.',
+].join('\n');
+
+const GROUP_HELP_TEXT = [
+  'In this group chat I only respond when you **@mention** me, and everyone here sees my replies.',
+  'Each person gets their own agents-chat conversation and uses their own access.',
+  '',
+  HELP_TEXT,
 ].join('\n');
 
 /** Returns false if this activity id was already seen (Bot Framework may redeliver). */
@@ -104,8 +114,11 @@ export async function handleActivity(activity: TeamsActivity, config: TeamsConfi
 
   if (activity.type === 'conversationUpdate') {
     const botAdded = activity.membersAdded?.some((m) => m.id === activity.recipient?.id);
-    if (botAdded && activity.conversation?.conversationType === 'personal') {
+    const conversationType = activity.conversation?.conversationType;
+    if (botAdded && conversationType === 'personal') {
       await sendText(config, { ...ref, replyToId: undefined }, `Hi! I connect you to the **${config.agentId}** agent in agents-chat.\n\n${HELP_TEXT}`);
+    } else if (botAdded && conversationType === 'groupChat') {
+      await sendText(config, { ...ref, replyToId: undefined }, `Hi! I connect you to the **${config.agentId}** agent in agents-chat. @mention me with your question.\n\n${GROUP_HELP_TEXT}`);
     }
     return;
   }
@@ -119,13 +132,24 @@ export async function handleActivity(activity: TeamsActivity, config: TeamsConfi
   }
 }
 
-async function handleMessage(activity: TeamsActivity, config: TeamsConfig, ref: ConversationRef): Promise<void> {
-  if (activity.conversation?.conversationType !== 'personal') {
-    await sendText(config, ref, 'I only work in 1:1 chats. Please message me directly.');
+async function handleMessage(activity: TeamsActivity, config: TeamsConfig, conversationRef: ConversationRef): Promise<void> {
+  const conversationType = activity.conversation?.conversationType;
+  const mentioned = isBotMentioned(activity.entities, conversationRef.botId);
+  if (conversationType !== 'personal' && conversationType !== 'groupChat') {
+    if (mentioned) await sendText(config, conversationRef, 'I only work in 1:1 chats and group chats.');
     return;
   }
+  const isGroup = conversationType === 'groupChat';
+  // Never interrupt a group discussion: act only on messages that explicitly @mention the bot,
+  // even if the app is granted permission to read every message in the chat.
+  if (isGroup && !mentioned) return;
+  const ref: ConversationRef = { ...conversationRef, isGroup };
 
   const user = await resolveUser(config, ref, activity);
+  if (user === 'external') {
+    await sendText(config, ref, 'Sorry, only members of this organization can use this bot.');
+    return;
+  }
   if (!user) {
     await sendText(config, ref, '⚠️ I could not determine your email address, so I cannot map you to an agents-chat account.');
     return;
@@ -136,14 +160,16 @@ async function handleMessage(activity: TeamsActivity, config: TeamsConfig, ref: 
     return;
   }
 
-  const text = cleanIncomingText(activity.text);
+  const text = cleanIncomingText(activity.text, activity.entities, ref.botId);
   if (!text) {
     const hasAttachments = activity.attachments?.some((a) => a.contentType && a.contentType !== 'text/html');
     if (hasAttachments) await sendText(config, ref, 'Attachments are not supported yet. Please send text.');
+    else if (isGroup) await sendText(config, ref, GROUP_HELP_TEXT);
     return;
   }
 
-  const state = getConversationState(ref.conversationId);
+  // Group chats keep separate state per person so nobody can answer or stop someone else's turn.
+  const state = getConversationState(isGroup ? `${ref.conversationId}|${ref.userId}` : ref.conversationId);
   const command = parseCommand(text);
 
   if (state.running) {
@@ -155,13 +181,13 @@ async function handleMessage(activity: TeamsActivity, config: TeamsConfig, ref: 
       await answerPendingRequest(config, ref, user, state, text);
       return;
     }
-    await sendText(config, ref, 'I am still working on your previous message. Send `/stop` to cancel it.');
+    await sendText(config, ref, `I am still working on your previous message. ${isGroup ? 'Mention me with `/stop`' : 'Send `/stop`'} to cancel it.`);
     return;
   }
 
   switch (command?.name) {
     case 'help':
-      await sendText(config, ref, HELP_TEXT);
+      await sendText(config, ref, isGroup ? GROUP_HELP_TEXT : HELP_TEXT);
       return;
     case 'whoami': {
       const chatId = currentChatId(user, ref.conversationId);
@@ -197,12 +223,14 @@ function currentChatId(user: TeamsUser, conversationId: string): string | undefi
   return configStore.getUserSettings(user.email)[conversationSettingKey(conversationId)] || undefined;
 }
 
-async function resolveUser(config: TeamsConfig, ref: ConversationRef, activity: TeamsActivity): Promise<TeamsUser | null> {
+async function resolveUser(config: TeamsConfig, ref: ConversationRef, activity: TeamsActivity): Promise<TeamsUser | 'external' | null> {
   const cacheKey = activity.from?.aadObjectId || ref.userId;
   const cached = identities.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.user;
 
   const member = await getMember(config, ref, ref.userId);
+  // Group chats can include people from other organizations and anonymous meeting guests.
+  if (member.userRole === 'anonymous' || (member.tenantId && member.tenantId.toLowerCase() !== config.tenantId.toLowerCase())) return 'external';
   const email = (member.email || member.userPrincipalName || '').trim().toLowerCase();
   if (!email || !email.includes('@')) return null;
   const user: TeamsUser = { email, name: member.name || activity.from?.name || email, aadObjectId: member.aadObjectId || activity.from?.aadObjectId || ref.userId };
@@ -330,7 +358,7 @@ async function pollTurn(
     if (request?.id && request.id !== state.pendingRequest?.id && request.id !== state.answeredRequestId) {
       state.pendingRequest = request;
       await streamer.flush(fullText);
-      await sendText(config, ref, formatUserRequest(request));
+      await sendText(config, ref, ref.isGroup ? `${formatUserRequest(request)}\n_@mention me with your reply._` : formatUserRequest(request));
     } else if (!request) {
       state.pendingRequest = undefined;
     }

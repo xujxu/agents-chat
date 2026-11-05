@@ -1,11 +1,12 @@
 # Microsoft Teams bot
 
 agents-chat can expose one agent as a Microsoft Teams bot. Users message the bot in a 1:1 Teams chat,
-and the configured agent replies there. Replies stream into Teams as the agent writes them.
-The same conversations also appear in the agents-chat web UI.
+or @mention it in a group chat, and the configured agent replies there. Replies stream into Teams as
+the agent writes them. The same conversations also appear in the agents-chat web UI.
 
 - [Architecture](#architecture)
 - [Commands](#commands)
+- [Group chats](#group-chats)
 - [Setup](#setup)
 - [Option B: Key Vault token (no client secret)](#option-b-key-vault-token-no-client-secret)
 - [Security](#security)
@@ -17,7 +18,7 @@ The same conversations also appear in the agents-chat web UI.
 
 ```mermaid
 flowchart LR
-  user([Teams user]) -->|1:1 chat| teams[Microsoft Teams]
+  user([Teams user]) -->|"1:1 chat or<br/>@mention in group chat"| teams[Microsoft Teams]
   teams --> bfs[Bot Connector service]
   bfs -->|"POST /api/teams/messages<br/>signed JWT"| route
   subgraph host[agents-chat server]
@@ -39,7 +40,8 @@ flowchart LR
 2. The bridge looks up the sender in the Teams roster and maps them to an agents-chat account by
    **email/UPN**. It then calls the existing `/api/acp` route over loopback as that user. Chat
    ownership, agent access, and the admin role work exactly as in the web UI.
-3. Each Teams 1:1 conversation maps to one agents-chat chat named `Teams: …`. `/new` starts a new one.
+3. Each Teams 1:1 conversation maps to one agents-chat chat named `Teams: …`. In a group chat, each
+   person gets their own agents-chat chat. `/new` starts a new one.
 4. The bridge polls the turn and streams the growing answer to Teams. Agent questions and
    permission prompts are posted as numbered lists. Reply with the number or label; free-text
    questions take one answer per line.
@@ -52,6 +54,23 @@ flowchart LR
 | `/stop` | Stop the running response |
 | `/whoami` | Show the mapped account, agent, and chat id |
 | `/help` | Show help |
+
+## Group chats
+
+When the **Group chat** scope is enabled, anyone in the chat can add the bot (chat header → **+** /
+**Apps**). To avoid interrupting the discussion:
+
+- The bot acts **only on messages that @mention it**, for example `@agent-xujx summarize the build
+  failure`. Everything else is ignored. Teams only delivers @mentions to the bot by default, and the
+  bridge also checks the mention itself.
+- Commands work the same way: `@agent-xujx /stop`, `@agent-xujx /new`.
+- **Each person runs as themselves.** The asker is mapped to their own agents-chat account and gets
+  their own chat for that group. Only the asker can answer the agent's questions or `/stop` their
+  turn. Replies @mention the asker. To answer a question from the agent, @mention the bot with
+  your answer.
+- **Replies are visible to everyone in the group chat.** The agent runs with the asker's access, so
+  do not ask it for anything the other members should not see.
+- Members from other organizations and anonymous users are refused.
 
 ## Setup
 
@@ -122,6 +141,9 @@ curl.exe -s -o NUL -w "%{http_code}`n" -X POST https://<public-host>/api/teams/m
 
 1. In the Developer Portal, open **Apps → New app** and fill in the basic information.
 2. Under **App features → Bot**, select the bot from step 3 and enable the **Personal** scope.
+   Also enable **Group chat** if people should be able to add the bot to group chats
+   (see [Group chats](#group-chats)). Do not grant the `ChatMessage.Read.Chat` (RSC) permission;
+   the bot does not need it.
 3. Use **Preview in Teams**, or **Publish → Download app package** and upload it in Teams through
    **Apps → Manage your apps → Upload an app**. To make it available to others, publish it to your
    organization's app catalog.
@@ -235,7 +257,8 @@ lasts about 24 hours, so a few failed runs cause no outage.
   keys, audience = bot app id, and a 5-minute clock tolerance. Entra ID tokens are rejected: any app
   in a tenant can get one with the bot as audience, so they do not prove the request came from Teams.
 - **Request binding.** The token's `serviceurl` claim must match the activity, the tenant must equal
-  `TEAMS_TENANT_ID`, the channel must be `msteams`, and only personal chats are served.
+  `TEAMS_TENANT_ID`, the channel must be `msteams`, and only personal and group chats are served.
+  Group chat members from other organizations and anonymous users are refused.
 - **Outbound token.** The bot token is only sent to Bot Framework / Teams service hosts on an
   allow-list, never to an arbitrary `serviceUrl`.
 - **User identity** comes from a server-to-server roster lookup, not from message content. The bridge
@@ -277,7 +300,9 @@ Bot Connector with 250 ms round trips.
 
 ## Limitations
 
-- Personal (1:1) chats only. Group chats and channels are ignored.
+- 1:1 and group chats only. In team channels the bot only answers an @mention with a short notice.
+- In a group chat, Teams allows one streamed reply at a time. If two people ask at once, the second
+  reply arrives as a single message instead of streaming.
 - Text only. Attachments and Adaptive Cards are not supported yet.
 - In-flight turn state is kept in memory. A service restart during a reply ends that reply in Teams,
   but the full answer is still saved and visible in the web UI.

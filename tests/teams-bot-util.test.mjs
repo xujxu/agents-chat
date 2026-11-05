@@ -6,6 +6,7 @@ import {
   cleanIncomingText,
   conversationSettingKey,
   isAllowedServiceUrl,
+  isBotMentioned,
   newTeamsChatId,
   normalizeServiceUrl,
   parseCommand,
@@ -22,6 +23,20 @@ assert.equal(parseCommand('hello /new'), null);
 // Incoming text cleanup
 assert.equal(cleanIncomingText('<at>agent-xujx</at> hi &amp; <b>bye</b>'), 'hi & bye');
 assert.equal(cleanIncomingText(undefined), '');
+
+// Group chats: only explicit @mentions of the bot count, and other people's names are kept
+const botId = '28:bot-app';
+const mentions = [
+  { type: 'mention', text: '<at>agent-xujx</at>', mentioned: { id: botId, name: 'agent-xujx' } },
+  { type: 'mention', text: '<at>Alice</at>', mentioned: { id: '29:alice', name: 'Alice' } },
+];
+assert.ok(isBotMentioned(mentions, botId));
+assert.ok(!isBotMentioned([mentions[1]], botId));
+assert.ok(!isBotMentioned(undefined, botId));
+assert.ok(!isBotMentioned([{ type: 'clientInfo' }], botId));
+assert.equal(cleanIncomingText('<at>agent-xujx</at> ask <at>Alice</at> about /new', mentions, botId), 'ask Alice about /new');
+assert.equal(cleanIncomingText('<at>agent-xujx</at> /stop', mentions, botId), '/stop');
+assert.equal(cleanIncomingText('<at>Alice</at> hi', [mentions[1]], botId), 'Alice hi');
 
 // Ids and settings keys are stable per conversation and never leak the raw id
 const key = conversationSettingKey('a:1-conv');

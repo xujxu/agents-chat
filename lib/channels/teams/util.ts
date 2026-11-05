@@ -15,11 +15,33 @@ export function parseCommand(text: string): TeamsCommand {
 
 const HTML_ENTITIES: Record<string, string> = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&nbsp;': ' ' };
 
-/** Normalize inbound Teams message text: drop bot @mentions and stray HTML. */
-export function cleanIncomingText(text: unknown): string {
+export type TeamsEntity = { type?: string; text?: string; mentioned?: { id?: string; name?: string } };
+
+function botMentions(entities: unknown, botId: string): TeamsEntity[] {
+  if (!Array.isArray(entities)) return [];
+  return entities.filter((e): e is TeamsEntity => e?.type === 'mention' && e.mentioned?.id === botId);
+}
+
+/** True when the message explicitly @mentions the bot. */
+export function isBotMentioned(entities: unknown, botId: string): boolean {
+  return botMentions(entities, botId).length > 0;
+}
+
+/**
+ * Normalize inbound Teams message text and strip stray HTML. With `botId`, only @mentions of the bot are
+ * removed and other mentions keep the person's name; without it, every mention is removed.
+ */
+export function cleanIncomingText(text: unknown, entities?: unknown, botId?: string): string {
   if (typeof text !== 'string') return '';
+  const botNames = new Set<string>();
+  if (botId) {
+    for (const mention of botMentions(entities, botId)) {
+      const inner = /<at>([\s\S]*?)<\/at>/i.exec(mention.text || '')?.[1];
+      for (const name of [inner, mention.mentioned?.name]) if (name?.trim()) botNames.add(name.trim().toLowerCase());
+    }
+  }
   return text
-    .replace(/<at>[\s\S]*?<\/at>/gi, '')
+    .replace(/<at>([\s\S]*?)<\/at>/gi, (_, name: string) => (!botId || botNames.has(name.trim().toLowerCase()) ? '' : name))
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>\s*<p>/gi, '\n')
     .replace(/<[^>]+>/g, '')

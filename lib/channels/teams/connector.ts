@@ -10,6 +10,8 @@ export type ConversationRef = {
   userId: string;
   userName?: string;
   replyToId?: string;
+  /** Group chat: plain messages @mention the user they answer. */
+  isGroup?: boolean;
 };
 
 export type TeamsMember = {
@@ -19,6 +21,7 @@ export type TeamsMember = {
   email?: string;
   userPrincipalName?: string;
   tenantId?: string;
+  userRole?: string;
 };
 
 export class ConnectorError extends Error {
@@ -57,9 +60,20 @@ export async function sendActivity(config: TeamsConfig, ref: ConversationRef, ac
 }
 
 export async function sendText(config: TeamsConfig, ref: ConversationRef, text: string): Promise<void> {
-  for (const chunk of splitForTeams(text)) {
-    await sendActivity(config, ref, { type: 'message', textFormat: 'markdown', text: chunk });
+  const mention = userMention(ref);
+  for (const [index, chunk] of splitForTeams(text).entries()) {
+    if (index === 0 && mention) {
+      await sendActivity(config, ref, { type: 'message', textFormat: 'markdown', text: `${mention.text} ${chunk}`, entities: [mention] });
+    } else {
+      await sendActivity(config, ref, { type: 'message', textFormat: 'markdown', text: chunk });
+    }
   }
+}
+
+function userMention(ref: ConversationRef): { type: 'mention'; text: string; mentioned: { id: string; name: string } } | null {
+  const name = ref.userName?.replace(/[<>]/g, '').trim();
+  if (!ref.isGroup || !name) return null;
+  return { type: 'mention', text: `<at>${name}</at>`, mentioned: { id: ref.userId, name } };
 }
 
 export async function sendTyping(config: TeamsConfig, ref: ConversationRef): Promise<void> {
