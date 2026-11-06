@@ -181,41 +181,64 @@ The repo has a template in `teams-app/`. The filled-in copy holds your app packa
 app's ids, so keep it out of git, like `.env.local`. For script deployments, keep it in
 `shared/teams-app/`.
 
-1. **Set up the folder** (once):
+The commands below are PowerShell (on Linux, `atk` takes the same arguments). Set `$dir` to your
+folder in every new shell:
+
+```powershell
+$dir = 'C:\agents-chat\shared\teams-app'   # your deployment's shared\teams-app
+```
+
+1. **Set up the folder** (once). Install the CLI and, from the root of an agents-chat checkout,
+   copy the template:
 
    ```powershell
    npm install -g @microsoft/m365agentstoolkit-cli
-   $dir = 'C:\agents-chat\shared\teams-app'   # Linux: /opt/agents-chat/shared/teams-app
    New-Item -ItemType Directory -Force "$dir\env", "$dir\appPackage" | Out-Null
    Copy-Item teams-app\m365agents.yml $dir
    Copy-Item teams-app\env\.env.dev.example "$dir\env\.env.dev"
    ```
 
-   In the Developer Portal, open your app, select **Publish → Download app package**, and save it as
-   `appPackage\teams-app.zip` in that folder.
+   The result is:
 
-2. **Sign in and upload** (once, and again after each app change):
+   ```text
+   teams-app\
+     m365agents.yml          # from the template; no edits needed
+     env\.env.dev            # from .env.dev.example; leave the values empty
+     appPackage\teams-app.zip
+   ```
+
+2. **Add the app package.** In the [Developer Portal](https://dev.teams.microsoft.com/apps), open
+   your app (step 5), select **Publish → Download app package**, and save the zip as
+   `$dir\appPackage\teams-app.zip`. Do not unzip it. If you keep another file name, change
+   `appPackagePath` in `m365agents.yml` to match. Leave `scope: shared` as it is: the value must be
+   lowercase, or `atk provision` fails.
+
+3. **Sign in and upload** (once, and again after each app change). Sign in with an owner of the
+   Teams app; a browser window opens:
 
    ```powershell
    atk auth login m365
    atk provision --env dev -f $dir -i false
    ```
 
-   The first upload writes `M365_TITLE_ID`, `M365_APP_ID`, and `SHARE_LINK` to `env\.env.dev`. Keep
-   that file: later uploads and shares use it to find the same app. Without it, `atk provision`
-   creates a second shared copy. Before uploading a changed package, increase its `version`.
+   You do not type any ids. The first upload fills in `M365_TITLE_ID`, `M365_APP_ID`, and
+   `SHARE_LINK` in `env\.env.dev` and adds a `projectId` line to `m365agents.yml`. Check them with
+   `Get-Content "$dir\env\.env.dev"`. Keep both files: later uploads and shares use them to find the
+   same app, and without them `atk provision` creates a second shared copy. To upload a changed
+   package, increase `version` in the app's manifest (Developer Portal: **Basic information → Version**), download it again over the old zip, and run `atk provision` again.
 
-3. **Share** with each colleague, then send them `SHARE_LINK`. After they accept it, the bot appears
-   in their Teams apps.
+4. **Share** with each colleague. The bot then appears in their Teams apps; you can also send them
+   `SHARE_LINK` from `env\.env.dev` to open it directly.
 
    ```powershell
    atk share --env dev -f $dir --scope users --email 'alice@contoso.com,bob@contoso.com' -i false
    atk share remove --env dev -f $dir --users 'bob@contoso.com' -i false   # revoke
    ```
 
-4. **Allow them in agents-chat.** Sharing the Teams app does not grant any access to agents-chat.
-   Add each person to `TEAMS_ALLOWED_USERS` (the bot ignores everyone else) and make sure they can
-   sign in to agents-chat and use the Teams agent, then restart the service.
+5. **Allow them in agents-chat.** Sharing the Teams app does not grant any access to agents-chat.
+   Add each person to `TEAMS_ALLOWED_USERS` in `.env.local` (the bot ignores everyone else),
+   restart the service, and make sure they have an agents-chat role and access to the agents they
+   should use.
 
 ## Option B: Key Vault token (no client secret)
 
