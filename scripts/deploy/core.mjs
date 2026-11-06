@@ -142,7 +142,8 @@ function resolveTarget({ skipPull, fallback }) {
   if (skipPull) return g('rev-parse', 'HEAD');
   run('git', ['-C', P.repo, 'fetch', '--quiet', '--tags', '--force', 'origin'], { step: 'build' });
   if (o.revision) {
-    for (const ref of [o.revision, `origin/${o.revision}`]) {
+    // Prefer the freshly fetched remote branch: local branches in the mirror are never updated and go stale.
+    for (const ref of [`origin/${o.revision}`, o.revision]) {
       const sha = git(['-C', P.repo, 'rev-parse', '--verify', '--quiet', `${ref}^{commit}`], { allowFail: true });
       if (sha) return sha;
     }

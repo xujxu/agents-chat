@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Creates a bare origin from the current checkout plus test commits on branches.
-# Prints KEY=sha lines for: BASE V2 BROKEN UNHEALTHY V3 LOCKCHANGE.
+# Prints KEY=sha lines for: BASE V2 BROKEN UNHEALTHY V3 LOCKCHANGE V4.
 set -euo pipefail
 src="$1"; origin="$2"; work="$3"
 health=app/api/health/route.ts
@@ -26,3 +26,4 @@ commit broken sed -i 's/export async function GET() {/export async function GET(
 commit unhealthy sed -i 's/return NextResponse.json({ ok: true, version: readRevision() });/return NextResponse.json({ ok: false }, { status: 500 });/' "$health"
 commit v3 true
 commit lockchange sed -i 's/"lockfileVersion"/"lockfileVersion" /' package-lock.json
+commit v4 true

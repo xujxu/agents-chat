@@ -128,6 +128,11 @@ step "7b. --no-install is refused after a lock change"
 expect_exit 2 d update --revision "$LOCKCHANGE" --no-install
 wait_version "$V3"
 
+step "7c. a branch name deploys the fetched remote branch, not a stale local branch in the mirror"
+git -C "$ROOT/repo" branch -f t-v4 "$V3"
+d update --revision t-v4 --no-install
+wait_version "$V4"
+
 step "retention: at most 3 releases"
 [[ $(ls "$ROOT/releases" | wc -l) -le 3 ]] || fail "more than 3 releases kept"
 
