@@ -1,5 +1,5 @@
 // Teams bridge behavior with Bot Connector, Entra ID and /api/acp mocked; data is written to a temp dir.
-// Runs in CI (.github/workflows/teams-bot.yml). Locally: npx --yes --package=tsx@4.20.6 tsx --test tests/teams-bot-bridge.test.ts
+// Runs in CI (.github/workflows/checks.yml). Locally: npx --yes --package=tsx@4.20.6 tsx --test tests/teams-bot-bridge.test.ts
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
