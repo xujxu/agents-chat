@@ -597,7 +597,8 @@ Tests are Playwright E2E plus lightweight Node regression checks. Playwright exp
 The **Checks** workflow (`checks` job) runs on every PR: type check plus all `tests/*.test.*`
 unit tests. The **Playwright E2E** workflow runs on every PR targeting `main`.
 It builds and serves the production app with isolated CI credentials, runs desktop Chromium
-in four shards, and runs Android Chromium and iPhone WebKit as independent jobs. Desktop
+in four shards, Android Chromium in two shards, and iPhone WebKit in four shards, all as
+independent parallel jobs. Desktop
 failures do not prevent mobile coverage from running. Mobile checks cover navigation and
 overlay state, sidebar collapse/reopen and desktop preference preservation across breakpoints,
 narrow screens and landscape, keyboard/composer geometry, file previews,
