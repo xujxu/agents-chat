@@ -3,6 +3,12 @@ export async function register() {
   const { ensureRuntime } = await import("./lib/scheduler/schedulerRuntime");
   await ensureRuntime();
   void warmUpTeamsBot();
+  try {
+    const { startShareReminders } = await import("./lib/channels/teams/shareReminders");
+    startShareReminders();
+  } catch {
+    // Reminders are optional; the in-app notices still work.
+  }
 }
 
 /** Pre-fetch Teams bot credentials so the first Teams message after a restart replies quickly. */

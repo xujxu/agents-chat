@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as configStore from '@/lib/configStore';
 import { getAuthToken, getUserEmail } from '@/lib/auth';
 import { canUseAgent, getUserRole } from '@/lib/rbac';
+import { notifyExtensionDecision, sendShareReminders } from '@/lib/channels/teams/shareReminders';
+import { offerTeamsSwitch } from '@/lib/channels/teams/defaultAgent';
 
 export const dynamic = 'force-dynamic';
 
-/** Days before expiry when recipients are reminded and may ask for more time. */
-const REMIND_DAYS = 3;
+const REMIND_DAYS = configStore.SHARE_REMIND_DAYS;
 
 function json(body: Record<string, unknown>, status = 200) {
   return NextResponse.json(body, { status });
@@ -55,6 +56,12 @@ export async function POST(req: NextRequest) {
       return json({ ok: false, error: grant?.status === 'expired' ? 'expired' : 'not_invited' }, 403);
     }
     if (email) configStore.setUserLastUsedAgent(email, agent.id);
+    // Recipients start with the shared agent in new web chats and in Teams.
+    if (email && accepted) {
+      configStore.setUserSetting(email, configStore.DEFAULT_AGENT_SETTING, agent.id);
+      // People already using another agent in Teams are asked there before it switches; best-effort.
+      void offerTeamsSwitch(email).catch(() => undefined);
+    }
     return json({ ok: true, agentId: agent.id, agentName: agent.name || agent.id });
   }
 
@@ -62,6 +69,8 @@ export async function POST(req: NextRequest) {
     const days = Number(body?.days ?? configStore.SHARE_DAYS);
     if (!agentId || !email) return json({ ok: false, error: 'missing_agentId' }, 400);
     if (!configStore.requestAgentAccessExtension(agentId, email, days)) return json({ ok: false, error: 'not_allowed' }, 400);
+    // Tell admins in Teams now rather than at the next hourly check; best-effort.
+    void sendShareReminders().catch(() => undefined);
     return json({ ok: true });
   }
 
@@ -82,10 +91,13 @@ export async function POST(req: NextRequest) {
     const requested = configStore.getAgentAccess(agentId, target)?.extensionDays;
     const days = Number(body?.days ?? (action === 'approve-extension' && requested ? requested : configStore.SHARE_DAYS));
     if (!configStore.extendAgentAccess(agentId, target, days)) return json({ ok: false, error: 'invalid_request' }, 400);
+    // Only answer a pending request; a plain extension by an admin is not a reply to anything.
+    if (requested) void notifyExtensionDecision({ agentId, email: target }, true).catch(() => undefined);
     return json({ ok: true });
   }
   if (action === 'deny-extension') {
     if (!configStore.denyAgentAccessExtension(agentId, target)) return json({ ok: false, error: 'not_found' }, 404);
+    void notifyExtensionDecision({ agentId, email: target }, false).catch(() => undefined);
     return json({ ok: true });
   }
   return json({ ok: false, error: 'unknown_action' }, 400);

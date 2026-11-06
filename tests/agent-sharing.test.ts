@@ -82,10 +82,12 @@ test('agent sharing: invites, share links and expiry', async (t) => {
 
     const stranger = await call('bob@contoso.com', { action: 'accept', token: data.token });
     assert.deepEqual([stranger.status, stranger.data.error], [403, 'not_invited']);
+    assert.equal(configStore.getUserDefaultAgent('bob@contoso.com'), null, 'only the invited person gets the default');
 
     const accepted = await call(guest.email, { action: 'accept', token: data.token });
     assert.deepEqual([accepted.status, accepted.data.agentId], [200, 'shared']);
     assert.equal(canUseAgent(guest, agent), true);
+    assert.equal(configStore.getUserDefaultAgent(guest.email), 'shared', 'the shared agent becomes the default');
 
     const rotated = await call('admin@contoso.com', { action: 'create-link', agentId: 'shared' });
     assert.notEqual(rotated.data.token, data.token);
@@ -154,5 +156,44 @@ test('agent sharing: invites, share links and expiry', async (t) => {
     }));
     assert.equal((await post({ action: 'add-agent-access', email: 'x@outside.com' })).status, 403);
     assert.equal((await post({ action: 'list-agent-access' })).status, 200, 'owners can still see who has access');
+  });
+
+  await t.test('the accepted agent is the web default only for that person and only while usable', async () => {
+    const acp = await import('../app/api/acp/route');
+    const { getDefaultAgentId } = await import('../app/features/chat/chatHelpers');
+    type ListedAgent = { id: string; canTalk?: boolean; isDefault?: boolean };
+    const listAgents = async (email: string): Promise<ListedAgent[]> => {
+      const cookie = await encode({ token: { email, sub: email, provider: 'azure-ad' }, secret: process.env.NEXTAUTH_SECRET! });
+      const res = await acp.POST(new NextRequest('http://localhost/api/acp', {
+        method: 'POST',
+        headers: { cookie: `next-auth.session-token=${cookie}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'list-agents' }),
+      }));
+      return (await res.json()).agents;
+    };
+    const withoutFlag = (agents: ListedAgent[]) => agents.map(({ isDefault: _, ...agent }) => agent);
+    configStore.createAgent({ id: 'open', name: 'Open', owner: 'admin@contoso.com', public: true });
+    const dana = 'dana@contoso.com';
+    configStore.addAgentAccess('shared', dana, 'admin@contoso.com');
+    const link = await call('admin@contoso.com', { action: 'create-link', agentId: 'shared' });
+    assert.equal((await call(dana, { action: 'accept', token: link.data.token })).status, 200);
+
+    let agents = await listAgents(dana);
+    assert.deepEqual(agents.filter((a) => a.isDefault).map((a) => a.id), ['shared']);
+    configStore.setUserSetting(dana, configStore.DEFAULT_AGENT_SETTING, 'open');
+    assert.equal(getDefaultAgentId(await listAgents(dana)), 'open', 'the flagged agent wins over config order');
+    assert.equal((await listAgents('bob@contoso.com')).some((a) => a.isDefault), false, 'other people are unaffected');
+
+    // A forged (set-user-setting) or revoked default is flagged but not usable, so it is ignored.
+    configStore.setUserSetting(dana, configStore.DEFAULT_AGENT_SETTING, 'bobs');
+    agents = await listAgents(dana);
+    const bobs = agents.find((a) => a.id === 'bobs');
+    assert.deepEqual([bobs?.canTalk, bobs?.isDefault], [false, true]);
+    assert.equal(getDefaultAgentId(agents), getDefaultAgentId(withoutFlag(agents)));
+    configStore.setUserSetting(dana, configStore.DEFAULT_AGENT_SETTING, 'shared');
+    configStore.removeAgentAccess('shared', dana);
+    agents = await listAgents(dana);
+    assert.equal(agents.find((a) => a.id === 'shared')?.canTalk, false);
+    assert.equal(getDefaultAgentId(agents), getDefaultAgentId(withoutFlag(agents)));
   });
 });
