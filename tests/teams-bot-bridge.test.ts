@@ -205,6 +205,83 @@ async function main() {
     assert.equal(configStore.getUserAgentModelPref('alice@contoso.com', 'teams'), 'claude-sonnet-5.5');
     assert.equal(configStore.getUserAgentModelPref('bob@contoso.com', 'teams'), 'claude-opus-5.5');
 
+    // /agent lists the agents this user may talk to (same rule as the web UI) and switches the
+    // agent for this conversation only. Each agent keeps its own chat.
+    const pause = () => new Promise((resolve) => setTimeout(resolve, 5));
+    configStore.createAgent({ id: 'mcagent', name: 'MC Agent', owner: 'carol@contoso.com', public: true });
+    await pause();
+    configStore.createAgent({ id: 'secret', name: 'secret', owner: 'carol@contoso.com' });
+    await pause();
+    configStore.createAgent({ id: 'shared', name: 'shared', owner: 'carol@contoso.com' });
+    configStore.addAgentAccess('shared', 'alice@contoso.com', 'carol@contoso.com');
+    await pause();
+    configStore.createAgent({ id: 'scheduler', name: 'scheduler', owner: 'alice@contoso.com' });
+    const chatStore = await import('../lib/chatStore');
+    const { conversationAgentKey } = await import('../lib/channels/teams/util');
+    const say = async (text: string, from = '29:alice', conversation = 'personal-1') => run(activity(from, text, [], 'personal', conversation));
+    const command = async (text: string) => { const res = await say(text); assert.equal(res.acp.length, 0, text); return res.posts[0].text as string; };
+    const sendOf = (res: { acp: any[] }) => res.acp.find((a) => a.action === 'send'); // eslint-disable-line @typescript-eslint/no-explicit-any
+
+    const teamsChatId = sendOf(await say('before switching')).chatId;
+    reply = await command('/agent');
+    assert.match(reply, /1\. `teams` – default ✅\n2\. MC Agent \(`mcagent`\)\n3\. `shared`\n/);
+    assert.doesNotMatch(reply, /secret|scheduler/);
+    reply = await command('/agent mc');
+    assert.match(reply, /Now talking to MC Agent \(`mcagent`\)/);
+    assert.match(reply, /next message starts a new conversation/);
+    let sent = sendOf(await say('analyze the connector failure'));
+    assert.equal(sent.agentId, 'mcagent');
+    assert.notEqual(sent.chatId, teamsChatId);
+    assert.equal(sent.modelId, undefined, 'models are per agent');
+    const mcChatId = sent.chatId;
+    assert.equal((await chatStore.getChat('alice@contoso.com', mcChatId))?.agentId, 'mcagent', 'web chat belongs to the agent');
+    assert.equal(sendOf(await say('follow-up')).chatId, mcChatId, 'agent chat continues');
+    assert.match(await command('/whoami'), /Agent: \*\*mcagent\*\*/);
+    assert.match(await command('/model'), /\*\*mcagent\*\* agent has no model list/);
+    reply = await command('/agent');
+    assert.match(reply, /1\. `teams` – default\n2\. MC Agent \(`mcagent`\) ✅/);
+
+    // Other conversations and other people keep their own agent.
+    assert.equal(sendOf(await say('elsewhere', '29:alice', 'personal-fast')).agentId, 'teams');
+    r = await run(activity('29:bob', '<at>agent-xujx</at> /agent', [botMention]));
+    assert.match(r.posts[0].text, /1\. MC Agent \(`mcagent`\)$/m);
+    assert.doesNotMatch(r.posts[0].text, /`teams`|`shared`/, 'Bob sees only agents he may use');
+    r = await run(activity('29:bob', '<at>agent-xujx</at> /agent shared', [botMention]));
+    assert.match(r.posts[0].text, /No agent you can use matches "shared"/);
+    r = await run(activity('29:bob', '<at>agent-xujx</at> hi', [botMention]));
+    assert.equal(sendOf(r).agentId, 'teams');
+
+    // Lookups that fail keep the current agent.
+    assert.match(await command('/agent secret'), /No agent you can use matches "secret"/);
+    assert.match(await command('/agent scheduler'), /No agent you can use matches/);
+    assert.match(await command('/agent 9'), /No agent you can use matches "9"/);
+    assert.match(await command('/agent a'), /matches several agents/);
+    assert.equal(sendOf(await say('still mc')).agentId, 'mcagent');
+
+    // /stop reaches the agent that is running the turn.
+    holdOpen.add(mcChatId);
+    const stopStart = calls.length;
+    const mcTurn = handleActivity(activity('29:alice', 'long task', [], 'personal', 'personal-1'), config);
+    await waitFor(() => since(stopStart).acp.some((a) => a.action === 'send'), 'mcagent send');
+    r = await say('/stop');
+    assert.deepEqual(r.acp.map((a) => [a.action, a.agentId, a.chatId]), [['interrupt', 'mcagent', mcChatId]]);
+    await mcTurn;
+
+    // Switching back resumes the earlier chat; /new only resets the current agent's chat.
+    assert.match(await command('/agent 1'), /Now talking to `teams` – default .*earlier conversation with it continues/);
+    sent = sendOf(await say('back to teams'));
+    assert.deepEqual([sent.agentId, sent.chatId], ['teams', teamsChatId]);
+    assert.match(await command('/agent shared'), /Now talking to `shared`/);
+    assert.match(await command('/new'), /Started a new conversation/);
+    assert.equal(sendOf(await say('shared hi')).agentId, 'shared');
+    await command('/agent mcagent');
+    assert.equal(sendOf(await say('mc again')).chatId, mcChatId);
+
+    // A removed agent falls back to the default.
+    configStore.setUserSetting('alice@contoso.com', conversationAgentKey('personal-1'), 'removed-agent');
+    sent = sendOf(await say('fallback'));
+    assert.deepEqual([sent.agentId, sent.chatId], ['teams', teamsChatId]);
+
     // Welcome messages go only to allowed users who install the bot or add it to a group chat.
     const welcomeFor = async (from: string, conversationType: string, conversationId: string) => {
       const start = calls.length;

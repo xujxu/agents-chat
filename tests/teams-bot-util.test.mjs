@@ -4,6 +4,7 @@ import {
   buildUserRequestAnswer,
   chatNameFromPrompt,
   cleanIncomingText,
+  conversationAgentKey,
   conversationSettingKey,
   isAllowedServiceUrl,
   isBotMentioned,
@@ -18,6 +19,7 @@ import {
 assert.deepEqual(parseCommand('/new hello world'), { name: 'new', args: 'hello world' });
 assert.deepEqual(parseCommand('/STOP'), { name: 'stop', args: '' });
 assert.deepEqual(parseCommand('/model  opus '), { name: 'model', args: 'opus' });
+assert.deepEqual(parseCommand('/Agent mcagent'), { name: 'agent', args: 'mcagent' });
 assert.equal(parseCommand('/unknown'), null);
 assert.equal(parseCommand('hello /new'), null);
 
@@ -43,6 +45,10 @@ assert.equal(cleanIncomingText('<at>Alice</at> hi', [mentions[1]], botId), 'Alic
 const key = conversationSettingKey('a:1-conv');
 assert.equal(key, conversationSettingKey('a:1-conv'));
 assert.match(key, /^teams\.chat\.[0-9a-f]{16}$/);
+assert.match(conversationSettingKey('a:1-conv', 'mcagent'), /^teams\.chat\.[0-9a-f]{16}\.[0-9a-f]{12}$/);
+assert.ok(conversationSettingKey('a:1-conv', 'mcagent').startsWith(`${key}.`), 'per-agent chat key');
+assert.notEqual(conversationSettingKey('a:1-conv', 'mcagent'), conversationSettingKey('a:1-conv', 'dev'));
+assert.match(conversationAgentKey('a:1-conv'), /^teams\.agent\.[0-9a-f]{16}$/);
 assert.match(newTeamsChatId('a:1-conv', 1700000000000), /^teams-[0-9a-f]{12}-[0-9a-z]+$/);
 assert.ok(chatNameFromPrompt('x'.repeat(200)).length <= 'Teams: '.length + 60);
 assert.ok(chatNameFromPrompt('fix build').startsWith('Teams: '));

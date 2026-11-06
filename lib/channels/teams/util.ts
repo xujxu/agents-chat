@@ -4,11 +4,11 @@ import { createHash } from 'node:crypto';
 /** Max characters per Teams text message (Teams caps activities at ~100 KB; stay well below it). */
 export const TEAMS_MAX_TEXT = 20000;
 
-export type TeamsCommandName = 'new' | 'stop' | 'help' | 'whoami' | 'model';
+export type TeamsCommandName = 'new' | 'stop' | 'help' | 'whoami' | 'model' | 'agent';
 export type TeamsCommand = { name: TeamsCommandName; args: string } | null;
 
 export function parseCommand(text: string): TeamsCommand {
-  const match = /^\/(new|stop|help|whoami|model)(?:\s+([\s\S]*))?$/i.exec(text.trim());
+  const match = /^\/(new|stop|help|whoami|model|agent)(?:\s+([\s\S]*))?$/i.exec(text.trim());
   if (!match) return null;
   return { name: match[1].toLowerCase() as TeamsCommandName, args: (match[2] || '').trim() };
 }
@@ -57,8 +57,18 @@ export function newTeamsChatId(conversationId: string, now = Date.now()): string
   return `teams-${hashId(conversationId, 12)}-${now.toString(36)}`;
 }
 
-export function conversationSettingKey(conversationId: string): string {
-  return `teams.chat.${hashId(conversationId)}`;
+/**
+ * User setting holding the agents-chat chat for a Teams conversation. Each agent gets its own chat;
+ * the bot's default agent keeps the original key so existing conversations continue.
+ */
+export function conversationSettingKey(conversationId: string, agentId?: string): string {
+  const base = `teams.chat.${hashId(conversationId)}`;
+  return agentId ? `${base}.${hashId(agentId, 12)}` : base;
+}
+
+/** User setting holding the agent chosen with `/agent` for a Teams conversation. */
+export function conversationAgentKey(conversationId: string): string {
+  return `teams.agent.${hashId(conversationId)}`;
 }
 
 export function chatNameFromPrompt(prompt: string): string {

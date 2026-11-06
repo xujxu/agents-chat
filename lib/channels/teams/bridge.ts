@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { encode } from 'next-auth/jwt';
+import { canTalkTo } from '@/lib/auth';
 import { appendMessageToChat, getChat, saveChat } from '@/lib/chatStore';
 import * as configStore from '@/lib/configStore';
 import type { AgentModel } from '@/lib/configStore';
@@ -11,6 +12,7 @@ import {
   buildUserRequestAnswer,
   chatNameFromPrompt,
   cleanIncomingText,
+  conversationAgentKey,
   conversationSettingKey,
   formatUserRequest,
   isAllowedServiceUrl,
@@ -31,6 +33,8 @@ const IDENTITY_REFRESH_MS = 60 * 60_000;
 /** ...and after this long without a successful refresh, the next message waits for a fresh lookup. */
 const IDENTITY_MAX_AGE_MS = 24 * 60 * 60_000;
 const SESSION_TOKEN_TTL_S = 60 * 60;
+/** Internal agent that the web UI also hides from its agent lists. */
+const SCHEDULER_AGENT_ID = 'scheduler';
 
 /** Status lines shown while `send` waits for a cold agent to start. Mutable for tests. */
 export const SLOW_START_STATUS = [
@@ -57,6 +61,8 @@ type TeamsUser = { email: string; name: string; aadObjectId: string };
 type ConversationState = {
   running: boolean;
   chatId?: string;
+  /** Agent of the running (or last) turn, so /stop and answers reach it even after `/agent`. */
+  agentId?: string;
   pendingRequest?: UserRequestLike;
   answeredRequestId?: string;
 };
@@ -81,7 +87,8 @@ const HELP_TEXT = [
   '**Commands**',
   '- `/new [prompt]` – start a new conversation (optionally with a first prompt)',
   '- `/stop` – stop the current response',
-  '- `/whoami` – show which agents-chat account, model, and chat you are using',
+  '- `/whoami` – show which agents-chat account, agent, model, and chat you are using',
+  '- `/agent [number or name]` – list agents you can use, or switch to one (each agent keeps its own conversation)',
   '- `/model [number or name]` – list models, or switch to one',
   '- `/help` – show this help',
   '',
@@ -235,19 +242,23 @@ async function handleMessage(
       await sendText(config, ref, isGroup ? GROUP_HELP_TEXT : HELP_TEXT);
       return;
     case 'whoami': {
-      const chatId = currentChatId(user, ref.conversationId);
-      const modelId = selectedModelId(config, user);
-      await sendText(config, ref, `Account: **${user.email}**\nAgent: **${config.agentId}**\nModel: ${modelId ? `\`${modelId}\`` : "(agent's default)"}\nChat: ${chatId ? `\`${chatId}\`` : '(none yet)'}`);
+      const agentId = activeAgentId(config, user, ref.conversationId);
+      const chatId = currentChatId(config, user, agentId, ref.conversationId);
+      const modelId = selectedModelId(user, agentId);
+      await sendText(config, ref, `Account: **${user.email}**\nAgent: **${agentId}**\nModel: ${modelId ? `\`${modelId}\`` : "(agent's default)"}\nChat: ${chatId ? `\`${chatId}\`` : '(none yet)'}`);
       return;
     }
+    case 'agent':
+      await sendText(config, ref, changeAgent(config, user, ref.conversationId, command.args));
+      return;
     case 'model':
-      await sendText(config, ref, changeModel(config, user, command.args));
+      await sendText(config, ref, changeModel(user, activeAgentId(config, user, ref.conversationId), command.args));
       return;
     case 'stop':
       await sendText(config, ref, 'Nothing is running.');
       return;
     case 'new':
-      configStore.setUserSetting(user.email, conversationSettingKey(ref.conversationId), '');
+      configStore.setUserSetting(user.email, chatSettingKey(config, activeAgentId(config, user, ref.conversationId), ref.conversationId), '');
       if (!command.args) {
         await sendText(config, ref, '🆕 Started a new conversation. Send your first message.');
         return;
@@ -268,8 +279,59 @@ function getConversationState(conversationId: string): ConversationState {
   return state;
 }
 
-function currentChatId(user: TeamsUser, conversationId: string): string | undefined {
-  return configStore.getUserSettings(user.email)[conversationSettingKey(conversationId)] || undefined;
+function chatSettingKey(config: TeamsConfig, agentId: string, conversationId: string): string {
+  return conversationSettingKey(conversationId, agentId === config.agentId ? undefined : agentId);
+}
+
+function currentChatId(config: TeamsConfig, user: TeamsUser, agentId: string, conversationId: string): string | undefined {
+  return configStore.getUserSettings(user.email)[chatSettingKey(config, agentId, conversationId)] || undefined;
+}
+
+/** The agent this user talks to in this conversation: their `/agent` choice, else TEAMS_AGENT_ID. */
+function activeAgentId(config: TeamsConfig, user: TeamsUser, conversationId: string): string {
+  const chosen = configStore.getUserSettings(user.email)[conversationAgentKey(conversationId)];
+  return chosen && configStore.getAgentById(chosen) ? chosen : config.agentId;
+}
+
+function userRole(user: TeamsUser): 'admin' | 'user' {
+  // Mirror the NextAuth jwt callback parsing so Teams and web always agree on admin role.
+  const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+  return adminEmails.includes(user.email) ? 'admin' : 'user';
+}
+
+/** Agents this user may talk to, using the same rule as the web UI and /api/acp. */
+function talkableAgents(config: TeamsConfig, user: TeamsUser): configStore.AgentRecord[] {
+  const token = { email: user.email, role: userRole(user) };
+  return configStore.getAllAgents().filter((agent) => agent.id !== SCHEDULER_AGENT_ID
+    && canTalkTo(token, agent.owner, agent.id, agent.public, configStore.hasAgentAccess));
+}
+
+/**
+ * `/agent` lists the agents this user can talk to; `/agent <number|id|name>` switches this Teams
+ * conversation (for this user only) to that agent. Each agent keeps its own agents-chat chat, so
+ * switching back continues the earlier conversation.
+ */
+function changeAgent(config: TeamsConfig, user: TeamsUser, conversationId: string, args: string): string {
+  const agents = talkableAgents(config, user);
+  const current = activeAgentId(config, user, conversationId);
+  const label = (agent: configStore.AgentRecord) => `${agent.name && agent.name !== agent.id ? `${agent.name} (\`${agent.id}\`)` : `\`${agent.id}\``}${agent.id === config.agentId ? ' – default' : ''}`;
+  const list = (items: configStore.AgentRecord[]) => items.map((agent) => `${agents.indexOf(agent) + 1}. ${label(agent)}${agent.id === current ? ' ✅' : ''}`).join('\n');
+  const query = args.trim().toLowerCase();
+  if (!query) {
+    if (agents.length === 0) return `No agents are available. You are using **${current}**.`;
+    return `**Agents** (✅ = current)\n${list(agents)}\n\nSend \`/agent <number or name>\` to switch.`;
+  }
+
+  const index = /^\d+$/.test(query) ? Number(query) - 1 : -1;
+  const exact = agents[index] ?? agents.find((agent) => agent.id.toLowerCase() === query || agent.name?.toLowerCase() === query);
+  const matches = exact ? [exact] : agents.filter((agent) => agent.id.toLowerCase().includes(query) || !!agent.name?.toLowerCase().includes(query));
+  if (matches.length === 0) return `No agent you can use matches "${args.trim()}". Send \`/agent\` to see the list.`;
+  if (matches.length > 1) return `"${args.trim()}" matches several agents:\n${list(matches)}\n\nSend \`/agent <number>\` to pick one.`;
+
+  const agent = matches[0];
+  configStore.setUserSetting(user.email, conversationAgentKey(conversationId), agent.id === config.agentId ? '' : agent.id);
+  const resumed = currentChatId(config, user, agent.id, conversationId);
+  return `Now talking to ${label(agent)} in this chat. ${resumed ? 'Your earlier conversation with it continues; send `/new` to start fresh.' : 'Your next message starts a new conversation with it.'}`;
 }
 
 /**
@@ -316,11 +378,8 @@ async function sessionCookie(user: TeamsUser): Promise<string> {
   if (cached && cached.expiresAt > Date.now()) return cached.value;
   const secret = process.env.NEXTAUTH_SECRET;
   if (!secret) throw new Error('NEXTAUTH_SECRET is not configured');
-  // Mirror the NextAuth jwt callback parsing so Teams and web always agree on admin role.
-  const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
-  const role = adminEmails.includes(user.email) ? 'admin' : 'user';
   const value = await encode({
-    token: { name: user.name, email: user.email, sub: user.aadObjectId, role },
+    token: { name: user.name, email: user.email, sub: user.aadObjectId, role: userRole(user) },
     secret,
     maxAge: SESSION_TOKEN_TTL_S,
   });
@@ -331,11 +390,11 @@ async function sessionCookie(user: TeamsUser): Promise<string> {
 type AcpResult = { status: number; data: Record<string, any> }; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 /** Call the existing /api/acp route over loopback as the mapped user. */
-async function acp(config: TeamsConfig, user: TeamsUser, body: Record<string, unknown>): Promise<AcpResult> {
+async function acp(config: TeamsConfig, user: TeamsUser, agentId: string, body: Record<string, unknown>): Promise<AcpResult> {
   const res = await fetch(`${config.internalBaseUrl}/api/acp`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: `next-auth.session-token=${await sessionCookie(user)}` },
-    body: JSON.stringify({ agentId: config.agentId, ...body }),
+    body: JSON.stringify({ ...body, agentId }),
   });
   const data = await res.json().catch(() => ({}));
   return { status: res.status, data };
@@ -345,11 +404,11 @@ async function acp(config: TeamsConfig, user: TeamsUser, body: Record<string, un
  * The model the web UI would use for this user and agent: their saved model choice, then the
  * agent default, then the first model. Sent explicitly so Teams turns run on the same model.
  */
-function selectedModelId(config: TeamsConfig, user: TeamsUser): string | undefined {
-  const agent = configStore.getAgentById(config.agentId);
+function selectedModelId(user: TeamsUser, agentId: string): string | undefined {
+  const agent = configStore.getAgentById(agentId);
   const models = agent?.models ?? [];
   const known = (id: string | null | undefined) => !!id && models.some((model) => model.modelId === id);
-  const preferred = configStore.getUserAgentModelPref(user.email, config.agentId);
+  const preferred = configStore.getUserAgentModelPref(user.email, agentId);
   if (preferred && (models.length === 0 || known(preferred))) return preferred;
   if (known(agent?.defaultModelId)) return agent!.defaultModelId;
   return models[0]?.modelId;
@@ -359,10 +418,10 @@ function selectedModelId(config: TeamsConfig, user: TeamsUser): string | undefin
  * `/model` lists the agent's models; `/model <number|id|name>` saves the choice as the user's
  * model preference for this agent (the same one the web UI's model picker saves).
  */
-function changeModel(config: TeamsConfig, user: TeamsUser, args: string): string {
-  const models = configStore.getAgentById(config.agentId)?.models ?? [];
-  if (models.length === 0) return `The **${config.agentId}** agent has no model list, so its model cannot be changed here.`;
-  const current = selectedModelId(config, user);
+function changeModel(user: TeamsUser, agentId: string, args: string): string {
+  const models = configStore.getAgentById(agentId)?.models ?? [];
+  if (models.length === 0) return `The **${agentId}** agent has no model list, so its model cannot be changed here.`;
+  const current = selectedModelId(user, agentId);
   const label = (model: AgentModel) => (model.name && model.name !== model.modelId ? `${model.name} (\`${model.modelId}\`)` : `\`${model.modelId}\``);
   const list = (items: AgentModel[]) => items.map((model) => `${models.indexOf(model) + 1}. ${label(model)}${model.modelId === current ? ' ✅' : ''}`).join('\n');
   const query = args.trim().toLowerCase();
@@ -374,19 +433,19 @@ function changeModel(config: TeamsConfig, user: TeamsUser, args: string): string
   if (matches.length === 0) return `No model matches "${args.trim()}". Send \`/model\` to see the list.`;
   if (matches.length > 1) return `"${args.trim()}" matches several models:\n${list(matches)}\n\nSend \`/model <number>\` to pick one.`;
 
-  configStore.setUserAgentModelPref(user.email, config.agentId, matches[0].modelId);
-  return `Model set to ${label(matches[0])}. It applies from your next message here and in the agents-chat web UI.`;
+  configStore.setUserAgentModelPref(user.email, agentId, matches[0].modelId);
+  return `Model set to ${label(matches[0])} for **${agentId}**. It applies from your next message here and in the agents-chat web UI.`;
 }
 
-async function ensureChat(config: TeamsConfig, user: TeamsUser, conversationId: string, prompt: string): Promise<{ id: string; name: string }> {
-  const existingId = currentChatId(user, conversationId);
+async function ensureChat(config: TeamsConfig, user: TeamsUser, agentId: string, conversationId: string, prompt: string): Promise<{ id: string; name: string }> {
+  const existingId = currentChatId(config, user, agentId, conversationId);
   if (existingId) {
     const existing = await getChat(user.email, existingId);
     if (existing) return { id: existing.id, name: existing.name };
   }
   const chat = { id: newTeamsChatId(conversationId), name: chatNameFromPrompt(prompt) };
-  await saveChat(user.email, { ...chat, ts: Date.now(), agentId: config.agentId, messages: [], agentSessions: {} });
-  configStore.setUserSetting(user.email, conversationSettingKey(conversationId), chat.id);
+  await saveChat(user.email, { ...chat, ts: Date.now(), agentId, messages: [], agentSessions: {} });
+  configStore.setUserSetting(user.email, chatSettingKey(config, agentId, conversationId), chat.id);
   return chat;
 }
 
@@ -399,7 +458,9 @@ async function runTurn(config: TeamsConfig, ref: ConversationRef, user: TeamsUse
   const indicator = streamer.informative('Thinking…');
   const slowTimers: ReturnType<typeof setTimeout>[] = [];
   try {
-    const chat = await ensureChat(config, user, ref.conversationId, prompt);
+    const agentId = activeAgentId(config, user, ref.conversationId);
+    state.agentId = agentId;
+    const chat = await ensureChat(config, user, agentId, ref.conversationId, prompt);
     state.chatId = chat.id;
     const userTs = Date.now();
     const agentMessageId = `teams-${randomUUID()}`;
@@ -408,16 +469,16 @@ async function runTurn(config: TeamsConfig, ref: ConversationRef, user: TeamsUse
     for (const status of SLOW_START_STATUS) {
       slowTimers.push(setTimeout(() => { streamer.informative(status.text).catch(() => undefined); }, status.afterMs));
     }
-    const modelId = selectedModelId(config, user);
-    const sent = await acp(config, user, { action: 'send', chatId: chat.id, text: prompt, messageId: agentMessageId, messageTs: userTs + 1, ...(modelId ? { modelId } : {}) });
+    const modelId = selectedModelId(user, agentId);
+    const sent = await acp(config, user, agentId, { action: 'send', chatId: chat.id, text: prompt, messageId: agentMessageId, messageTs: userTs + 1, ...(modelId ? { modelId } : {}) });
     slowTimers.forEach(clearTimeout);
     await indicator;
     if (!sent.data?.ok) {
-      await streamer.finish(describeSendError(config, sent));
+      await streamer.finish(describeSendError(agentId, sent));
       return;
     }
 
-    await pollTurn(config, ref, user, state, chat.id, agentMessageId, streamer);
+    await pollTurn(config, ref, user, state, agentId, chat.id, agentMessageId, streamer);
   } finally {
     slowTimers.forEach(clearTimeout);
     state.running = false;
@@ -425,11 +486,11 @@ async function runTurn(config: TeamsConfig, ref: ConversationRef, user: TeamsUse
   }
 }
 
-function describeSendError(config: TeamsConfig, result: AcpResult): string {
+function describeSendError(agentId: string, result: AcpResult): string {
   const error = String(result.data?.error || `HTTP ${result.status}`);
   if (result.status === 409) return 'The agent is still busy with a previous request in this chat. Send `/stop` to cancel it, or try again shortly.';
-  if (result.status === 403) return `You do not have access to the **${config.agentId}** agent.`;
-  if (result.status === 404 || /not.?found/i.test(error)) return `The **${config.agentId}** agent is not configured in agents-chat.`;
+  if (result.status === 403) return `You do not have access to the **${agentId}** agent. Send \`/agent\` to pick another.`;
+  if (result.status === 404 || /not.?found/i.test(error)) return `The **${agentId}** agent is not configured in agents-chat.`;
   if (result.status === 410) return 'This chat was deleted. Send `/new` to start a new conversation.';
   return `⚠️ Could not send your message to the agent: ${error}`;
 }
@@ -439,6 +500,7 @@ async function pollTurn(
   ref: ConversationRef,
   user: TeamsUser,
   state: ConversationState,
+  agentId: string,
   chatId: string,
   agentMessageId: string,
   streamer: TeamsStreamer,
@@ -451,7 +513,7 @@ async function pollTurn(
     await sleep(POLL_INTERVAL_MS);
     let turn: Record<string, any> | null; // eslint-disable-line @typescript-eslint/no-explicit-any
     try {
-      const polled = await acp(config, user, { action: 'poll', chatId });
+      const polled = await acp(config, user, agentId, { action: 'poll', chatId });
       if (!polled.data?.ok) throw new Error(String(polled.data?.error || `HTTP ${polled.status}`));
       turn = polled.data.activeTurn ?? null;
       failures = 0;
@@ -486,7 +548,7 @@ async function pollTurn(
       const suffix = error ? `⚠️ ${error}` : (turn.statusText === 'Interrupted' ? '⏹ Stopped.' : '');
       const finalText = suffix ? `${fullText}${fullText ? '\n\n' : ''}${suffix}` : fullText;
       await streamer.finish(finalText);
-      await acp(config, user, { action: 'turn-clear', chatId }).catch(() => undefined);
+      await acp(config, user, agentId, { action: 'turn-clear', chatId }).catch(() => undefined);
       return;
     }
 
@@ -513,7 +575,7 @@ async function answerPendingRequest(config: TeamsConfig, ref: ConversationRef, u
     await sendText(config, ref, 'Please reply with the number or name of one of the options, or send `/stop`.');
     return;
   }
-  const result = await acp(config, user, { action: 'respond-user-request', chatId: state.chatId, requestId: request.id, ...answer });
+  const result = await acp(config, user, state.agentId ?? config.agentId, { action: 'respond-user-request', chatId: state.chatId, requestId: request.id, ...answer });
   if (!result.data?.ok) {
     await sendText(config, ref, `⚠️ Could not deliver your answer: ${String(result.data?.error || `HTTP ${result.status}`)}`);
     return;
@@ -524,7 +586,7 @@ async function answerPendingRequest(config: TeamsConfig, ref: ConversationRef, u
 
 async function interrupt(config: TeamsConfig, user: TeamsUser, state: ConversationState): Promise<void> {
   if (!state.chatId) return;
-  const result = await acp(config, user, { action: 'interrupt', chatId: state.chatId });
+  const result = await acp(config, user, state.agentId ?? config.agentId, { action: 'interrupt', chatId: state.chatId });
   if (!result.data?.ok) logger.warn({ status: result.status, error: result.data?.error }, 'Teams /stop failed');
 }
 

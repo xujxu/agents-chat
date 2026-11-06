@@ -41,7 +41,8 @@ flowchart LR
    **email/UPN**. It then calls the existing `/api/acp` route over loopback as that user. Chat
    ownership, agent access, and the admin role work exactly as in the web UI.
 3. Each Teams 1:1 conversation maps to one agents-chat chat named `Teams: …`. In a group chat, each
-   person gets their own agents-chat chat. `/new` starts a new one.
+   person gets their own agents-chat chat. `/new` starts a new one. If you switch agents with
+   `/agent`, each agent gets its own chat in that conversation, filed under that agent in the web UI.
 4. The bridge polls the turn and streams the growing answer to Teams. Agent questions and
    permission prompts are posted as numbered lists. Reply with the number or label; free-text
    questions take one answer per line.
@@ -53,10 +54,15 @@ flowchart LR
 | `/new [prompt]` | Start a new chat, optionally with a first prompt |
 | `/stop` | Stop the running response |
 | `/whoami` | Show the mapped account, agent, model, and chat id |
+| `/agent [number or name]` | List the agents you can use, or switch this conversation to one. The choice is per person and per conversation; switching back continues that agent's earlier chat |
 | `/model [number or name]` | List the agent's models, or switch to one (also changes your model for this agent in the web UI) |
 | `/help` | Show help |
 
 Teams turns use the same model as the web UI: the model you last picked for this agent in agents-chat, otherwise the agent's default model.
+
+`/agent` lists the same agents you can talk to in the web UI (public agents, your own, ones shared
+with you, and all agents for admins). The bot's default agent comes from `TEAMS_AGENT_ID`; `/model`
+and `/new` apply to whichever agent you are currently using.
 
 ## Group chats
 
