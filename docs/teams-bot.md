@@ -290,11 +290,14 @@ Bot Connector with 250 ms round trips.
 | Step | Time |
 | --- | --- |
 | Endpoint acknowledgement | Immediate; processing runs in the background |
-| First "Thinking…" indicator in Teams | ~0.3 s (warm), ~0.5 s for a new user (one roster lookup, cached 1 hour) |
-| Agent cold start (first message after a service restart) | 4–6 s, while the indicator is already shown |
+| First "Thinking…" indicator in Teams | ~0.3 s (warm), ~0.5 s for a new user (one roster lookup; then cached and re-checked in the background every hour) |
+| Agent cold start (first message after a service restart) | 4–6 s, while the indicator is already shown. After 4 s it changes to "Starting the agent…", and after 20 s to "Still starting the agent…" |
 | Agent finished → final message in Teams | ~0.5 s or less (500 ms poll + one Bot Connector call) |
 | Streaming updates | At most one every 1.5 s, as Teams requires |
-| Bot token (option B) | ~2.5 s on the very first message after start, then cached and refreshed in the background |
+| Bot token and inbound signing keys | Fetched at service start (log line `Teams bot credentials warmed up`) and kept fresh every 5 minutes, so messages do not wait on `az`, Key Vault, or Entra ID |
+
+After the indicator appears, it shows what the agent is doing (thinking, or the current tool)
+until the first words of the answer stream in.
 
 ## Troubleshooting
 

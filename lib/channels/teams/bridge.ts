@@ -26,9 +26,17 @@ const logger = createLogger('teams-bot');
 const POLL_INTERVAL_MS = 500;
 const MAX_TURN_MS = 2 * 60 * 60_000;
 const MAX_POLL_FAILURES = 30;
-const IDENTITY_TTL_MS = 60 * 60_000;
+/** Identities are re-checked against the roster after this long, in the background... */
+const IDENTITY_REFRESH_MS = 60 * 60_000;
+/** ...and after this long without a successful refresh, the next message waits for a fresh lookup. */
+const IDENTITY_MAX_AGE_MS = 24 * 60 * 60_000;
 const SESSION_TOKEN_TTL_S = 60 * 60;
 
+/** Status lines shown while `send` waits for a cold agent to start. Mutable for tests. */
+export const SLOW_START_STATUS = [
+  { afterMs: 4000, text: 'Starting the agent… The first message after a while can take a few seconds.' },
+  { afterMs: 20_000, text: 'Still starting the agent…' },
+];
 export type TeamsActivity = {
   id?: string;
   type?: string;
@@ -53,16 +61,20 @@ type ConversationState = {
   answeredRequestId?: string;
 };
 
+type CachedIdentity = { user: TeamsUser; refreshAt: number; expiresAt: number };
+
 type Globals = {
   __teamsProcessed?: Map<string, number>;
   __teamsConversations?: Map<string, ConversationState>;
-  __teamsIdentities?: Map<string, { user: TeamsUser; expiresAt: number }>;
+  __teamsIdentities?: Map<string, CachedIdentity>;
+  __teamsIdentityRefreshes?: Map<string, Promise<unknown>>;
   __teamsSessionTokens?: Map<string, { value: string; expiresAt: number }>;
 };
 const g = globalThis as Globals;
 const processed = g.__teamsProcessed ??= new Map();
 const conversations = g.__teamsConversations ??= new Map();
 const identities = g.__teamsIdentities ??= new Map();
+const identityRefreshes = g.__teamsIdentityRefreshes ??= new Map();
 const sessionTokens = g.__teamsSessionTokens ??= new Map();
 
 const HELP_TEXT = [
@@ -260,18 +272,42 @@ function currentChatId(user: TeamsUser, conversationId: string): string | undefi
   return configStore.getUserSettings(user.email)[conversationSettingKey(conversationId)] || undefined;
 }
 
+/**
+ * Map the Teams sender to an agents-chat user. Cached per sender: after IDENTITY_REFRESH_MS the cached
+ * identity is still used, but re-checked against the roster in the background (a sender who has
+ * left the organization or lost their email is dropped from the cache), so normal messages never
+ * wait on the roster lookup. TEAMS_ALLOWED_USERS is checked on every message regardless.
+ */
 async function resolveUser(config: TeamsConfig, ref: ConversationRef, activity: TeamsActivity): Promise<TeamsUser | 'external' | null> {
   const cacheKey = activity.from?.aadObjectId || ref.userId;
   const cached = identities.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return cached.user;
+  const now = Date.now();
+  if (cached && cached.expiresAt > now) {
+    if (cached.refreshAt <= now && !identityRefreshes.has(cacheKey)) {
+      const refresh = lookupUser(config, ref, activity, cacheKey)
+        .catch((err) => logger.warn({ err: err instanceof Error ? err.message : String(err) }, 'Background Teams roster refresh failed'))
+        .finally(() => identityRefreshes.delete(cacheKey));
+      identityRefreshes.set(cacheKey, refresh);
+    }
+    return cached.user;
+  }
+  return lookupUser(config, ref, activity, cacheKey);
+}
 
+async function lookupUser(config: TeamsConfig, ref: ConversationRef, activity: TeamsActivity, cacheKey: string): Promise<TeamsUser | 'external' | null> {
   const member = await getMember(config, ref, ref.userId);
   // Group chats can include people from other organizations and anonymous meeting guests.
-  if (member.userRole === 'anonymous' || (member.tenantId && member.tenantId.toLowerCase() !== config.tenantId.toLowerCase())) return 'external';
+  if (member.userRole === 'anonymous' || (member.tenantId && member.tenantId.toLowerCase() !== config.tenantId.toLowerCase())) {
+    identities.delete(cacheKey);
+    return 'external';
+  }
   const email = (member.email || member.userPrincipalName || '').trim().toLowerCase();
-  if (!email || !email.includes('@')) return null;
+  if (!email || !email.includes('@')) {
+    identities.delete(cacheKey);
+    return null;
+  }
   const user: TeamsUser = { email, name: member.name || activity.from?.name || email, aadObjectId: member.aadObjectId || activity.from?.aadObjectId || ref.userId };
-  identities.set(cacheKey, { user, expiresAt: Date.now() + IDENTITY_TTL_MS });
+  identities.set(cacheKey, { user, refreshAt: Date.now() + IDENTITY_REFRESH_MS, expiresAt: Date.now() + IDENTITY_MAX_AGE_MS });
   return user;
 }
 
@@ -357,6 +393,11 @@ async function ensureChat(config: TeamsConfig, user: TeamsUser, conversationId: 
 async function runTurn(config: TeamsConfig, ref: ConversationRef, user: TeamsUser, state: ConversationState, prompt: string): Promise<void> {
   state.running = true;
   state.pendingRequest = undefined;
+  // Show progress before anything else: saving the chat and `send` (which starts a cold agent
+  // process) can take several seconds.
+  const streamer = new TeamsStreamer(config, ref);
+  const indicator = streamer.informative('Thinking…');
+  const slowTimers: ReturnType<typeof setTimeout>[] = [];
   try {
     const chat = await ensureChat(config, user, ref.conversationId, prompt);
     state.chatId = chat.id;
@@ -364,11 +405,12 @@ async function runTurn(config: TeamsConfig, ref: ConversationRef, user: TeamsUse
     const agentMessageId = `teams-${randomUUID()}`;
     await appendMessageToChat(user.email, chat, { id: `teams-user-${randomUUID()}`, type: 'user', content: prompt, ts: userTs });
 
-    // Show progress right away: `send` can take several seconds while a cold agent process starts.
-    const streamer = new TeamsStreamer(config, ref);
-    const indicator = streamer.informative('Thinking…');
+    for (const status of SLOW_START_STATUS) {
+      slowTimers.push(setTimeout(() => { streamer.informative(status.text).catch(() => undefined); }, status.afterMs));
+    }
     const modelId = selectedModelId(config, user);
     const sent = await acp(config, user, { action: 'send', chatId: chat.id, text: prompt, messageId: agentMessageId, messageTs: userTs + 1, ...(modelId ? { modelId } : {}) });
+    slowTimers.forEach(clearTimeout);
     await indicator;
     if (!sent.data?.ok) {
       await streamer.finish(describeSendError(config, sent));
@@ -377,6 +419,7 @@ async function runTurn(config: TeamsConfig, ref: ConversationRef, user: TeamsUse
 
     await pollTurn(config, ref, user, state, chat.id, agentMessageId, streamer);
   } finally {
+    slowTimers.forEach(clearTimeout);
     state.running = false;
     state.pendingRequest = undefined;
   }
@@ -449,12 +492,17 @@ async function pollTurn(
 
     if (!state.pendingRequest) {
       if (fullText) await streamer.update(fullText);
-      else await streamer.informative(String(turn.statusText || 'Thinking…'));
+      else await streamer.informative(statusLine(turn.statusText));
     }
     lastText = fullText;
   }
 
   await streamer.finish(`${lastText}\n\n⚠️ Stopped waiting after ${MAX_TURN_MS / 60_000} minutes. Check the agents-chat web UI.`.trim());
+}
+
+function statusLine(statusText: unknown): string {
+  const text = typeof statusText === 'string' ? statusText.trim() : '';
+  return !text || text === 'Thinking' ? 'Thinking…' : text;
 }
 
 async function answerPendingRequest(config: TeamsConfig, ref: ConversationRef, user: TeamsUser, state: ConversationState, text: string): Promise<void> {

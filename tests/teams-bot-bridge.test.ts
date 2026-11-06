@@ -17,6 +17,8 @@ const calls: Call[] = [];
 const sentMessageIds = new Map<string, string>();
 const pendingRequests = new Map<string, { id: string; options: { optionId: string; label: string }[] }>();
 const holdOpen = new Set<string>();
+const turnedExternal = new Set<string>();
+let sendDelayMs = 0;
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
@@ -30,7 +32,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   if (url.startsWith('https://login.microsoftonline.com/')) return json({ access_token: 'test-token', expires_in: 3600 });
   if (url.includes('/members/')) {
     const id = decodeURIComponent(url.split('/members/')[1]);
-    if (id === '29:external') return json({ id, email: 'x@other.com', tenantId: 'other-tenant' });
+    if (id === '29:external' || turnedExternal.has(id)) return json({ id, email: 'x@other.com', tenantId: 'other-tenant' });
     if (id === '29:anon') return json({ id, userRole: 'anonymous', tenantId: TENANT });
     if (id === '29:noemail') return json({ id, name: 'No Email', tenantId: TENANT });
     if (id === '29:broken') return json({ error: 'boom' }, 500);
@@ -39,7 +41,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   if (url.startsWith(SERVICE_URL)) return json({ id: `act-${calls.length}` });
   if (url.endsWith('/api/acp')) {
     const { action, chatId } = body;
-    if (action === 'send') { sentMessageIds.set(chatId, body.messageId); return json({ ok: true }); }
+    if (action === 'send') { if (sendDelayMs) await new Promise((r) => setTimeout(r, sendDelayMs)); sentMessageIds.set(chatId, body.messageId); return json({ ok: true }); }
     if (action === 'poll') {
       const userRequest = pendingRequests.get(chatId);
       const done = !holdOpen.has(chatId);
@@ -88,7 +90,7 @@ async function main() {
   process.env.NEXTAUTH_SECRET = 'test-only-nextauth-secret-0123456789';
   try {
     process.chdir(dir);
-    const { handleActivity } = await import('../lib/channels/teams/bridge');
+    const { handleActivity, SLOW_START_STATUS } = await import('../lib/channels/teams/bridge');
     const run = async (act: ReturnType<typeof activity>) => { const start = calls.length; await handleActivity(act, config); return since(start); };
 
     // Group chat: messages that do not @mention the bot are ignored entirely.
@@ -219,6 +221,70 @@ async function main() {
     for (const from of ['29:carol', '29:external']) {
       assert.equal((await welcomeFor(from, 'groupChat', 'group-2')).length, 0, `${from} adds bot to a group`);
       assert.equal((await welcomeFor(from, 'personal', `personal-${from}`)).length, 0, `${from} installs bot`);
+    }
+
+    // Latency: the "Thinking…" indicator is the first thing posted, before the agent is asked to start.
+    const informatives = (posts: any[]) => posts.filter((p) => p.entities?.[0]?.streamType === 'informative').map((p) => p.text as string); // eslint-disable-line @typescript-eslint/no-explicit-any
+    let start = calls.length;
+    await handleActivity(activity('29:alice', 'quick', [], 'personal', 'personal-fast'), config);
+    const fastCalls = calls.slice(start);
+    assert.ok(fastCalls.findIndex((c) => c.url.startsWith(SERVICE_URL)) < fastCalls.findIndex((c) => c.body?.action === 'send'), 'indicator before send');
+    assert.equal(informatives(since(start).posts)[0], 'Thinking…');
+
+    // UX: while a cold agent starts (slow `send`), the status line explains the wait.
+    const defaults = SLOW_START_STATUS.map((s) => s.afterMs);
+    SLOW_START_STATUS[0].afterMs = 1600;
+    SLOW_START_STATUS[1].afterMs = 3200;
+    try {
+      sendDelayMs = 3600;
+      r = await run(activity('29:alice', 'slow', [], 'personal', 'personal-fast'));
+      assert.deepEqual(informatives(r.posts), ['Thinking…', SLOW_START_STATUS[0].text, SLOW_START_STATUS[1].text]);
+      // A fast send cancels the pending status lines.
+      sendDelayMs = 0;
+      start = calls.length;
+      await handleActivity(activity('29:alice', 'fast', [], 'personal', 'personal-fast'), config);
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      assert.deepEqual(informatives(since(start).posts), ['Thinking…']);
+    } finally {
+      sendDelayMs = 0;
+      SLOW_START_STATUS.forEach((s, i) => { s.afterMs = defaults[i]; });
+    }
+
+    // Identity cache: a known user is served from cache without waiting on the roster, and
+    // re-checked in the background once due; someone who has left is then dropped.
+    const identities = (globalThis as any).__teamsIdentities as Map<string, { refreshAt: number }>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const refreshes = (globalThis as any).__teamsIdentityRefreshes as Map<string, Promise<unknown>>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const memberCalls = (from: number) => calls.slice(from).filter((c) => c.url.includes('/members/')).length;
+    start = calls.length;
+    r = await run(activity('29:bob', 'cached', [], 'personal', 'personal-bob'));
+    assert.equal(memberCalls(start), 0, 'fresh identity: no roster lookup');
+    turnedExternal.add('29:bob');
+    identities.get('aad-29:bob')!.refreshAt = 0;
+    start = calls.length;
+    r = await run(activity('29:bob', 'still cached', [], 'personal', 'personal-bob'));
+    assert.ok(r.acp.some((a) => a.action === 'send'), 'stale identity is still served');
+    await waitFor(() => refreshes.size === 0, 'background identity refresh');
+    assert.equal(memberCalls(start), 1, 'one background roster lookup');
+    r = await run(activity('29:bob', 'after leaving', [], 'personal', 'personal-bob'));
+    assert.deepEqual([r.posts.length, r.acp.length], [0, 0], 'user dropped after the background refresh');
+    turnedExternal.delete('29:bob');
+    r = await run(activity('29:bob', 'back', [], 'personal', 'personal-bob'));
+    assert.ok(r.acp.some((a) => a.action === 'send'), 'looked up again on demand');
+
+    // Warm-up fetches the bot token once, so the first message does not wait for it.
+    const auth = await import('../lib/channels/teams/auth');
+    auth.resetTeamsAuthForTests();
+    try {
+      start = calls.length;
+      const errors: string[] = [];
+      await auth.warmUpTeams(config, { inboundKeys: false, onError: (stage) => errors.push(stage) });
+      assert.deepEqual(errors, []);
+      assert.equal(calls.slice(start).filter((c) => c.url.startsWith('https://login.microsoftonline.com/')).length, 1, 'token fetched by warm-up');
+      start = calls.length;
+      r = await run(activity('29:alice', 'warm', [], 'personal', 'personal-fast'));
+      assert.equal(calls.slice(start).filter((c) => c.url.startsWith('https://login.microsoftonline.com/')).length, 0, 'message reuses the warm token');
+    } finally {
+      auth.resetTeamsAuthForTests();
     }
 
     console.log('teams bot bridge checks passed');
