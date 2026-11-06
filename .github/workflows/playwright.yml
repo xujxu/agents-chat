@@ -72,6 +72,8 @@ jobs:
     env:
       ADMIN_PASSWORD: admin123
       ADMIN_USERNAME: admin
+      # chat-account-recovery.spec.ts signs in as bob, who needs a role now that sign-in is deny-by-default.
+      MEMBER_EMAILS: bob@local
       NEXTAUTH_SECRET: playwright-ci-secret
       NEXTAUTH_URL: http://localhost:3010
       PLAYWRIGHT_BASE_URL: http://localhost:3010

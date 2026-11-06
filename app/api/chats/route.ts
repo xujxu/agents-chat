@@ -6,22 +6,17 @@ import { commitChatOperation, isChatOperation } from '@/lib/chatSyncStore';
 import { readTransfer } from '@/lib/chatTransferStore';
 import { ChatSyncError } from '@/lib/chatSyncProtocol';
 import { hasPersistedAgentSession } from '@/app/features/chat/chatHelpers';
-import { getGitContextOptions, isValidStoredGitContext, validateGitContext } from '@/lib/gitContext';
+import { getGitContextOptions, isValidStoredGitContext, validateGitContext, type GitContextOptions } from '@/lib/gitContext';
 import { getAgentById, getAllAgents, getUserChatLastUsedAgent, getUserLastUsedAgent, getUserSettings } from '@/lib/configStore';
+import { getUserRole, usableAgents } from '@/lib/rbac';
 import { createLogger } from '@/lib/logger';
+import { isAdminToken } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 const logger = createLogger('api.chats');
 
 function getUserId(token: any): string { // eslint-disable-line @typescript-eslint/no-explicit-any
   return token?.email || token?.name || token?.sub || 'anonymous';
-}
-
-function isAdminToken(token: any): boolean { // eslint-disable-line @typescript-eslint/no-explicit-any
-  if (!token) return false;
-  if (token.role === 'admin' || token.sub === 'admin') return true;
-  const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map((e: string) => e.trim().toLowerCase()).filter(Boolean);
-  return adminEmails.includes((token.email || '').toLowerCase());
 }
 
 const LAST_USED_AGENT_SCOPE_KEY = 'last_used_agent_scope';
@@ -33,7 +28,25 @@ function getDefaultAgentCwd(): string | null {
   return defaultAgent?.cwd || null;
 }
 
-function resolveChatGitContextOptions(userId: string, chat: StoredChat) {
+function unavailableGitContext(): GitContextOptions {
+  return { available: false, repoRoot: '', branches: [], worktrees: [], effective: null, statusText: 'Git context unavailable' };
+}
+
+/** Guests may only see git state for the workspaces of agents shared with them. */
+function guestGitRoots(token: any): string[] { // eslint-disable-line @typescript-eslint/no-explicit-any
+  return usableAgents(token).filter((agent) => !agent.relay && agent.cwd).map((agent) => agent.cwd as string);
+}
+
+function resolveGuestChatGitContextOptions(token: any, chat: StoredChat): GitContextOptions { // eslint-disable-line @typescript-eslint/no-explicit-any
+  for (const root of guestGitRoots(token)) {
+    const options = getGitContextOptions(chat.gitContext || null, root);
+    if (options.available && (!chat.gitContext || options.repoRoot === chat.gitContext.repoRoot)) return options;
+  }
+  return unavailableGitContext();
+}
+
+function resolveChatGitContextOptions(userId: string, chat: StoredChat, token?: any): GitContextOptions { // eslint-disable-line @typescript-eslint/no-explicit-any
+  if (token && getUserRole(token) === 'guest') return resolveGuestChatGitContextOptions(token, chat);
   const candidateRoots = new Set<string>();
   if (chat.gitContext?.repoRoot) candidateRoots.add(chat.gitContext.repoRoot);
 
@@ -94,6 +107,8 @@ function resolveChatGitContextOptions(userId: string, chat: StoredChat) {
 export async function GET(req: NextRequest) {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, cookieName: 'next-auth.session-token' });
   if (!token) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+  const role = getUserRole(token);
+  if (!role) return NextResponse.json({ ok: false, error: 'not_authorized' }, { status: 403 });
 
   const userId = getUserId(token);
   const chatId = req.nextUrl.searchParams.get('id');
@@ -101,7 +116,7 @@ export async function GET(req: NextRequest) {
   if (chatId) {
     const chat = await getChat(userId, chatId);
     if (!chat) return NextResponse.json({ ok: false, error: 'not_found' }, { status: 404 });
-    const gitContextOptions = resolveChatGitContextOptions(userId, chat);
+    const gitContextOptions = resolveChatGitContextOptions(userId, chat, token);
     if (!chat.gitContext && gitContextOptions.effective) {
       logger.info({
         chatId,
@@ -129,6 +144,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, cookieName: 'next-auth.session-token' });
   if (!token) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+  const role = getUserRole(token);
+  if (!role) return NextResponse.json({ ok: false, error: 'not_authorized' }, { status: 403 });
 
   const userId = getUserId(token);
   const body = await req.json().catch(() => ({}));
@@ -202,7 +219,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'git_context_locked' }, { status: 409 });
     }
 
-    const options = getGitContextOptions(gitContext);
+    const options = role === 'guest'
+      ? guestGitRoots(token).map((root) => getGitContextOptions(gitContext, root)).find((candidate) => candidate.available && candidate.repoRoot === gitContext.repoRoot)
+      : getGitContextOptions(gitContext);
+    if (!options) return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 });
     const validated = validateGitContext(gitContext, options);
     if (!validated.ok) {
       return NextResponse.json({ ok: false, error: validated.error }, { status: 400 });

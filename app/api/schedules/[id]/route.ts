@@ -4,6 +4,7 @@ import { openScheduleStore } from "../../../../lib/scheduler/scheduleStore";
 import { getRuntime, ensureRuntime } from "../../../../lib/scheduler/schedulerRuntime";
 import { specToCron, validateSpec } from "../../../../app/features/scheduler/scheduleSpec";
 import { MIN_TIMEOUT_MINUTES, MAX_TIMEOUT_MINUTES } from "../../../../app/features/scheduler/scheduleTypes";
+import { denyRole } from '@/lib/rbac';
 
 function authorize(token: any, ownerEmail: string) {
   return token?.email && (isAdminToken(token) || token.email === ownerEmail);
@@ -12,6 +13,8 @@ function authorize(token: any, ownerEmail: string) {
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const token = await getAuthToken(req);
+  const denied = token ? denyRole(token, ['admin', 'member']) : null;
+  if (denied) return denied;
   const store = openScheduleStore();
   const job = store.getJob(id);
   if (!job) return NextResponse.json({ error: "not found" }, { status: 404 });
@@ -22,6 +25,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const token = await getAuthToken(req);
+  const denied = token ? denyRole(token, ['admin', 'member']) : null;
+  if (denied) return denied;
   const store = openScheduleStore();
   const job = store.getJob(id);
   if (!job) return NextResponse.json({ error: "not found" }, { status: 404 });
@@ -53,6 +58,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const token = await getAuthToken(req);
+  const denied = token ? denyRole(token, ['admin', 'member']) : null;
+  if (denied) return denied;
   const store = openScheduleStore();
   const job = store.getJob(id);
   if (!job) return NextResponse.json({ error: "not found" }, { status: 404 });

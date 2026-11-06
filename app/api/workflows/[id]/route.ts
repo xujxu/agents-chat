@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { getUserWorkflow, deleteUserWorkflow } from '@/lib/workflowStore';
+import { denyRole } from '@/lib/rbac';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +14,8 @@ type Ctx = { params: Promise<{ id: string }> };
 export async function GET(req: NextRequest, ctx: Ctx) {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, cookieName: 'next-auth.session-token' });
   if (!token) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+  const denied = denyRole(token, ['admin', 'member']);
+  if (denied) return denied;
   const userId = getUserId(token);
   const { id } = await ctx.params;
   const wf = getUserWorkflow(userId, id);
@@ -23,6 +26,8 @@ export async function GET(req: NextRequest, ctx: Ctx) {
 export async function DELETE(req: NextRequest, ctx: Ctx) {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, cookieName: 'next-auth.session-token' });
   if (!token) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+  const denied = denyRole(token, ['admin', 'member']);
+  if (denied) return denied;
   const userId = getUserId(token);
   const { id } = await ctx.params;
   const ok = deleteUserWorkflow(userId, id);

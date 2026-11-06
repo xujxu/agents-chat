@@ -11,9 +11,12 @@ import {
   updateChatMessage,
   StoredMessage,
   updateChatAgentSession,
+  isAgentSessionOwnedByOtherUser,
 } from '@/lib/chatStore';
 import { isAdminToken, getUserEmail, canModify, canTalkTo, getAuthToken } from '@/lib/auth';
+import { canUseAgent, getUserRole } from '@/lib/rbac';
 import * as configStore from '@/lib/configStore';
+import { pruneGitHubBindings } from '@/lib/githubIdentity';
 import type { AcpPromptPart, AgentConfig, AgentModel, AgentProcess, PromptAttachment, StoredContentPart, TurnEvent, TurnPhase, TurnState, UserSession, WarmLocalAgentResult } from '@/lib/acp/types';
 import { AttachmentValidationError, buildPromptParts, normalizePromptAttachments } from '@/lib/acp/attachments';
 import { createNdjsonRpc, createRelayNdjsonRpc } from '@/lib/acp/rpc';
@@ -628,6 +631,20 @@ function getLastStoredSessionId(value: unknown): string | null {
 async function getStoredChatAgentSessionId(userId: string, chatId: string, agentId: string): Promise<string | null> {
   const chat = await getChat(userId, chatId);
   return getLastStoredSessionId(chat?.agentSessions?.[agentId]);
+}
+
+/**
+ * Whether another user already uses `sessionId` on this agent, live or in one of their saved chats. Everyone
+ * sharing an agent runs as its owner, so session IDs are the only boundary between their conversations.
+ */
+function isSessionOfAnotherUser(agentId: string, userId: string, sessionId: string): boolean {
+  const ownKey = userSessionKey(agentId, userId);
+  for (const [key, other] of getUserSessions().entries()) {
+    if (key === ownKey || !key.startsWith(`${agentId}:`)) continue;
+    if (other.sessionId === sessionId) return true;
+    for (const list of other.chatSessions?.values() ?? []) if (list.includes(sessionId)) return true;
+  }
+  return isAgentSessionOwnedByOtherUser(userId, agentId, sessionId);
 }
 
 async function getStoredChatHistoryForRecovery(userId: string, chatId: string): Promise<{ type: string; content: string; agentId?: string }[] | undefined> {
@@ -1595,6 +1612,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'missing_action' }, { status: 400 });
     }
 
+    const authToken = await getAuthToken(req);
+    const userRole = getUserRole(authToken);
+    if (!userRole) return NextResponse.json({ ok: false, error: 'not_authorized' }, { status: 403 });
+    // Changing an agent (config, sign-in, access list, deletion) needs a member or admin role on top of ownership,
+    // so an owner later demoted to guest can no longer reconfigure what runs on the server.
+    const canManageAgent = (owner: string | undefined) => userRole !== 'guest' && canModify(authToken, owner || '');
+
     // ─── Diagnostic endpoint ───
     if (action === 'diag') {
       const mem = process.memoryUsage();
@@ -1698,7 +1722,9 @@ export async function POST(req: NextRequest) {
     if (action === 'acp-auth-status') {
       if (!agentId) return NextResponse.json({ ok: false, error: 'missing_agentId' }, { status: 400 });
       const config = getAgentById(agentId);
-      if (!config) return NextResponse.json({ ok: false, error: 'agent_not_found' }, { status: 404 });
+      const record = configStore.getAgentById(agentId);
+      if (!config || !record) return NextResponse.json({ ok: false, error: 'agent_not_found' }, { status: 404 });
+      if (!canUseAgent(authToken, record)) return NextResponse.json({ ok: false, error: 'access_denied' }, { status: 403 });
       const proc = getAgentProcess(agentId, config);
       return NextResponse.json({
         ok: true,
@@ -1714,12 +1740,14 @@ export async function POST(req: NextRequest) {
       if (!agentId) return NextResponse.json({ ok: false, error: 'missing_agentId' }, { status: 400 });
       const config = getAgentById(agentId);
       if (!config) return NextResponse.json({ ok: false, error: 'agent_not_found' }, { status: 404 });
-      // Only authenticated app users can trigger agent sign-in. We don't
-      // restrict to admins because the underlying agent uses its own auth
-      // (e.g. the user's own GitHub account for Copilot CLI).
-      const token = await getAuthToken(req);
+      // Signing the agent in changes the identity it runs as, so only its owner or an admin may do it.
+      const token = authToken;
       const userEmail = getUserEmail(token);
       if (!userEmail) return NextResponse.json({ ok: false, error: 'unauthenticated' }, { status: 401 });
+      const record = configStore.getAgentById(agentId);
+      if (!record || !canManageAgent(record.owner)) {
+        return NextResponse.json({ ok: false, error: 'permission_denied' }, { status: 403 });
+      }
       const methodId = typeof body?.methodId === 'string' ? body.methodId : '';
       if (!methodId) return NextResponse.json({ ok: false, error: 'missing_methodId' }, { status: 400 });
 
@@ -1787,28 +1815,28 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'list-agents') {
-      const allAgents = configStore.getAllAgents();
-      const token = await getAuthToken(req);
-      const userEmail = getUserEmail(token);
+      const token = authToken;
       const procs = getAgentProcesses();
-      // All authenticated users can see all agents; include canModify and canTalk flags
-      const agents = allAgents.map(a => {
-        const userCanModify = canModify(token, a.owner);
-        const userCanTalk = canTalkTo(token, a.owner, a.id, a.public, configStore.hasAgentAccess);
+      // Guests only see the agents shared with them; members still see locked agents (canTalk: false).
+      const agents = configStore.getAllAgents().flatMap(a => {
+        const userCanModify = userRole !== 'guest' && canModify(token, a.owner);
+        const userCanTalk = canUseAgent(token, a);
+        if (userRole === 'guest' && !userCanTalk) return [];
         const relayNode = a.relay && a.relayConnectionName ? configStore.getNodeByName(a.relayConnectionName) : null;
         const proc = procs.get(a.id);
         const authMethods = proc?.authMethods ?? [];
         const needsAuth = !!proc?.needsAuth;
         const base = { id: a.id, name: a.name, owner: a.owner, canModify: userCanModify, canTalk: userCanTalk, public: a.public, relay: a.relay, noTools: a.noTools, relayConnectionName: a.relayConnectionName, relayConnectionLabel: relayNode?.label, cwd: a.cwd, models: a.models, defaultModelId: a.defaultModelId, authMethods, needsAuth };
         if (userCanModify) {
-          return { ...base, command: a.command, args: a.args, cwd: a.cwd, yolo: a.yolo, relayConnectionName: a.relayConnectionName, relayConnectionLabel: relayNode?.label };
+          return [{ ...base, command: a.command, args: a.args, cwd: a.cwd, yolo: a.yolo, relayConnectionName: a.relayConnectionName, relayConnectionLabel: relayNode?.label }];
         }
-        return base;
+        return [base];
       });
-      return NextResponse.json({ ok: true, agents });
+      return NextResponse.json({ ok: true, agents, role: userRole });
     }
 
     if (action === 'warm-local-agents') {
+      if (userRole === 'guest') return NextResponse.json({ ok: true, warmed: 0, agents: [] });
       const agents = await warmLocalAgents();
       const warmed = agents.filter(agent => agent.status === 'started').length;
       return NextResponse.json({ ok: true, warmed, agents });
@@ -1818,6 +1846,9 @@ export async function POST(req: NextRequest) {
       if (!agentId) return NextResponse.json({ ok: false, error: 'missing_agentId' }, { status: 400 });
       const agent = getAgentById(agentId);
       if (!agent) return NextResponse.json({ ok: false, error: 'agent_not_found' }, { status: 404 });
+      if (userRole === 'guest' || !canModify(authToken, configStore.getAgentById(agentId)?.owner || '')) {
+        return NextResponse.json({ ok: false, error: 'permission_denied' }, { status: 403 });
+      }
       // Return env as parsed object for the UI
       let envObj: Record<string, string> = {};
       try { if (agent.env) envObj = JSON.parse(agent.env); } catch { /* ignore */ }
@@ -1826,10 +1857,9 @@ export async function POST(req: NextRequest) {
 
     if (action === 'get-sessions') {
       // Return current session IDs for all agents for this user
-      const userId = String(body?.userId || 'anonymous');
-      const allAgents = readAgentsConfig();
+      const userId = String(authToken?.email || authToken?.name || authToken?.sub || 'anonymous');
       const sessionMap: Record<string, string | null> = {};
-      for (const agent of allAgents) {
+      for (const agent of configStore.getAllAgents().filter((a) => canUseAgent(authToken, a))) {
         const s = getUserSessions().get(userSessionKey(agent.id, userId));
         sessionMap[agent.id] = s?.sessionId ?? null;
       }
@@ -1840,10 +1870,9 @@ export async function POST(req: NextRequest) {
 
     if (action === 'update-agent-config') {
       if (!agentId) return NextResponse.json({ ok: false, error: 'missing_agentId' }, { status: 400 });
-      const token = await getAuthToken(req);
       const agent = configStore.getAgentById(agentId);
       if (!agent) return NextResponse.json({ ok: false, error: 'agent_not_found' }, { status: 404 });
-      if (!canModify(token, agent.owner)) {
+      if (!canManageAgent(agent.owner)) {
         return NextResponse.json({ ok: false, error: 'permission_denied' }, { status: 403 });
       }
 
@@ -1890,6 +1919,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'create-agent') {
+      if (userRole === 'guest') return NextResponse.json({ ok: false, error: 'permission_denied' }, { status: 403 });
       const token = await getAuthToken(req);
       const ownerEmail = getUserEmail(token);
       if (!ownerEmail) {
@@ -1931,10 +1961,9 @@ export async function POST(req: NextRequest) {
 
     if (action === 'delete-agent') {
       if (!agentId) return NextResponse.json({ ok: false, error: 'missing_agentId' }, { status: 400 });
-      const token = await getAuthToken(req);
       const agent = configStore.getAgentById(agentId);
       if (!agent) return NextResponse.json({ ok: false, error: 'agent_not_found' }, { status: 404 });
-      if (!canModify(token, agent.owner)) {
+      if (!canManageAgent(agent.owner)) {
         return NextResponse.json({ ok: false, error: 'permission_denied' }, { status: 403 });
       }
 
@@ -1951,6 +1980,7 @@ export async function POST(req: NextRequest) {
       }
 
       configStore.deleteAgent(agentId);
+      pruneGitHubBindings();
       return NextResponse.json({ ok: true });
     }
 
@@ -1958,38 +1988,36 @@ export async function POST(req: NextRequest) {
 
     if (action === 'add-agent-access') {
       if (!agentId) return NextResponse.json({ ok: false, error: 'missing_agentId' }, { status: 400 });
-      const token = await getAuthToken(req);
       const agent = configStore.getAgentById(agentId);
       if (!agent) return NextResponse.json({ ok: false, error: 'agent_not_found' }, { status: 404 });
-      if (!canModify(token, agent.owner)) {
+      if (!canManageAgent(agent.owner)) {
         return NextResponse.json({ ok: false, error: 'permission_denied' }, { status: 403 });
       }
       const email = (body?.email as string || '').trim().toLowerCase();
       if (!email) return NextResponse.json({ ok: false, error: 'missing_email' }, { status: 400 });
-      configStore.addAgentAccess(agentId, email, getUserEmail(token));
+      configStore.addAgentAccess(agentId, email, getUserEmail(authToken));
       return NextResponse.json({ ok: true });
     }
 
     if (action === 'remove-agent-access') {
       if (!agentId) return NextResponse.json({ ok: false, error: 'missing_agentId' }, { status: 400 });
-      const token = await getAuthToken(req);
       const agent = configStore.getAgentById(agentId);
       if (!agent) return NextResponse.json({ ok: false, error: 'agent_not_found' }, { status: 404 });
-      if (!canModify(token, agent.owner)) {
+      if (!canManageAgent(agent.owner)) {
         return NextResponse.json({ ok: false, error: 'permission_denied' }, { status: 403 });
       }
       const email = (body?.email as string || '').trim().toLowerCase();
       if (!email) return NextResponse.json({ ok: false, error: 'missing_email' }, { status: 400 });
       configStore.removeAgentAccess(agentId, email);
+      pruneGitHubBindings();
       return NextResponse.json({ ok: true });
     }
 
     if (action === 'list-agent-access') {
       if (!agentId) return NextResponse.json({ ok: false, error: 'missing_agentId' }, { status: 400 });
-      const token = await getAuthToken(req);
       const agent = configStore.getAgentById(agentId);
       if (!agent) return NextResponse.json({ ok: false, error: 'agent_not_found' }, { status: 404 });
-      if (!canModify(token, agent.owner)) {
+      if (!canManageAgent(agent.owner)) {
         return NextResponse.json({ ok: false, error: 'permission_denied' }, { status: 403 });
       }
       const accessList = configStore.getAgentAccessList(agentId);
@@ -2003,11 +2031,15 @@ export async function POST(req: NextRequest) {
     }
 
     const config = getAgentById(agentId);
-    if (!config) {
+    const agentRecordForAccess = configStore.getAgentById(agentId);
+    if (!config || !agentRecordForAccess) {
       return NextResponse.json({ ok: false, error: 'agent_not_found' }, { status: 404 });
     }
+    if (!canUseAgent(authToken, agentRecordForAccess)) {
+      return NextResponse.json({ ok: false, error: 'access_denied' }, { status: 403 });
+    }
 
-    const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, cookieName: 'next-auth.session-token' });
+    const token = authToken;
     const userId = String(token?.email || token?.name || token?.sub || 'anonymous');
     const isAdmin = isAdminToken(token);
     const proc = getAgentProcess(agentId, config);
@@ -2381,6 +2413,9 @@ export async function POST(req: NextRequest) {
       const chatId = body?.chatId as string | undefined;
       if (!savedSessionId) {
         return NextResponse.json({ ok: false, error: 'missing_sessionId' }, { status: 400 });
+      }
+      if (!isAdmin && isSessionOfAnotherUser(agentId, userId, savedSessionId)) {
+        return NextResponse.json({ ok: false, error: 'session_not_found' }, { status: 404 });
       }
       const turnChatKey = chatId || '__default';
       const chatTurn = sess.activeTurns.get(turnChatKey);

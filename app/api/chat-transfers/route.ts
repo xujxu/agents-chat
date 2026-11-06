@@ -3,12 +3,15 @@ import { getToken } from 'next-auth/jwt';
 import { putTransferChunk, deleteTransfer, transferStatus } from '@/lib/chatTransferStore';
 import { ChatSyncError, isRecord } from '@/lib/chatSyncProtocol';
 import { createLogger } from '@/lib/logger';
+import { denyRole } from '@/lib/rbac';
 
 const logger = createLogger('api.chat-transfers');
 
 export async function POST(req: NextRequest) {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, cookieName: 'next-auth.session-token' });
   if (!token) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+  const denied = denyRole(token);
+  if (denied) return denied;
   const userId = String(token.email || token.name || token.sub || 'anonymous');
   try {
     const body: unknown = await req.json();

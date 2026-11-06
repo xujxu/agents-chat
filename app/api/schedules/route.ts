@@ -5,6 +5,7 @@ import { getRuntime, ensureRuntime } from '../../../lib/scheduler/schedulerRunti
 import { specToCron, validateSpec } from '../../../app/features/scheduler/scheduleSpec';
 import { getAllAgents } from '../../../lib/configStore';
 import { DEFAULT_TIMEOUT_MINUTES, MIN_TIMEOUT_MINUTES, MAX_TIMEOUT_MINUTES } from '../../../app/features/scheduler/scheduleTypes';
+import { denyRole, canUseAgent } from '@/lib/rbac';
 
 function normalizeTimeoutMinutes(value: unknown): number | { error: string } {
   if (value === undefined || value === null || value === '') return DEFAULT_TIMEOUT_MINUTES;
@@ -19,6 +20,8 @@ function normalizeTimeoutMinutes(value: unknown): number | { error: string } {
 export async function GET(req: NextRequest) {
   const token = await getAuthToken(req);
   if (!token?.email) return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
+  const denied = token ? denyRole(token, ['admin', 'member']) : null;
+  if (denied) return denied;
   const store = openScheduleStore();
   const isAdmin = isAdminToken(token);
   const all = store.listJobs();
@@ -29,12 +32,15 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const token = await getAuthToken(req);
   if (!token?.email) return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
+  const denied = token ? denyRole(token, ['admin', 'member']) : null;
+  if (denied) return denied;
   const body = await req.json();
   const { agentId, name, prompt, scheduleSpec, enabled, timeoutMinutes } = body ?? {};
   if (!agentId || !name || !prompt || !scheduleSpec)
     return NextResponse.json({ error: 'missing fields' }, { status: 400 });
   const agent = getAllAgents().find((a) => a.id === agentId);
   if (!agent) return NextResponse.json({ error: 'agent not found' }, { status: 404 });
+  if (!canUseAgent(token, agent)) return NextResponse.json({ error: 'access denied' }, { status: 403 });
   try {
     validateSpec(scheduleSpec);
   } catch (e: any) {

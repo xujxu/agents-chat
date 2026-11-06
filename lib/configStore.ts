@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import Database from 'better-sqlite3';
 import { createLogger } from '@/lib/logger';
+import { setDbRoleLookup, setGitHubBindingLookup } from '@/lib/auth';
 
 const logger = createLogger('configStore');
 
@@ -97,6 +98,20 @@ function getDb(): ReturnType<typeof Database> {
       PRIMARY KEY (agent_id, email),
       FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
     );
+    CREATE TABLE IF NOT EXISTS user_roles (
+      email TEXT PRIMARY KEY,
+      role TEXT NOT NULL CHECK (role IN ('admin', 'member')),
+      granted_by TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS github_identity_bindings (
+      email TEXT PRIMARY KEY,
+      github_id TEXT NOT NULL,
+      github_login TEXT NOT NULL DEFAULT '',
+      bound_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_github_identity_bindings_id ON github_identity_bindings(github_id);
     CREATE TABLE IF NOT EXISTS user_agent_model_prefs (
       user_email TEXT NOT NULL,
       agent_id   TEXT NOT NULL,
@@ -528,6 +543,87 @@ export function hasAgentAccess(agentId: string, email: string): boolean {
   const row = db.prepare('SELECT 1 FROM agent_access WHERE agent_id = ? AND email = ?').get(agentId, email.toLowerCase());
   return !!row;
 }
+
+export function hasAnyAgentAccess(email: string): boolean {
+  const db = getDb();
+  return !!db.prepare('SELECT 1 FROM agent_access WHERE email = ? LIMIT 1').get(email.toLowerCase());
+}
+
+/** Every agent access grant, for the admin "Users & roles" view. */
+export function listAllAgentAccess(): { agentId: string; email: string; grantedBy: string; createdAt: string }[] {
+  const db = getDb();
+  const rows = db.prepare('SELECT agent_id, email, granted_by, created_at FROM agent_access ORDER BY email, agent_id').all() as any[];
+  return rows.map(r => ({ agentId: r.agent_id, email: r.email, grantedBy: r.granted_by, createdAt: r.created_at }));
+}
+
+// ─── Global User Roles (managed in the UI; env roles live in ADMIN_EMAILS / MEMBER_EMAILS) ───
+
+export type DbUserRole = 'admin' | 'member';
+export type UserRoleRecord = { email: string; role: DbUserRole; grantedBy: string; createdAt: string; updatedAt: string };
+
+export function listUserRoles(): UserRoleRecord[] {
+  const db = getDb();
+  const rows = db.prepare('SELECT email, role, granted_by, created_at, updated_at FROM user_roles ORDER BY email').all() as any[];
+  return rows.map(r => ({ email: r.email, role: r.role, grantedBy: r.granted_by, createdAt: r.created_at, updatedAt: r.updated_at }));
+}
+
+export function getDbUserRole(email: string): DbUserRole | null {
+  const normalized = (email || '').trim().toLowerCase();
+  if (!normalized) return null;
+  const row = getDb().prepare('SELECT role FROM user_roles WHERE email = ?').get(normalized) as { role: DbUserRole } | undefined;
+  return row?.role ?? null;
+}
+
+export function setUserRole(email: string, role: DbUserRole, grantedBy: string): void {
+  getDb().prepare(`
+    INSERT INTO user_roles (email, role, granted_by) VALUES (?, ?, ?)
+    ON CONFLICT(email) DO UPDATE SET role = excluded.role, granted_by = excluded.granted_by, updated_at = datetime('now')
+  `).run(email.trim().toLowerCase(), role, grantedBy.toLowerCase());
+}
+
+export function removeUserRole(email: string): boolean {
+  return getDb().prepare('DELETE FROM user_roles WHERE email = ?').run(email.trim().toLowerCase()).changes > 0;
+}
+
+setDbRoleLookup(getDbUserRole);
+
+// ─── GitHub identity bindings (an allowed email is linked to the GitHub account that first signs in with it) ───
+
+export type GitHubBinding = { email: string; githubId: string; githubLogin: string; boundAt: string };
+
+function toGitHubBinding(r: any): GitHubBinding {
+  return { email: r.email, githubId: r.github_id, githubLogin: r.github_login, boundAt: r.bound_at };
+}
+
+export function listGitHubBindings(): GitHubBinding[] {
+  return (getDb().prepare('SELECT email, github_id, github_login, bound_at FROM github_identity_bindings ORDER BY email').all() as any[]).map(toGitHubBinding);
+}
+
+export function getGitHubBindingsForId(githubId: string): GitHubBinding[] {
+  return (getDb().prepare('SELECT email, github_id, github_login, bound_at FROM github_identity_bindings WHERE github_id = ? ORDER BY bound_at, email').all(githubId) as any[]).map(toGitHubBinding);
+}
+
+export function getGitHubBindingId(email: string): string | null {
+  const row = getDb().prepare('SELECT github_id FROM github_identity_bindings WHERE email = ?').get(email.trim().toLowerCase()) as { github_id: string } | undefined;
+  return row?.github_id ?? null;
+}
+
+/** Links the email to the account unless another account already holds it; true when the account holds it. */
+export function bindGitHubEmail(email: string, githubId: string, githubLogin: string): boolean {
+  const normalized = email.trim().toLowerCase();
+  const db = getDb();
+  db.prepare('INSERT INTO github_identity_bindings (email, github_id, github_login) VALUES (?, ?, ?) ON CONFLICT(email) DO NOTHING')
+    .run(normalized, githubId, githubLogin);
+  if (getGitHubBindingId(normalized) !== githubId) return false;
+  db.prepare('UPDATE github_identity_bindings SET github_login = ? WHERE github_id = ?').run(githubLogin, githubId);
+  return true;
+}
+
+export function removeGitHubBinding(email: string): boolean {
+  return getDb().prepare('DELETE FROM github_identity_bindings WHERE email = ?').run(email.trim().toLowerCase()).changes > 0;
+}
+
+setGitHubBindingLookup(getGitHubBindingId);
 
 // ─── User Agent Model Preferences ───
 

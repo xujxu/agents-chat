@@ -1477,3 +1477,24 @@
     padding: 10px;
   }
 }
+
+/* Users & roles (admin) */
+.chatPageRoot .usersRolesModal { width: min(640px, 100%); }
+.chatPageRoot .usersRolesHint { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+.chatPageRoot .usersRolesError { color: #ff7b7b; font-size: 13px; margin: 0 0 10px; }
+.chatPageRoot .usersRolesNotice { color: #f5c26b; font-size: 13px; margin: 0 0 10px; }
+.chatPageRoot .usersRolesAdd { display: flex; gap: 8px; margin-bottom: 12px; }
+.chatPageRoot .usersRolesAdd input { flex: 1; min-width: 0; }
+.chatPageRoot .modal .usersRolesAdd select,
+.chatPageRoot .modal .usersRolesActions select { width: auto; padding: 8px 10px; }
+.chatPageRoot .usersRolesAdd button { padding: 8px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--accent); color: var(--bg); cursor: pointer; }
+.chatPageRoot .usersRolesAdd button:disabled { opacity: 0.5; cursor: default; }
+.chatPageRoot .usersRolesList { list-style: none; margin: 0 0 12px; padding: 0; max-height: 50vh; overflow-y: auto; border-top: 1px solid var(--border); }
+.chatPageRoot .usersRolesItem { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--border); }
+.chatPageRoot .usersRolesIdentity { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.chatPageRoot .usersRolesEmail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chatPageRoot .usersRolesMeta { display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; color: var(--muted); }
+.chatPageRoot .usersRolesBadge { padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-soft); }
+.chatPageRoot .usersRolesBadge.role-admin { color: var(--accent); border-color: var(--accent); }
+.chatPageRoot .usersRolesSource { padding: 1px 6px; border-radius: 6px; background: var(--panel); }
+.chatPageRoot .accountMenuAction { margin-bottom: 6px; }

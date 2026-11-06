@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { upsertOrchestrationNode } from '@/lib/chatStore';
+import { denyRole } from '@/lib/rbac';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +25,8 @@ export async function PATCH(
 ) {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, cookieName: 'next-auth.session-token' });
   if (!token) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+  const denied = denyRole(token, ['admin', 'member']);
+  if (denied) return denied;
   const userId = getUserId(token);
 
   const { id, nodeId } = await params;

@@ -355,12 +355,13 @@ cp .env.example .env.local
 | `NEXTAUTH_URL` | ✅ | Public URL of the app, for example `https://localhost:3010` |
 | `AZURE_AD_CLIENT_ID` | Optional | Azure AD / Microsoft Entra app client ID; enables SSO login when set |
 | `AZURE_AD_CLIENT_SECRET` | Optional | Azure AD client secret |
-| `AZURE_AD_TENANT_ID` | Optional | Tenant ID, default `common` |
+| `AZURE_AD_TENANT_ID` | Optional | Tenant ID, default `common`. Pin your tenant GUID to use `MEMBER_EMAILS=*` |
 | `GITHUB_CLIENT_ID` | Optional | GitHub OAuth app client ID; enables "Sign in with GitHub" when set. Configure the OAuth app's callback URL as `${NEXTAUTH_URL}/api/auth/callback/github`. |
 | `GITHUB_CLIENT_SECRET` | Optional | GitHub OAuth client secret |
 | `ADMIN_USERNAME` | Optional | Local admin username for credentials login |
 | `ADMIN_PASSWORD` | Optional | Local admin password |
 | `ADMIN_EMAILS` | Optional | Comma-separated emails granted admin role for Azure AD users |
+| `MEMBER_EMAILS` | Optional | Comma-separated members: exact emails, `@domain` suffixes, or `*` for every user of a pinned `AZURE_AD_TENANT_ID` (never GitHub). See [Roles](#roles). |
 | `RELAY_SEND_CONNECTION_STRING` | Optional | Azure Relay send connection string; required for relay agents and node probing |
 | `RELAY_KEY_VAULT_NAME` | Optional | Key Vault name used when generating the node setup ZIP |
 | `RELAY_KEY_VAULT_SECRET_NAME` | Optional | Key Vault secret name used when generating the node setup ZIP |
@@ -368,6 +369,21 @@ cp .env.example .env.local
 | `RELAY_RESOURCE_GROUP` | Optional | Azure resource group used by node setup ZIPs and relay node auto-discovery |
 | `RELAY_NAMESPACE` | Optional | Azure Relay namespace name |
 | `TEAMS_*` | Optional | Microsoft Teams bot settings (`TEAMS_BOT_APP_ID`, `TEAMS_TENANT_ID`, `TEAMS_AGENT_ID`, and a credential). See [docs/teams-bot.md](docs/teams-bot.md#4-configure-agents-chat) |
+
+### Roles
+
+Every request is checked against a server-side role:
+
+| Role | Who | Can |
+|------|-----|-----|
+| Admin | `ADMIN_EMAILS`, the local admin login, or **Users & roles** | Everything, including every agent and node |
+| Member | `MEMBER_EMAILS`, `GITHUB_ALLOWED_EMAILS`, or **Users & roles** | Create agents, use public, own and granted agents, workflows and schedules |
+| Guest | Anyone else with an agent access grant | Chat with granted agents only (including `/model` and `/session`); no agent creation or configuration, workflows, schedules, nodes, or other agents' sessions and files |
+
+Sign-in is deny-by-default: with `ADMIN_EMAILS` and `MEMBER_EMAILS` empty, only the local admin login, users an admin added in **Users & roles**, and guests with a grant can sign in. **Upgrade note:** Entra sign-in used to admit any tenant user; set `MEMBER_EMAILS=*` with your tenant GUID in `AZURE_AD_TENANT_ID` to keep that behaviour (`*` is ignored for `common`, `organizations` and `consumers`, which would admit any Microsoft account). The same rules apply to the Teams bot, so Teams users also need a role. Owners demoted to guest can still chat with agents shared with them but can no longer configure, delete or share their own agents. GitHub users are matched by any of their verified GitHub emails (accounts with no verified email by `<id>+<login>@users.noreply.github.com`). The first GitHub account that signs in with an allowed email is linked to it by its numeric account ID, and only that account can use the email afterwards, even if the email later moves to another GitHub account or the user changes their own email. The link is dropped when the email loses every role, and admins can reset it in **Users & roles** (e.g. for a user who switched GitHub accounts).
+
+Admins can also grant and revoke roles without a restart from the account menu → **Users & roles** (stored in the `user_roles` table, API `/api/users`). Env and UI roles combine; the higher role wins. Changes take effect on the user's next request, in both the web app and Teams. Admins listed in `ADMIN_EMAILS` are read-only in the UI, and admins cannot change or remove their own role. Removing a UI role never revokes a role that env still gives (for example a `MEMBER_EMAILS` domain); the dialog tags such users `env (@domain)` and warns before and after the removal.
+`/api/file` limits non-admins to files inside the workspaces of agents they can use, and serves HTML and SVG with a sandboxing `Content-Security-Policy`.
 
 ### Agents
 

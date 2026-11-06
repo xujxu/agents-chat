@@ -5,10 +5,15 @@ import GitHubProvider from 'next-auth/providers/github';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { type NextRequest } from 'next/server';
 import {
+  getDbRole,
   getGitHubAllowedEmails,
-  isGitHubEmailAllowed,
+  isEnvAdminEmail,
+  memberEmailsFor,
+  resolveUserRole,
   shouldUseSecureAuthCookies,
 } from '@/lib/auth';
+import { hasAnyAgentAccess, listUserRoles } from '@/lib/configStore';
+import { fetchVerifiedGitHubEmails, resolveGitHubSignIn } from '@/lib/githubIdentity';
 
 /** Constant-time string comparison to prevent timing attacks. */
 function safeEqual(a: string, b: string): boolean {
@@ -57,7 +62,9 @@ if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
         return {
           id: String(profile.id),
           name: profile.name || profile.login,
-          email: profile.email || `${profile.login}@users.noreply.github.com`,
+          // GitHub's own noreply form: the numeric id never changes hands, unlike a login that can be
+          // renamed and re-registered by someone else.
+          email: profile.email || `${profile.id}+${profile.login}@users.noreply.github.com`,
           image: profile.avatar_url,
           // Stash the OAuth access token so we can fetch primary email later
           // if the profile.email is null (private email setting).
@@ -154,89 +161,46 @@ export const authOptions: AuthOptions = {
   },
   callbacks: {
     async signIn({ user, account, profile }) {
-      if (account?.provider !== 'github') return true;
-
-      const allowedEmails = getGitHubAllowedEmails(
-        process.env.GITHUB_ALLOWED_EMAILS,
-        process.env.ADMIN_EMAILS,
-      );
-      if (allowedEmails.length === 0) {
-        return '/login?error=GitHubAllowlistNotConfigured';
-      }
+      if (!account || account.provider === 'admin-login') return true;
 
       let email = typeof profile?.email === 'string' ? profile.email : '';
-      if (!email && account.access_token) {
-        try {
-          const res = await fetch('https://api.github.com/user/emails', {
-            headers: {
-              Authorization: `Bearer ${account.access_token}`,
-              Accept: 'application/vnd.github+json',
-            },
-          });
-          if (res.ok) {
-            const emails = (await res.json()) as Array<{ email: string; primary: boolean; verified: boolean }>;
-            const verified = emails.find((entry) => entry.primary && entry.verified)
-              || emails.find((entry) => entry.verified);
-            email = verified?.email || '';
-          }
-        } catch {
-          return false;
+      if (account.provider === 'github') {
+        const githubId = String(account.providerAccountId || user.id || '');
+        const login = String((profile as { login?: unknown } | undefined)?.login || (user as { ghLogin?: unknown }).ghLogin || '');
+        // GitHub only publishes verified emails on the profile, so that is a safe fallback if the API call fails.
+        const verified = (account.access_token ? await fetchVerifiedGitHubEmails(account.access_token) : null)
+          ?? (email ? [email] : []);
+        const resolved = resolveGitHubSignIn(githubId, login, verified);
+        if (resolved) {
+          // NextAuth hands this same user object to the jwt callback, which makes it the session's email.
+          user.email = resolved;
+          return true;
         }
+        const allowedEmails = getGitHubAllowedEmails(
+          process.env.GITHUB_ALLOWED_EMAILS,
+          process.env.ADMIN_EMAILS,
+        );
+        return allowedEmails.length === 0 && !memberEmailsFor('github') && listUserRoles().length === 0
+          ? '/login?error=GitHubAllowlistNotConfigured'
+          : false;
       }
 
-      return isGitHubEmailAllowed(email || user.email || undefined, allowedEmails);
+      email = email || user.email || '';
+      return resolveUserRole({ email, provider: account.provider }, hasAnyAgentAccess) ? true : '/login?error=NotAuthorized';
     },
-    async jwt({ token, user, account, profile }) {
-      // GitHub's profile helper supplies a noreply fallback when the public
-      // email is private. Resolve the verified primary email for stable identity.
-      const githubProfileEmail = account?.provider === 'github'
-        ? (profile as { email?: string | null } | undefined)?.email
-        : undefined;
-      if (account?.provider === 'github' && account.access_token && !githubProfileEmail) {
-        try {
-          const res = await fetch('https://api.github.com/user/emails', {
-            headers: {
-              Authorization: `Bearer ${account.access_token}`,
-              Accept: 'application/vnd.github+json',
-            },
-          });
-          if (res.ok) {
-            const emails = (await res.json()) as Array<{ email: string; primary: boolean; verified: boolean }>;
-            const primary = emails.find((e) => e.primary && e.verified) || emails.find((e) => e.verified);
-            if (primary?.email) {
-              token.email = primary.email;
-            }
-          }
-        } catch {
-          // ignore — fall back to whatever the profile() helper provided
-        }
-      }
-      if (user) {
+    async jwt({ token, user, account }) {
+      // signIn chose (and linked) the GitHub account's email; the token's sub is the account's numeric id.
+      if (account?.provider === 'github' && user?.email) token.email = user.email.toLowerCase();
+      if (account?.provider) token.provider = account.provider;
+      if (user && (user as any).role === 'admin') {
         // Credentials login with role=admin → always admin
-        if ((user as any).role === 'admin') {
-          token.role = 'admin';
-        } else {
-          // Azure AD / OAuth users: check ADMIN_EMAILS env var
-          const adminEmails = (process.env.ADMIN_EMAILS || '')
-            .split(',')
-            .map((e) => e.trim().toLowerCase())
-            .filter(Boolean);
-          // Check both user.email and token.email — Azure AD may populate
-          // the email on the token (from the id_token) rather than user object
-          const userEmail = (token.email || user.email || '').toString().toLowerCase();
-          token.role = adminEmails.includes(userEmail) ? 'admin' : 'user';
-        }
-      } else {
-        // Re-evaluate admin role on every request so ADMIN_EMAILS changes
-        // take effect without requiring the user to sign out and back in.
-        if (token.sub !== 'admin' && token.email) {
-          const adminEmails = (process.env.ADMIN_EMAILS || '')
-            .split(',')
-            .map((e) => e.trim().toLowerCase())
-            .filter(Boolean);
-          const email = (token.email as string).toLowerCase();
-          token.role = adminEmails.includes(email) ? 'admin' : 'user';
-        }
+        token.role = 'admin';
+      } else if (token.sub !== 'admin') {
+        // Azure AD / OAuth users: ADMIN_EMAILS or an admin role granted in the UI. Re-evaluated on every
+        // session refresh so role changes take effect without signing out. Azure AD may populate the
+        // email on the token (from the id_token) rather than the user object.
+        const email = (token.email || user?.email || '').toString().toLowerCase();
+        token.role = email && (isEnvAdminEmail(email) || getDbRole(email) === 'admin') ? 'admin' : 'user';
       }
       return token;
     },

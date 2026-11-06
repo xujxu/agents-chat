@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAdminToken, getUserEmail, canModify, getAuthToken } from '@/lib/auth';
+import { denyRole } from '@/lib/rbac';
 import * as configStore from '@/lib/configStore';
 import { getNodeOwner } from '@/lib/nodeOwner';
 import { createLogger } from '@/lib/logger';
@@ -138,6 +139,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { action } = body;
     const token = await getAuthToken(req);
+    if (!token) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+    const denied = denyRole(token, ['admin', 'member']);
+    if (denied) return denied;
 
     if (action === 'list-nodes') {
       const nodes = await getAllMergedNodes();

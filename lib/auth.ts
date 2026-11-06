@@ -32,24 +32,132 @@ export function shouldUseSecureAuthCookies(
   return nextAuthUrl ? nextAuthUrl.startsWith('https://') : nodeEnv === 'production';
 }
 
+/**
+ * Roles granted in the admin UI live in SQLite (`configStore.user_roles`). This module stays free of the DB
+ * import, so configStore registers its lookup here when it loads. Kept on globalThis so every server bundle
+ * that imports this module sees the same lookup.
+ */
+type DbRoleLookup = (email: string) => 'admin' | 'member' | null;
+const roleLookupHolder = globalThis as unknown as { __agentsChatDbRoleLookup?: DbRoleLookup };
+
+export function setDbRoleLookup(lookup: DbRoleLookup | null): void {
+  roleLookupHolder.__agentsChatDbRoleLookup = lookup ?? undefined;
+}
+
+export function getDbRole(email: string | undefined): 'admin' | 'member' | null {
+  const normalized = (email || '').trim().toLowerCase();
+  const lookup = roleLookupHolder.__agentsChatDbRoleLookup;
+  if (!normalized || !lookup) return null;
+  try {
+    return lookup(normalized);
+  } catch {
+    return null;
+  }
+}
+
+/** GitHub account id an email is linked to (`configStore.github_identity_bindings`), registered like the role lookup. */
+type GitHubBindingLookup = (email: string) => string | null;
+const bindingLookupHolder = globalThis as unknown as { __agentsChatGitHubBindingLookup?: GitHubBindingLookup };
+
+export function setGitHubBindingLookup(lookup: GitHubBindingLookup | null): void {
+  bindingLookupHolder.__agentsChatGitHubBindingLookup = lookup ?? undefined;
+}
+
+export function getGitHubBinding(email: string): string | null {
+  const lookup = bindingLookupHolder.__agentsChatGitHubBindingLookup;
+  return lookup ? lookup(email) : null;
+}
+
+export function isEnvAdminEmail(email: string | undefined): boolean {
+  const normalized = (email || '').trim().toLowerCase();
+  return Boolean(normalized) && parseEmailList(process.env.ADMIN_EMAILS).includes(normalized);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function isAdminToken(token: any): boolean {
   if (!token) return false;
-  if (token.role === 'admin') return true;
   if (token.sub === 'admin') return true;
-  const adminEmails = (process.env.ADMIN_EMAILS || '')
-    .split(',')
-    .map((e: string) => e.trim().toLowerCase())
-    .filter(Boolean);
-  if (adminEmails.length === 0) return false;
-  const email = ((token.email as string) || '').toLowerCase();
-  return adminEmails.includes(email);
+  // The role claim is never trusted on its own (older OAuth cookies carry no provider and could keep a revoked
+  // admin claim), so every other token is re-evaluated against env and the UI roles.
+  const email = getUserEmail(token);
+  if (!email) return false;
+  return isEnvAdminEmail(email) || getDbRole(email) === 'admin';
+}
+
+/**
+ * Global roles: `admin` (ADMIN_EMAILS, the admin login, or granted in the UI) can do everything; `member`
+ * (MEMBER_EMAILS, GITHUB_ALLOWED_EMAILS, or granted in the UI) can create agents and use public, own and
+ * granted agents; `guest` (anyone else with at least one agent access grant) can only use the agents
+ * granted to them.
+ */
+export type UserRole = 'admin' | 'member' | 'guest';
+
+/**
+ * MEMBER_EMAILS entries are emails, `@domain` suffixes or `*` (see `memberEmailsFor` for where `*` applies).
+ * GITHUB_ALLOWED_EMAILS entries are members too, since that list already granted full access.
+ */
+export function isMemberEmail(
+  email: string | undefined,
+  memberEmails: string | undefined = process.env.MEMBER_EMAILS,
+  githubAllowedEmails: string | undefined = process.env.GITHUB_ALLOWED_EMAILS,
+): boolean {
+  const normalized = (email || '').trim().toLowerCase();
+  if (!normalized) return false;
+  if (parseEmailList(githubAllowedEmails).includes(normalized)) return true;
+  return parseEmailList(memberEmails).some((pattern) => pattern === '*'
+    || pattern === normalized
+    || (pattern.startsWith('@') && normalized.endsWith(pattern)));
+}
+
+const MULTI_TENANT_ENTRA_IDS = new Set(['', 'common', 'organizations', 'consumers']);
+
+/** Whether AZURE_AD_TENANT_ID names one tenant, so Entra only admits that tenant's accounts. */
+export function isPinnedEntraTenant(tenantId: string | undefined = process.env.AZURE_AD_TENANT_ID): boolean {
+  return !MULTI_TENANT_ENTRA_IDS.has((tenantId || '').trim().toLowerCase());
+}
+
+/**
+ * MEMBER_EMAILS as it applies to this sign-in. The `*` wildcard admits every account of the pinned Entra
+ * tenant; it is dropped for GitHub (anyone can create an account) and when Entra is multi-tenant (any
+ * Microsoft account, with an email claim the user's own tenant controls).
+ */
+export function memberEmailsFor(
+  provider: string | undefined,
+  memberEmails: string | undefined = process.env.MEMBER_EMAILS,
+  tenantId: string | undefined = process.env.AZURE_AD_TENANT_ID,
+): string {
+  const entries = parseEmailList(memberEmails);
+  const wildcardAllowed = provider !== 'github' && isPinnedEntraTenant(tenantId);
+  return (wildcardAllowed ? entries : entries.filter((entry) => entry !== '*')).join(',');
+}
+
+/** The user's role, or null when they may not use the app at all. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function resolveUserRole(token: any, hasAnyAgentAccess: (email: string) => boolean): UserRole | null {
+  if (!token) return null;
+  if (isAdminToken(token)) return 'admin';
+  const email = getUserEmail(token);
+  if (!email) return null;
+  if (isMemberEmail(email, memberEmailsFor(token.provider))) return 'member';
+  if (getDbRole(email) === 'member') return 'member';
+  return hasAnyAgentAccess(email) ? 'guest' : null;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getUserEmail(token: any): string {
   if (!token) return '';
-  return ((token.email as string) || '').toLowerCase();
+  const email = ((token.email as string) || '').toLowerCase();
+  // A GitHub session only owns its email while the email stays linked to that account (lookup errors deny).
+  if (email && token.provider === 'github') {
+    let boundId: string | null;
+    try {
+      boundId = getGitHubBinding(email);
+    } catch {
+      return '';
+    }
+    if (boundId && boundId !== String(token.sub ?? '')) return '';
+  }
+  return email;
 }
 
 /**

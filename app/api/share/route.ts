@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { getChat, shareChat, getSharedChat, saveChat } from '@/lib/chatStore';
 import * as crypto from 'crypto';
+import { denyRole } from '@/lib/rbac';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +14,8 @@ function getUserId(token: any): string { // eslint-disable-line @typescript-esli
 export async function POST(req: NextRequest) {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, cookieName: 'next-auth.session-token' });
   if (!token) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+  const denied = denyRole(token, ['admin', 'member']);
+  if (denied) return denied;
 
   const userId = getUserId(token);
   const body = await req.json().catch(() => ({}));
@@ -58,6 +61,8 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, cookieName: 'next-auth.session-token' });
   if (!token) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+  const denied = denyRole(token, ['admin', 'member']);
+  if (denied) return denied;
 
   const shareId = req.nextUrl.searchParams.get('id');
   if (!shareId) return NextResponse.json({ ok: false, error: 'missing_id' }, { status: 400 });
