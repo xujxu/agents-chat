@@ -3,7 +3,7 @@
 // Microsoft 365 Agents Toolkit CLI (atk), update TEAMS_ALLOWED_USERS in shared/.env.local, and
 // restart the service. See docs/teams-bot.md#share-the-bot-with-colleagues.
 //
-// Usage: node scripts/teams-share/cli.mjs <add|remove|list> [emails...] [options]
+// Run it through scripts/teams-share.ps1 (Windows) or scripts/teams-share.sh (Linux).
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -14,13 +14,14 @@ import { inspectLock, isWin, readJson, waitHealthy } from '../deploy/fsops.mjs';
 
 const SCRIPTS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ATK_TIMEOUT_MS = 5 * 60 * 1000;
-const USAGE = `Usage: node scripts/teams-share/cli.mjs <add|remove|list> [emails...] [options]
+const USAGE = `Usage: scripts/teams-share.ps1 (Windows) or scripts/teams-share.sh (Linux),
+       <add|remove|list> [emails...] [options]
 
   add a@x.com,b@x.com   Share the Teams app with them, allow them in ${KEY}, restart.
   remove a@x.com        Remove them from ${KEY}, restart, revoke the Teams share.
   list                  Show ${KEY} and the shared app's link.
 
-Options:
+Options (in PowerShell: -ProjectDir, -TeamsAppDir, -Env, -NoRestart, -WaitSeconds, -DryRun):
   --project-dir <dir>    Deployment root (default: AGENTS_CHAT_PROJECT_DIR, or the root
                          this script was deployed into).
   --teams-app-dir <dir>  atk project folder (default: <project-dir>/shared/teams-app).
@@ -32,6 +33,9 @@ Options:
 Restarting needs an elevated PowerShell (Windows) or root (Linux).`;
 
 const say = (msg) => process.stderr.write(`[teams-share] ${msg}\n`);
+// Option names as the user typed them: teams-share.ps1 parameters on Windows, --flags elsewhere.
+const PS_NAMES = { 'project-dir': '-ProjectDir', env: '-Env', 'no-restart': '-NoRestart', wait: '-WaitSeconds' };
+const flag = (name) => (isWin ? PS_NAMES[name] : `--${name}`);
 
 class StepError extends Error {}
 
@@ -42,7 +46,7 @@ function resolveRoot(option) {
   const release = path.dirname(SCRIPTS_DIR);
   if (path.basename(release) === 'current') return path.dirname(release);
   if (path.basename(path.dirname(release)) === 'releases') return path.dirname(path.dirname(release));
-  throw new UsageError('Give --project-dir (the deployment root that contains shared/).');
+  throw new UsageError(`Give ${flag('project-dir')} (the deployment root that contains shared/).`);
 }
 
 function readEnvValue(file, key) {
@@ -78,7 +82,7 @@ function isElevated() {
 function preflight(ctx) {
   const errors = [];
   if (!fs.existsSync(ctx.envFile)) {
-    errors.push(`${ctx.envFile} not found. Is --project-dir the deployment root?`);
+    errors.push(`${ctx.envFile} not found. Is ${flag('project-dir')} the deployment root?`);
   } else {
     try {
       ctx.allowList = readAllowList(fs.readFileSync(ctx.envFile, 'utf8'));
@@ -108,12 +112,12 @@ function preflight(ctx) {
 
   if (ctx.restart) {
     if (!ctx.service.name) {
-      errors.push(`${path.join(ctx.root, 'state.json')} does not name the service, so it cannot be restarted. Pass --no-restart and restart it yourself.`);
+      errors.push(`${path.join(ctx.root, 'state.json')} does not name the service, so it cannot be restarted. Pass ${flag('no-restart')} and restart it yourself.`);
     }
     if (!isElevated()) {
       errors.push(isWin
-        ? 'Restarting needs an elevated PowerShell. Run as administrator, or pass --no-restart.'
-        : 'Restarting needs root. Run with sudo, or pass --no-restart.');
+        ? `Restarting needs an elevated PowerShell. Run as administrator, or pass ${flag('no-restart')}.`
+        : `Restarting needs root. Run with sudo, or pass ${flag('no-restart')}.`);
     }
     if (fs.existsSync(path.join(ctx.root, 'deploy.lock')) && inspectLock(ctx.root) === 'held') {
       errors.push('A deployment is running (deploy.lock is held). Retry when it finishes.');
@@ -195,7 +199,7 @@ async function apply(ctx) {
     say(`To finish: ${next}`);
     return 1;
   };
-  const rerun = `rerun the same command (each step is safe to repeat)${ctx.restart ? '' : ' with --no-restart'}.`;
+  const rerun = `rerun the same command (each step is safe to repeat)${ctx.restart ? '' : ` with ${flag('no-restart')}`}.`;
 
   let changed;
   if (ctx.op === 'add') {
@@ -264,9 +268,9 @@ async function main(argv) {
   }
   const [op, ...rest] = positionals;
   if (!['add', 'remove', 'list'].includes(op)) throw new UsageError('Choose add, remove, or list.');
-  if (!/^[A-Za-z0-9_-]+$/.test(o.env)) throw new UsageError(`Invalid --env: ${o.env}`);
+  if (!/^[A-Za-z0-9_-]+$/.test(o.env)) throw new UsageError(`Invalid ${flag('env')}: ${o.env}`);
   const wait = Number(o.wait);
-  if (!Number.isInteger(wait) || wait < 0) throw new UsageError(`Invalid --wait: ${o.wait}`);
+  if (!Number.isInteger(wait) || wait < 0) throw new UsageError(`Invalid ${flag('wait')}: ${o.wait}`);
   const root = resolveRoot(o['project-dir']);
   const ctx = {
     op,

@@ -261,22 +261,24 @@ Do not use `atk share --scope tenant`: it shares the app with everyone in the te
 
 #### Add or remove colleagues with one command
 
-Once steps 1–3 are done, `scripts/teams-share/cli.mjs` does steps 4 and 5 for you (except the
-agents-chat role). Run it from an **elevated** PowerShell, because it restarts the service:
+Once steps 1–3 are done, `scripts\teams-share.ps1` does steps 4 and 5 for you (except the
+agents-chat role). Like `update.ps1`, it is a thin wrapper around a Node.js script
+(`scripts\teams-share\cli.mjs`); on Linux use `scripts/teams-share.sh` with the `--option` names
+shown by `--help`. Run it from an **elevated** PowerShell, because it restarts the service:
 
 ```powershell
-$cli = 'C:\path\to\agents-chat\current\scripts\teams-share\cli.mjs'
-node $cli add 'alice@contoso.com,bob@contoso.com'   # share, allow, restart
-node $cli remove 'bob@contoso.com'                   # disallow, restart, revoke the share
-node $cli list                                       # current allow-list and share link
-node $cli add 'alice@contoso.com' --dry-run          # check everything, change nothing
+cd C:\path\to\agents-chat\current
+.\scripts\teams-share.ps1 add alice@contoso.com,bob@contoso.com   # share, allow, restart
+.\scripts\teams-share.ps1 remove bob@contoso.com                  # disallow, restart, revoke the share
+.\scripts\teams-share.ps1 list                                    # current allow-list and share link
+.\scripts\teams-share.ps1 add alice@contoso.com -DryRun           # check everything, change nothing
 ```
 
 It finds the deployment root from where it is installed (`current\scripts\...`); from a source
-checkout, pass `--project-dir C:\path\to\agents-chat` or set `AGENTS_CHAT_PROJECT_DIR`. Other
-options: `--teams-app-dir` (default `<root>\shared\teams-app`), `--env` (default `dev`),
-`--no-restart` (no elevation needed; restart yourself later), and `--wait <seconds>`. Run with
-`--help` for the full list.
+checkout, pass `-ProjectDir C:\path\to\agents-chat` or set `AGENTS_CHAT_PROJECT_DIR`. Other
+options: `-TeamsAppDir` (default `<root>\shared\teams-app`), `-Env` (default `dev`),
+`-NoRestart` (no elevation needed; restart yourself later), and `-WaitSeconds`. Run it with
+`-Help` for the full list.
 
 How it handles failures:
 
