@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { THEMES, normalizeThemeId } from '../../theme/themes';
 import type { MobileOverlay } from '../hooks/useMobileOverlayState';
 import { useFullscreen } from '../useFullscreen';
+import { UsersRolesDialog } from './UsersRolesDialog';
 
 type ActiveMobileOverlay = Exclude<MobileOverlay, null>;
 
@@ -13,7 +15,6 @@ export type PageHeaderProps = {
   userEmail?: string | null;
   userImage?: string | null;
   onSignOut: () => void;
-  onOpenUsersRoles?: () => void;
   themeMenu: ReactNode;
   showChatsPanel: boolean;
   showAgentsPanel: boolean;
@@ -41,7 +42,6 @@ export function PageHeader({
   userEmail,
   userImage,
   onSignOut,
-  onOpenUsersRoles,
   themeMenu,
   showChatsPanel,
   showAgentsPanel,
@@ -65,6 +65,9 @@ export function PageHeader({
   const [showHeaderOverflow, setShowHeaderOverflow] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
+  const [showUsersRoles, setShowUsersRoles] = useState(false);
+  const closeUsersRoles = useCallback(() => setShowUsersRoles(false), []);
+  const headerRef = useRef<HTMLElement | null>(null);
   const headerOverflowRef = useRef<HTMLDivElement | null>(null);
   const headerOverflowButtonRef = useRef<HTMLButtonElement | null>(null);
   const settingsRef = useRef<HTMLDivElement | null>(null);
@@ -157,7 +160,7 @@ export function PageHeader({
   ));
 
   return (
-    <header className="header">
+    <header className="header" ref={headerRef}>
       <div className="headerLeft">
         <button
           type="button"
@@ -274,8 +277,8 @@ export function PageHeader({
                 <div className="accountMenuRow"><span className="accountMenuLabel">Email</span><span className="accountMenuValue">{userEmail || '—'}</span></div>
                 <div className="accountMenuRow"><span className="accountMenuLabel">Role</span><span className="accountMenuValue">{isAdmin ? 'Administrator' : 'User'}</span></div>
                 <div className="accountMenuSeparator" />
-                {isAdmin && onOpenUsersRoles ? (
-                  <button type="button" className="accountMenuSignOut accountMenuAction" onClick={() => { if (isMobileLayout) onMobileOverlayClose(); else setShowAccount(false); onOpenUsersRoles(); }}>Users &amp; roles</button>
+                {isAdmin ? (
+                  <button type="button" className="accountMenuSignOut accountMenuAction" onClick={() => { if (isMobileLayout) onMobileOverlayClose(); else setShowAccount(false); setShowUsersRoles(true); }}>Users &amp; roles</button>
                 ) : null}
                 <button type="button" className="accountMenuSignOut" data-mobile-overlay-initial-focus={isMobileLayout ? true : undefined} onClick={() => { if (isMobileLayout) onMobileOverlayClose(); else setShowAccount(false); onSignOut(); }}>Sign out</button>
               </div>
@@ -283,6 +286,10 @@ export function PageHeader({
           </div>
         )}
       </div>
+      {isAdmin && showUsersRoles && headerRef.current
+        // The header's backdrop-filter would trap a fixed overlay, so render into the themed page instead.
+        ? createPortal(<UsersRolesDialog onClose={closeUsersRoles} />, headerRef.current.closest('.page') ?? document.body)
+        : null}
     </header>
   );
 }
