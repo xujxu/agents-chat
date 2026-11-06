@@ -154,7 +154,7 @@ export async function handleActivity(activity: TeamsActivity, config: TeamsConfi
     if (!user) return;
     if (conversationType === 'personal') {
       rememberPersonalChat(ref, user);
-      await sendText(config, { ...ref, replyToId: undefined }, `Hi! I connect you to the **${config.agentId}** agent in agents-chat.\n\n${HELP_TEXT}`);
+      await sendText(config, { ...ref, replyToId: undefined }, `Hi! I connect you to the **${agentDisplayName(activeAgentId(config, user, conversationId))}** agent in agents-chat.\n\n${HELP_TEXT}`);
     } else {
       await sendText(config, { ...ref, replyToId: undefined }, `Hi! I connect you to the **${config.agentId}** agent in agents-chat. @mention me with your question.\n\n${GROUP_HELP_TEXT}`);
     }
@@ -328,10 +328,23 @@ function currentChatId(config: TeamsConfig, user: TeamsUser, agentId: string, co
   return configStore.getUserSettings(user.email)[chatSettingKey(config, agentId, conversationId)] || undefined;
 }
 
-/** The agent this user talks to in this conversation: their `/agent` choice, else TEAMS_AGENT_ID. */
+/** The agent this user talks to in this conversation: their `/agent` choice, else their default agent. */
 function activeAgentId(config: TeamsConfig, user: TeamsUser, conversationId: string): string {
   const chosen = configStore.getUserSettings(user.email)[conversationAgentKey(conversationId)];
-  return chosen && configStore.getAgentById(chosen) ? chosen : config.agentId;
+  return chosen && configStore.getAgentById(chosen) ? chosen : defaultAgentId(config, user);
+}
+
+/**
+ * This user's default agent: the one shared with them (set when they accept the share link), else
+ * TEAMS_AGENT_ID, else the first agent they may use. Falls back to TEAMS_AGENT_ID (which then answers
+ * with the "no access" message) when they may use none.
+ */
+function defaultAgentId(config: TeamsConfig, user: TeamsUser): string {
+  const agents = talkableAgents(config, user);
+  const preferred = configStore.getUserDefaultAgent(user.email);
+  if (preferred && agents.some((agent) => agent.id === preferred)) return preferred;
+  if (agents.some((agent) => agent.id === config.agentId)) return config.agentId;
+  return agents[0]?.id ?? config.agentId;
 }
 
 function userRole(user: TeamsUser): 'admin' | 'user' {
@@ -353,7 +366,8 @@ function talkableAgents(config: TeamsConfig, user: TeamsUser): configStore.Agent
 function changeAgent(config: TeamsConfig, user: TeamsUser, conversationId: string, args: string): string {
   const agents = talkableAgents(config, user);
   const current = activeAgentId(config, user, conversationId);
-  const label = (agent: configStore.AgentRecord) => `${agent.name && agent.name !== agent.id ? `${agent.name} (\`${agent.id}\`)` : `\`${agent.id}\``}${agent.id === config.agentId ? ' – default' : ''}`;
+  const fallback = defaultAgentId(config, user);
+  const label = (agent: configStore.AgentRecord) => `${agent.name && agent.name !== agent.id ? `${agent.name} (\`${agent.id}\`)` : `\`${agent.id}\``}${agent.id === fallback ? ' – default' : ''}`;
   const list = (items: configStore.AgentRecord[]) => items.map((agent) => `${agents.indexOf(agent) + 1}. ${label(agent)}${agent.id === current ? ' ✅' : ''}`).join('\n');
   const query = args.trim().toLowerCase();
   if (!query) {
@@ -368,7 +382,7 @@ function changeAgent(config: TeamsConfig, user: TeamsUser, conversationId: strin
   if (matches.length > 1) return `"${args.trim()}" matches several agents:\n${list(matches)}\n\nSend \`/agent <number>\` to pick one.`;
 
   const agent = matches[0];
-  configStore.setUserSetting(user.email, conversationAgentKey(conversationId), agent.id === config.agentId ? '' : agent.id);
+  configStore.setUserSetting(user.email, conversationAgentKey(conversationId), agent.id === fallback ? '' : agent.id);
   const resumed = currentChatId(config, user, agent.id, conversationId);
   return `Now talking to ${label(agent)} in this chat. ${resumed ? 'Your earlier conversation with it continues; send `/new` to start fresh.' : 'Your next message starts a new conversation with it.'}`;
 }

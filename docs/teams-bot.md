@@ -65,8 +65,9 @@ flowchart LR
 Teams turns use the same model as the web UI: the model you last picked for this agent in agents-chat, otherwise the agent's default model.
 
 `/agent` lists the same agents you can talk to in the web UI (public agents, your own, ones shared
-with you, and all agents for admins). The bot's default agent comes from `TEAMS_AGENT_ID`; `/model`
-and `/new` apply to whichever agent you are currently using.
+with you, and all agents for admins). Your default agent is the one most recently shared with you
+(set when you accept its share link), else `TEAMS_AGENT_ID`, else the first agent you may use; it is
+marked "– default". `/model` and `/new` apply to whichever agent you are currently using.
 
 `/session` shows your 10 most recent sessions with the current agent, including chats started in
 the web UI, newest first (✅ marks the one in use). `/session <number>` picks from the last list or

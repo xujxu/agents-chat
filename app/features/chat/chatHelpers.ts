@@ -77,7 +77,8 @@ export function getMentionedAgentIds(text: string, agents: Agent[]) {
 }
 
 export function getDefaultAgentId(agents: Agent[]): string | null {
-  return (agents.find((agent) => agent.id !== SCHEDULER_AGENT_ID) || agents[0] || null)?.id || null;
+  const preferred = agents.find((agent) => agent.isDefault && agent.id !== SCHEDULER_AGENT_ID && agent.canTalk !== false);
+  return (preferred || agents.find((agent) => agent.id !== SCHEDULER_AGENT_ID) || agents[0] || null)?.id || null;
 }
 
 export function getExistingAgentId(agentId: string | null | undefined, agents: Agent[]): string | null {

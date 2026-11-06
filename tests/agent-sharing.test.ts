@@ -86,6 +86,7 @@ test('agent sharing: invites, share links and expiry', async (t) => {
     const accepted = await call(guest.email, { action: 'accept', token: data.token });
     assert.deepEqual([accepted.status, accepted.data.agentId], [200, 'shared']);
     assert.equal(canUseAgent(guest, agent), true);
+    assert.equal(configStore.getUserDefaultAgent(guest.email), 'shared', 'the shared agent becomes the default');
 
     const rotated = await call('admin@contoso.com', { action: 'create-link', agentId: 'shared' });
     assert.notEqual(rotated.data.token, data.token);

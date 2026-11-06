@@ -251,12 +251,12 @@ async function main() {
     // Other conversations and other people keep their own agent.
     assert.equal(sendOf(await say('elsewhere', '29:alice', 'personal-fast')).agentId, 'teams');
     r = await run(activity('29:bob', '<at>agent-xujx</at> /agent', [botMention]));
-    assert.match(r.posts[0].text, /1\. MC Agent \(`mcagent`\)$/m);
+    assert.match(r.posts[0].text, /1\. MC Agent \(`mcagent`\) – default ✅$/m);
     assert.doesNotMatch(r.posts[0].text, /`teams`|`shared`/, 'Bob sees only agents he may use');
     r = await run(activity('29:bob', '<at>agent-xujx</at> /agent shared', [botMention]));
     assert.match(r.posts[0].text, /No agent you can use matches "shared"/);
     r = await run(activity('29:bob', '<at>agent-xujx</at> hi', [botMention]));
-    assert.equal(sendOf(r).agentId, 'teams');
+    assert.equal(sendOf(r).agentId, 'mcagent', 'without access to TEAMS_AGENT_ID, the first agent he may use is his default');
 
     // Lookups that fail keep the current agent.
     assert.match(await command('/agent secret'), /No agent you can use matches "secret"/);
@@ -291,12 +291,24 @@ async function main() {
     sent = sendOf(await say('fallback'));
     assert.deepEqual([sent.agentId, sent.chatId], ['teams', teamsChatId]);
 
+    // Accepting a share link makes the shared agent the recipient's default; it stops being the
+    // default once their access ends.
+    configStore.setUserSetting('alice@contoso.com', configStore.DEFAULT_AGENT_SETTING, 'shared');
+    assert.equal(sendOf(await say('hello', '29:alice', 'personal-recipient')).agentId, 'shared');
+    reply = (await say('/agent', '29:alice', 'personal-recipient')).posts[0].text;
+    assert.match(reply, /1\. `teams`\n2\. MC Agent \(`mcagent`\)\n3\. `shared` – default ✅/);
+    configStore.removeAgentAccess('shared', 'alice@contoso.com');
+    assert.equal(sendOf(await say('hello again', '29:alice', 'personal-recipient')).agentId, 'teams');
+    configStore.addAgentAccess('shared', 'alice@contoso.com', 'carol@contoso.com');
+    configStore.acceptAgentInvite('shared', 'alice@contoso.com');
+    configStore.setUserSetting('alice@contoso.com', configStore.DEFAULT_AGENT_SETTING, '');
+
     // /session lists this person's sessions with the current agent (including web chats), switches by
     // number, chat id or search (the web UI's chat search), and keeps each agent's sessions separate.
     const webChat = { id: 'web-chat-1', name: 'Connector failure triage', ts: Date.now() - 3 * 3600_000, agentId: 'teams', messages: [], agentSessions: {} };
     await chatStore.saveChat('alice@contoso.com', webChat);
     await chatStore.saveChat('alice@contoso.com', { ...webChat, id: 'web-mc', name: 'MC web chat', agentId: 'mcagent' });
-    await chatStore.saveChat('bob@contoso.com', { ...webChat, id: 'web-bob', name: 'Bob connector notes' });
+    await chatStore.saveChat('bob@contoso.com', { ...webChat, id: 'web-bob', name: 'Bob connector notes', agentId: 'mcagent' });
     reply = await command('/session');
     assert.match(reply, /^\*\*Your sessions with teams\*\* \(✅ = current\)\n1\. /);
     assert.match(reply, /\. Teams: hello – (just now|\dm ago) ✅$/m);

@@ -1021,3 +1021,10 @@ export function setUserSetting(userEmail: string, key: string, value: string): v
     ON CONFLICT(user_email, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
   `).run(userEmail.toLowerCase(), key, value);
 }
+
+/** User setting holding the agent a person starts with (web new chats, Teams), set when they accept a share link. */
+export const DEFAULT_AGENT_SETTING = 'default_agent';
+
+export function getUserDefaultAgent(userEmail: string): string | null {
+  return getUserSettings(userEmail)[DEFAULT_AGENT_SETTING] || null;
+}

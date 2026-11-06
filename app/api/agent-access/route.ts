@@ -55,6 +55,8 @@ export async function POST(req: NextRequest) {
       return json({ ok: false, error: grant?.status === 'expired' ? 'expired' : 'not_invited' }, 403);
     }
     if (email) configStore.setUserLastUsedAgent(email, agent.id);
+    // Recipients start with the shared agent in new web chats and in Teams.
+    if (email && accepted) configStore.setUserSetting(email, configStore.DEFAULT_AGENT_SETTING, agent.id);
     return json({ ok: true, agentId: agent.id, agentName: agent.name || agent.id });
   }
 
