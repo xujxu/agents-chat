@@ -4,9 +4,6 @@ on:
   pull_request:
     branches:
       - main
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
@@ -41,16 +38,36 @@ jobs:
             browser: chromium
             shard: 4/4
             artifact: desktop-4
-          - name: Android Chromium
+          - name: Android Chromium 1/2
             project: android-chromium
             browser: chromium
-            shard: 1/1
-            artifact: android-chromium
-          - name: iPhone WebKit
+            shard: 1/2
+            artifact: android-chromium-1
+          - name: Android Chromium 2/2
+            project: android-chromium
+            browser: chromium
+            shard: 2/2
+            artifact: android-chromium-2
+          - name: iPhone WebKit 1/4
             project: iphone-webkit
             browser: webkit
-            shard: 1/1
-            artifact: iphone-webkit
+            shard: 1/4
+            artifact: iphone-webkit-1
+          - name: iPhone WebKit 2/4
+            project: iphone-webkit
+            browser: webkit
+            shard: 2/4
+            artifact: iphone-webkit-2
+          - name: iPhone WebKit 3/4
+            project: iphone-webkit
+            browser: webkit
+            shard: 3/4
+            artifact: iphone-webkit-3
+          - name: iPhone WebKit 4/4
+            project: iphone-webkit
+            browser: webkit
+            shard: 4/4
+            artifact: iphone-webkit-4
 
     env:
       ADMIN_PASSWORD: admin123

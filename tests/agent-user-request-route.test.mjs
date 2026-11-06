@@ -516,7 +516,7 @@ assert.match(
 
 assert.match(
   routeSource,
-  /function\s+logSessionLoadFallback\([\s\S]*?console\.log\(\s*`\[ACP:\$\{agentId\}\]\s+session\/load fallback:[\s\S]*?chat=\$\{chatId\s*\|\|\s*['"]\(none\)['"]\}[\s\S]*?savedSession=\$\{savedSessionId\}[\s\S]*?reason=\$\{reason\};\s+falling back to session\/new/,
+  /function\s+logSessionLoadFallback\([\s\S]*?(?:console\.)?log\(\s*`\[ACP:\$\{agentId\}\]\s+session\/load fallback:[\s\S]*?chat=\$\{chatId\s*\|\|\s*['"]\(none\)['"]\}[\s\S]*?savedSession=\$\{savedSessionId\}[\s\S]*?reason=\$\{reason\};\s+falling back to session\/new/,
   'route.ts should log chat/session/reason to stdout whenever session/load falls back to session/new',
 );
 
@@ -546,7 +546,7 @@ assert.match(
 
 assert.match(
   routeSource,
-  /action\s*===\s*['"]send['"][\s\S]*?const\s+chatSessionId\s*=\s*getChatSession\(sess,\s*chatId\);[\s\S]*?const\s+savedSessionId\s*=\s*await\s+getStoredChatAgentSessionId\(userId,\s*chatId,\s*agentId\);[\s\S]*?if\s*\(savedSessionId\)\s*\{[\s\S]*?await\s+loadSavedChatSessionForSend\(proc,\s*sess,\s*agentId,\s*userId,\s*chatId,\s*savedSessionId,\s*isAdmin\)[\s\S]*?await\s+ensureUserSession\(proc,\s*sess,\s*agentId,\s*userId,\s*isAdmin\)/,
+  /action\s*===\s*['"]send['"][\s\S]*?const\s+chatSessionId\s*=\s*getChatSession\(sess,\s*chatId\);[\s\S]*?const\s+savedSessionId\s*=\s*await\s+getStoredChatAgentSessionId\(userId,\s*chatId,\s*agentId\);[\s\S]*?if\s*\(!savedSessionId\)\s*\{[\s\S]*?\}\s*else\s+if[\s\S]*?await\s+loadSavedChatSessionForSend\(proc,\s*sess,\s*agentId,\s*userId,\s*chatId,\s*savedSessionId,\s*isAdmin\)[\s\S]*?await\s+ensureUserSession\(proc,\s*sess,\s*agentId,\s*userId,\s*isAdmin,\s*chatId\)/,
   'send should try the saved SQLite session for this chat before ensureUserSession creates a new session',
 );
 
@@ -564,7 +564,7 @@ assert.match(
 
 assert.match(
   routeSource,
-  /async\s+function\s+warmLocalAgents\(\):\s*Promise<WarmLocalAgentResult\[]>[\s\S]*?readAgentsConfig\(\)[\s\S]*?if\s*\(agent\.relay\)[\s\S]*?status:\s*['"]skipped_remote['"][\s\S]*?getAgentProcess\(agent\.id,\s*agent\)[\s\S]*?proc\.ready[\s\S]*?status:\s*['"]ready['"][\s\S]*?proc\.booting[\s\S]*?status:\s*['"]booting['"][\s\S]*?await\s+bootAgent\(agent\.id\)[\s\S]*?status:\s*['"]started['"][\s\S]*?catch[\s\S]*?console\.error[\s\S]*?status:\s*['"]failed['"]/,
+  /async\s+function\s+warmLocalAgents\(\):\s*Promise<WarmLocalAgentResult\[]>[\s\S]*?readAgentsConfig\(\)[\s\S]*?if\s*\(agent\.relay\)[\s\S]*?status:\s*['"]skipped_remote['"][\s\S]*?getAgentProcess\(agent\.id,\s*agent\)[\s\S]*?proc\.ready[\s\S]*?status:\s*['"]ready['"][\s\S]*?proc\.booting[\s\S]*?status:\s*['"]booting['"][\s\S]*?await\s+bootAgent\(agent\.id\)[\s\S]*?status:\s*['"]started['"][\s\S]*?catch[\s\S]*?(?:console|logger)\.error[\s\S]*?status:\s*['"]failed['"]/,
   'warmLocalAgents should skip relay/ready/booting agents, boot unready local agents, and report failures per agent',
 );
 
@@ -761,15 +761,16 @@ assert.match(
 
 assert.match(
   setupRouteSource,
-  /finally\s*\{[\s\S]*?try\s*\{[\s\S]*?await\s+fs\.rm\(tempDir,\s*\{\s*recursive:\s*true,\s*force:\s*true\s*\}\)[\s\S]*?\}\s*catch\s*\(cleanupErr\)[\s\S]*?console\.warn/,
+  /finally\s*\{[\s\S]*?try\s*\{[\s\S]*?await\s+fs\.rm\(tempDir,\s*\{\s*recursive:\s*true,\s*force:\s*true\s*\}\)[\s\S]*?\}\s*catch\s*\(cleanupErr\)[\s\S]*?(?:console|logger)\.warn/,
   'setup ZIP route should not fail a successful download when temporary cleanup fails',
 );
 
-assert.deepEqual(
-  agentsConfig,
-  { agents: [] },
-  'tracked agents.json should be public-safe and empty',
-);
+for (const agent of agentsConfig.agents) {
+  assert.equal(agent.cwd ?? '', '', `tracked agents.json agent ${agent.id} should not pin a machine-specific cwd`);
+  for (const [key, value] of Object.entries(agent.env ?? {})) {
+    assert.equal(value, '', `tracked agents.json agent ${agent.id} env ${key} should be an empty placeholder (no secrets)`);
+  }
+}
 
 assert.match(
   envExampleSource,

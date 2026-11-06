@@ -24,7 +24,7 @@ assert.match(
 
 assert.match(
   chatsRouteSource,
-  /const\s+gitContextOptions\s*=\s*getGitContextOptions\(/,
+  /const\s+gitContextOptions\s*=\s*resolveChatGitContextOptions\([\s\S]*?NextResponse\.json\(\{\s*ok:\s*true,\s*chat,\s*gitContextOptions\s*\}\)/,
   'GET chat payload should include git context options',
 );
 

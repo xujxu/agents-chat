@@ -46,12 +46,12 @@ assert.match(
 //     letter fallback when there is no image.
 assert.match(
   headerSource,
-  /userImage \? \([\s\S]*?className="userAvatar userAvatarImage"[\s\S]*?src=\{userImage\}[\s\S]*?\) : \([\s\S]*?className="userAvatar">\{\(authLabel \|\| '\?'\)\[0\]\.toUpperCase\(\)\}/,
+  /userImage \?\s*\(?\s*<img className="userAvatar userAvatarImage"[^>]*src=\{userImage\}[\s\S]*?\)?\s*:\s*\(?\s*<span className="userAvatar">\{\(authLabel \|\| '\?'\)\[0\]\.toUpperCase\(\)\}/,
   'The chip avatar should render the user photo when present and fall back to the initial',
 );
 assert.match(
   headerSource,
-  /className="userName userNameButton"[\s\S]{0,200}onClick=\{\(\) => setShowAccount\(\(v\) => !v\)\}/,
+  /className="userName userNameButton"[\s\S]{0,300}setShowAccount\(\((\w+)\) => !\1\)/,
   'The username should be a button that toggles showAccount',
 );
 assert.match(
@@ -63,7 +63,7 @@ assert.match(
 // 3. The popover renders as a dialog with Name, Email and Role rows.
 assert.match(
   headerSource,
-  /showAccount && \([\s\S]*?role="dialog"[\s\S]*?aria-label="Account details"/,
+  /accountOpen && \([\s\S]*?role="dialog"[\s\S]*?aria-label="Account details"/,
   'Account popover should render conditionally as an accessible dialog',
 );
 for (const label of ['Name', 'Email', 'Role']) {
@@ -85,7 +85,7 @@ assert.match(
 );
 assert.match(
   headerSource,
-  /className="accountMenuSignOut"[\s\S]{0,120}onClick=\{\(\) => \{ setShowAccount\(false\); onSignOut\(\); \}\}/,
+  /className="accountMenuSignOut"[\s\S]{0,200}onClick=\{\(\) => \{[^}]*setShowAccount\(false\); onSignOut\(\); \}\}/,
   'Account popover should offer a Sign out action that closes the popover',
 );
 assert.doesNotMatch(
@@ -97,7 +97,7 @@ assert.doesNotMatch(
 // 4. The popover closes on outside-click and Escape.
 assert.match(
   headerSource,
-  /if \(!showAccount\) return;[\s\S]*?accountRef\.current\?\.contains[\s\S]*?setShowAccount\(false\)/,
+  /if \(!showAccount(?: \|\| isMobileLayout)?\) return;[\s\S]*?accountRef\.current\?\.contains[\s\S]*?setShowAccount\(false\)/,
   'Account popover should close on outside pointer-down',
 );
 assert.match(

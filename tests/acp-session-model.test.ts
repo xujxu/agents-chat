@@ -1,5 +1,5 @@
 // session/set_model behavior of applySessionModelIfRequested (lib/acp/models.ts).
-// Runs in CI (.github/workflows/teams-bot.yml). Locally: npx --yes --package=tsx@4.20.6 tsx --test tests/acp-session-model.test.ts
+// Runs in CI (.github/workflows/checks.yml). Locally: npx --yes --package=tsx@4.20.6 tsx --test tests/acp-session-model.test.ts
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
