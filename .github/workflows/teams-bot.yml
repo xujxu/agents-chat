@@ -33,3 +33,5 @@ jobs:
         run: node --test tests/teams-bot-util.test.mjs
       - name: Teams bridge tests (group chat gating, per-user state, 1:1 behavior)
         run: npx --yes --package=tsx@4.20.6 tsx --test tests/teams-bot-bridge.test.ts
+      - name: ACP session model tests (agent default and selected model are applied)
+        run: npx --yes --package=tsx@4.20.6 tsx --test tests/acp-session-model.test.ts

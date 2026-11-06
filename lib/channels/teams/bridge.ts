@@ -222,7 +222,8 @@ async function handleMessage(
       return;
     case 'whoami': {
       const chatId = currentChatId(user, ref.conversationId);
-      await sendText(config, ref, `Account: **${user.email}**\nAgent: **${config.agentId}**\nChat: ${chatId ? `\`${chatId}\`` : '(none yet)'}`);
+      const modelId = selectedModelId(config, user);
+      await sendText(config, ref, `Account: **${user.email}**\nAgent: **${config.agentId}**\nModel: ${modelId ? `\`${modelId}\`` : "(agent's default)"}\nChat: ${chatId ? `\`${chatId}\`` : '(none yet)'}`);
       return;
     }
     case 'stop':
@@ -299,6 +300,20 @@ async function acp(config: TeamsConfig, user: TeamsUser, body: Record<string, un
   return { status: res.status, data };
 }
 
+/**
+ * The model the web UI would use for this user and agent: their saved model choice, then the
+ * agent default, then the first model. Sent explicitly so Teams turns run on the same model.
+ */
+function selectedModelId(config: TeamsConfig, user: TeamsUser): string | undefined {
+  const agent = configStore.getAgentById(config.agentId);
+  const models = agent?.models ?? [];
+  const known = (id: string | null | undefined) => !!id && models.some((model) => model.modelId === id);
+  const preferred = configStore.getUserAgentModelPref(user.email, config.agentId);
+  if (preferred && (models.length === 0 || known(preferred))) return preferred;
+  if (known(agent?.defaultModelId)) return agent!.defaultModelId;
+  return models[0]?.modelId;
+}
+
 async function ensureChat(config: TeamsConfig, user: TeamsUser, conversationId: string, prompt: string): Promise<{ id: string; name: string }> {
   const existingId = currentChatId(user, conversationId);
   if (existingId) {
@@ -324,7 +339,8 @@ async function runTurn(config: TeamsConfig, ref: ConversationRef, user: TeamsUse
     // Show progress right away: `send` can take several seconds while a cold agent process starts.
     const streamer = new TeamsStreamer(config, ref);
     const indicator = streamer.informative('Thinking…');
-    const sent = await acp(config, user, { action: 'send', chatId: chat.id, text: prompt, messageId: agentMessageId, messageTs: userTs + 1 });
+    const modelId = selectedModelId(config, user);
+    const sent = await acp(config, user, { action: 'send', chatId: chat.id, text: prompt, messageId: agentMessageId, messageTs: userTs + 1, ...(modelId ? { modelId } : {}) });
     await indicator;
     if (!sent.data?.ok) {
       await streamer.finish(describeSendError(config, sent));

@@ -167,6 +167,20 @@ async function main() {
     r = await run(activity('29:alice', '/help', [], 'personal', 'personal-1'));
     assert.doesNotMatch(r.posts[0].text, /group chat|<at>/);
 
+    // Turns use the same model as the web UI: the user's saved choice, else the agent default.
+    // Without a configured agent no model is sent (the line above ran before any agent existed).
+    const configStore = await import('../lib/configStore');
+    const sendModel = async () => (await run(activity('29:alice', 'model?', [], 'personal', 'personal-1'))).acp.find((a) => a.action === 'send')?.modelId;
+    assert.equal(await sendModel(), undefined, 'no agent configured');
+    configStore.createAgent({ id: 'teams', name: 'teams', owner: 'alice@contoso.com', models: [{ modelId: 'claude-sonnet-5.5' }, { modelId: 'claude-opus-5.5' }], defaultModelId: 'claude-sonnet-5.5' });
+    assert.equal(await sendModel(), 'claude-sonnet-5.5', 'agent default');
+    configStore.setUserAgentModelPref('alice@contoso.com', 'teams', 'claude-opus-5.5');
+    assert.equal(await sendModel(), 'claude-opus-5.5', 'user model choice');
+    r = await run(activity('29:alice', '/whoami', [], 'personal', 'personal-1'));
+    assert.match(r.posts[0].text, /Model: `claude-opus-5\.5`/);
+    configStore.setUserAgentModelPref('alice@contoso.com', 'teams', 'retired-model');
+    assert.equal(await sendModel(), 'claude-sonnet-5.5', 'unknown saved model falls back to the default');
+
     // Welcome messages go only to allowed users who install the bot or add it to a group chat.
     const welcomeFor = async (from: string, conversationType: string, conversationId: string) => {
       const start = calls.length;

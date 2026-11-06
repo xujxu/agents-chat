@@ -52,8 +52,10 @@ flowchart LR
 | --- | --- |
 | `/new [prompt]` | Start a new chat, optionally with a first prompt |
 | `/stop` | Stop the running response |
-| `/whoami` | Show the mapped account, agent, and chat id |
+| `/whoami` | Show the mapped account, agent, model, and chat id |
 | `/help` | Show help |
+
+Teams turns use the same model as the web UI: the model you last picked for this agent in agents-chat, otherwise the agent's default model.
 
 ## Group chats
 
