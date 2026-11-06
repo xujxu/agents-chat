@@ -9,7 +9,14 @@ export type { NodeData };
 
 const DEFAULT_CWD = 'Q:\\Repos\\workload-eventstream';
 
-export type AccessEntry = { email: string; grantedBy: string; createdAt: string };
+export type AccessEntry = {
+  email: string;
+  grantedBy: string;
+  createdAt: string;
+  expiresAt?: string;
+  status?: 'pending' | 'active' | 'expired';
+  extensionDays?: number | null;
+};
 
 export type AgentPanelState = {
   showAgentsPanel: boolean;
@@ -250,6 +257,27 @@ export function useAgentPanelState({
     }
   }
 
+  async function renewAccess(email: string, days?: number) {
+    if (agentSettingsLoading || agentAccessLoading || !settingsAgentId) return;
+    setFormError(null);
+    setAgentAccessLoading(true);
+    try {
+      const res = await fetch('/api/agent-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'extend', agentId: settingsAgentId, email, ...(days ? { days } : {}) }),
+      });
+      requireSuccessfulMutation(await res.json().catch(() => ({})), 'Failed to renew agent access');
+      const accessData = await acp({ action: 'list-agent-access', agentId: settingsAgentId });
+      requireSuccessfulMutation(accessData, 'Failed to renew agent access');
+      setAgentAccessList(accessData.access || []);
+    } catch (error) {
+      setFormError(mutationError(error, 'Failed to renew agent access'));
+    } finally {
+      setAgentAccessLoading(false);
+    }
+  }
+
   async function saveAgentSettings() {
     if (
       agentSettingsLoading
@@ -421,6 +449,7 @@ export function useAgentPanelState({
     deleteAgent,
     addAccess,
     removeAccess,
+    renewAccess,
 
     // UI-only model menu state
     openModelMenuKey,

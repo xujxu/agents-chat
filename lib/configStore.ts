@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
+import * as crypto from 'crypto';
 import Database from 'better-sqlite3';
 import { createLogger } from '@/lib/logger';
 import { setDbRoleLookup, setGitHubBindingLookup } from '@/lib/auth';
@@ -95,7 +96,18 @@ function getDb(): ReturnType<typeof Database> {
       email TEXT NOT NULL,
       granted_by TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      expires_at TEXT NOT NULL DEFAULT (datetime('now', '+30 days')),
+      accepted_at TEXT,
+      extension_days INTEGER,
+      extension_requested_at TEXT,
       PRIMARY KEY (agent_id, email),
+      FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS agent_share_links (
+      agent_id TEXT PRIMARY KEY,
+      token TEXT NOT NULL UNIQUE,
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
     );
     CREATE TABLE IF NOT EXISTS user_roles (
@@ -256,6 +268,22 @@ function runMigrations(): void {
       // Column already exists if DB was created fresh with the new schema
     }
     db.prepare('INSERT OR IGNORE INTO migrations (key) VALUES (?)').run('add_env_column');
+  }
+
+  // Share links: grants now expire and only count once the recipient opens the agent's share link. Grants
+  // made before this keep working (accepted) and get a fresh expiry.
+  const sharingMigrated = db.prepare('SELECT 1 FROM migrations WHERE key = ?').get('agent_access_sharing');
+  if (!sharingMigrated) {
+    for (const column of ['expires_at TEXT', 'accepted_at TEXT', 'extension_days INTEGER', 'extension_requested_at TEXT']) {
+      try {
+        db.exec(`ALTER TABLE agent_access ADD COLUMN ${column}`);
+      } catch {
+        // Column already exists if DB was created fresh with the new schema
+      }
+    }
+    db.prepare(`UPDATE agent_access SET accepted_at = COALESCE(accepted_at, created_at),
+      expires_at = COALESCE(expires_at, datetime('now', '+${SHARE_DAYS} days'))`).run();
+    db.prepare('INSERT OR IGNORE INTO migrations (key) VALUES (?)').run('agent_access_sharing');
   }
 }
 
@@ -513,11 +541,59 @@ export function deleteNode(name: string): boolean {
 }
 
 // ─── Agent Access Control ───
+//
+// A grant (agent_access row) is an invite until the recipient opens the agent's share link while signed in
+// as the invited account; then it is active until it expires. Expired grants still let the recipient sign
+// in for EXPIRED_GRACE_DAYS so they can ask for more time; after that they are ignored.
 
+export const SHARE_DAYS = 30;
+export const EXPIRED_GRACE_DAYS = 30;
+export const MAX_EXTENSION_DAYS = 90;
+
+export type AgentAccessStatus = 'pending' | 'active' | 'expired';
+export type AgentAccessEntry = {
+  email: string;
+  grantedBy: string;
+  createdAt: string;
+  expiresAt: string;
+  acceptedAt: string | null;
+  status: AgentAccessStatus;
+  extensionDays: number | null;
+  extensionRequestedAt: string | null;
+};
+
+/** SQLite `datetime()` text (UTC, no zone) as ISO-8601. */
+function sqliteTimeToIso(value: string | null): string | null {
+  if (!value) return null;
+  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value) ? `${value.replace(' ', 'T')}Z` : value;
+}
+
+function accessColumns(t = ''): string {
+  return `${t}email AS email, ${t}granted_by AS granted_by, ${t}created_at AS created_at, ${t}expires_at AS expires_at,
+    ${t}accepted_at AS accepted_at, ${t}extension_days AS extension_days, ${t}extension_requested_at AS extension_requested_at,
+    CASE WHEN ${t}expires_at <= datetime('now') THEN 'expired' WHEN ${t}accepted_at IS NULL THEN 'pending' ELSE 'active' END AS status`;
+}
+
+function toAccessEntry(r: any): AgentAccessEntry {
+  return {
+    email: r.email,
+    grantedBy: r.granted_by,
+    createdAt: sqliteTimeToIso(r.created_at) || '',
+    expiresAt: sqliteTimeToIso(r.expires_at) || '',
+    acceptedAt: sqliteTimeToIso(r.accepted_at),
+    status: r.status,
+    extensionDays: r.extension_days ?? null,
+    extensionRequestedAt: sqliteTimeToIso(r.extension_requested_at),
+  };
+}
+
+/** Invites `email` (or renews an existing grant) for SHARE_DAYS. Recipients still need the share link. */
 export function addAgentAccess(agentId: string, email: string, grantedBy: string): boolean {
   const db = getDb();
   try {
-    db.prepare('INSERT OR IGNORE INTO agent_access (agent_id, email, granted_by) VALUES (?, ?, ?)').run(
+    db.prepare(`INSERT INTO agent_access (agent_id, email, granted_by, expires_at) VALUES (?, ?, ?, datetime('now', '+${SHARE_DAYS} days'))
+      ON CONFLICT(agent_id, email) DO UPDATE SET granted_by = excluded.granted_by,
+        expires_at = MAX(agent_access.expires_at, excluded.expires_at)`).run(
       agentId, email.toLowerCase(), grantedBy.toLowerCase(),
     );
     return true;
@@ -532,21 +608,31 @@ export function removeAgentAccess(agentId: string, email: string): boolean {
   return result.changes > 0;
 }
 
-export function getAgentAccessList(agentId: string): { email: string; grantedBy: string; createdAt: string }[] {
+export function getAgentAccessList(agentId: string): AgentAccessEntry[] {
   const db = getDb();
-  const rows = db.prepare('SELECT email, granted_by, created_at FROM agent_access WHERE agent_id = ? ORDER BY created_at ASC').all(agentId) as any[];
-  return rows.map(r => ({ email: r.email, grantedBy: r.granted_by, createdAt: r.created_at }));
+  const rows = db.prepare(`SELECT ${accessColumns()} FROM agent_access WHERE agent_id = ? ORDER BY created_at ASC`).all(agentId) as any[];
+  return rows.map(toAccessEntry);
 }
 
+export function getAgentAccess(agentId: string, email: string): AgentAccessEntry | null {
+  const db = getDb();
+  const row = db.prepare(`SELECT ${accessColumns()} FROM agent_access WHERE agent_id = ? AND email = ?`).get(agentId, email.toLowerCase());
+  return row ? toAccessEntry(row) : null;
+}
+
+/** Whether `email` may use the agent through a grant: accepted through the share link and not expired. */
 export function hasAgentAccess(agentId: string, email: string): boolean {
   const db = getDb();
-  const row = db.prepare('SELECT 1 FROM agent_access WHERE agent_id = ? AND email = ?').get(agentId, email.toLowerCase());
+  const row = db.prepare(`SELECT 1 FROM agent_access WHERE agent_id = ? AND email = ?
+    AND accepted_at IS NOT NULL AND expires_at > datetime('now')`).get(agentId, email.toLowerCase());
   return !!row;
 }
 
+/** Whether a grant lets `email` sign in as a guest: invited, active, or recently expired. */
 export function hasAnyAgentAccess(email: string): boolean {
   const db = getDb();
-  return !!db.prepare('SELECT 1 FROM agent_access WHERE email = ? LIMIT 1').get(email.toLowerCase());
+  return !!db.prepare(`SELECT 1 FROM agent_access WHERE email = ?
+    AND expires_at > datetime('now', '-${EXPIRED_GRACE_DAYS} days') LIMIT 1`).get(email.toLowerCase());
 }
 
 /** Every agent access grant, for the admin "Users & roles" view. */
@@ -554,6 +640,89 @@ export function listAllAgentAccess(): { agentId: string; email: string; grantedB
   const db = getDb();
   const rows = db.prepare('SELECT agent_id, email, granted_by, created_at FROM agent_access ORDER BY email, agent_id').all() as any[];
   return rows.map(r => ({ agentId: r.agent_id, email: r.email, grantedBy: r.granted_by, createdAt: r.created_at }));
+}
+
+/** Activates an unexpired grant (idempotent). False when `email` has no unexpired grant for the agent. */
+export function acceptAgentInvite(agentId: string, email: string): boolean {
+  const db = getDb();
+  const result = db.prepare(`UPDATE agent_access SET accepted_at = COALESCE(accepted_at, datetime('now'))
+    WHERE agent_id = ? AND email = ? AND expires_at > datetime('now')`).run(agentId, email.toLowerCase());
+  return result.changes > 0;
+}
+
+/** Grants that still let `email` sign in, with agent names, for the recipient's own notices. */
+export function listUserAgentGrants(email: string): (AgentAccessEntry & { agentId: string; agentName: string })[] {
+  const db = getDb();
+  const rows = db.prepare(`SELECT a.agent_id, COALESCE(ag.name, a.agent_id) AS agent_name, ${accessColumns('a.')}
+    FROM agent_access a LEFT JOIN agents ag ON ag.id = a.agent_id
+    WHERE a.email = ? AND a.expires_at > datetime('now', '-${EXPIRED_GRACE_DAYS} days') ORDER BY a.expires_at`).all(email.toLowerCase()) as any[];
+  return rows.map(r => ({ ...toAccessEntry(r), agentId: r.agent_id, agentName: r.agent_name }));
+}
+
+/** Records the recipient's request for `days` more days on an accepted grant (replacing any earlier request). */
+export function requestAgentAccessExtension(agentId: string, email: string, days: number): boolean {
+  if (!Number.isInteger(days) || days < 1 || days > MAX_EXTENSION_DAYS) return false;
+  const db = getDb();
+  const result = db.prepare(`UPDATE agent_access SET extension_days = ?, extension_requested_at = datetime('now')
+    WHERE agent_id = ? AND email = ? AND accepted_at IS NOT NULL
+      AND expires_at > datetime('now', '-${EXPIRED_GRACE_DAYS} days')`).run(days, agentId, email.toLowerCase());
+  return result.changes > 0;
+}
+
+/** Pending extension requests across all agents, for admins. */
+export function listAgentAccessExtensionRequests(): (AgentAccessEntry & { agentId: string; agentName: string })[] {
+  const db = getDb();
+  const rows = db.prepare(`SELECT a.agent_id, COALESCE(ag.name, a.agent_id) AS agent_name, ${accessColumns('a.')}
+    FROM agent_access a LEFT JOIN agents ag ON ag.id = a.agent_id
+    WHERE a.extension_requested_at IS NOT NULL ORDER BY a.extension_requested_at`).all() as any[];
+  return rows.map(r => ({ ...toAccessEntry(r), agentId: r.agent_id, agentName: r.agent_name }));
+}
+
+/** Extends a grant by `days` from its expiry, or from now if it already expired, and clears any request. */
+export function extendAgentAccess(agentId: string, email: string, days: number): boolean {
+  if (!Number.isInteger(days) || days < 1 || days > MAX_EXTENSION_DAYS) return false;
+  const db = getDb();
+  const result = db.prepare(`UPDATE agent_access SET expires_at = datetime(MAX(expires_at, datetime('now')), ?),
+    extension_days = NULL, extension_requested_at = NULL WHERE agent_id = ? AND email = ?`).run(`+${days} days`, agentId, email.toLowerCase());
+  return result.changes > 0;
+}
+
+export function denyAgentAccessExtension(agentId: string, email: string): boolean {
+  const db = getDb();
+  const result = db.prepare(`UPDATE agent_access SET extension_days = NULL, extension_requested_at = NULL
+    WHERE agent_id = ? AND email = ? AND extension_requested_at IS NOT NULL`).run(agentId, email.toLowerCase());
+  return result.changes > 0;
+}
+
+// ─── Agent share links (one per agent; the link alone grants nothing without a grant) ───
+
+export function getAgentShareToken(agentId: string): string | null {
+  const db = getDb();
+  const row = db.prepare('SELECT token FROM agent_share_links WHERE agent_id = ?').get(agentId) as { token: string } | undefined;
+  return row?.token ?? null;
+}
+
+/** Creates the agent's share link, replacing (and so invalidating) any previous one. */
+export function rotateAgentShareToken(agentId: string, createdBy: string): string {
+  const db = getDb();
+  const token = crypto.randomBytes(24).toString('base64url');
+  db.prepare(`INSERT INTO agent_share_links (agent_id, token, created_by) VALUES (?, ?, ?)
+    ON CONFLICT(agent_id) DO UPDATE SET token = excluded.token, created_by = excluded.created_by, created_at = datetime('now')`).run(
+    agentId, token, createdBy.toLowerCase(),
+  );
+  return token;
+}
+
+export function revokeAgentShareToken(agentId: string): boolean {
+  const db = getDb();
+  return db.prepare('DELETE FROM agent_share_links WHERE agent_id = ?').run(agentId).changes > 0;
+}
+
+export function getAgentIdByShareToken(token: string): string | null {
+  if (!/^[A-Za-z0-9_-]{16,64}$/.test(token)) return null;
+  const db = getDb();
+  const row = db.prepare('SELECT agent_id FROM agent_share_links WHERE token = ?').get(token) as { agent_id: string } | undefined;
+  return row?.agent_id ?? null;
 }
 
 // ─── Global User Roles (managed in the UI; env roles live in ADMIN_EMAILS / MEMBER_EMAILS) ───

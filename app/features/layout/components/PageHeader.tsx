@@ -6,6 +6,7 @@ import { THEMES, normalizeThemeId } from '../../theme/themes';
 import type { MobileOverlay } from '../hooks/useMobileOverlayState';
 import { useFullscreen } from '../useFullscreen';
 import { UsersRolesDialog } from './UsersRolesDialog';
+import { AccessNoticesBanner } from './AccessNoticesBanner';
 
 type ActiveMobileOverlay = Exclude<MobileOverlay, null>;
 
@@ -290,6 +291,7 @@ export function PageHeader({
         // The header's backdrop-filter would trap a fixed overlay, so render into the themed page instead.
         ? createPortal(<UsersRolesDialog onClose={closeUsersRoles} />, headerRef.current.closest('.page') ?? document.body)
         : null}
+      {authLabel ? <AccessNoticesBanner /> : null}
     </header>
   );
 }

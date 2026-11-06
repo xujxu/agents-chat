@@ -218,6 +218,7 @@ async function main() {
     await pause();
     configStore.createAgent({ id: 'shared', name: 'shared', owner: 'carol@contoso.com' });
     configStore.addAgentAccess('shared', 'alice@contoso.com', 'carol@contoso.com');
+    configStore.acceptAgentInvite('shared', 'alice@contoso.com');
     await pause();
     configStore.createAgent({ id: 'scheduler', name: 'scheduler', owner: 'alice@contoso.com' });
     const chatStore = await import('../lib/chatStore');

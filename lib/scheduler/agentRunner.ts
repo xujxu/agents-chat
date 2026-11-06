@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import { existsSync } from 'fs';
 import { getAllAgents } from "../configStore.ts";
 import type { AgentRecord } from "../configStore.ts";
+import { canUseAgent } from "../rbac.ts";
 import type { CronJob } from "../../app/features/scheduler/scheduleTypes.ts";
 import { createNdjsonRpc } from "../acp/rpc.ts";
 
@@ -16,6 +17,10 @@ export async function runAgentOnce(job: CronJob, opts?: { timeoutMs?: number }):
   const agents = getAllAgents();
   const agent = agents.find((a) => a.id === job.agentId);
   if (!agent) return { replyText: "", rawLog: "", error: `agent not found: ${job.agentId}` };
+  // The job's creator may have lost access since (grant expired or removed, role changed).
+  if (!canUseAgent({ email: job.ownerEmail }, agent)) {
+    return { replyText: "", rawLog: "", error: `access denied: ${job.ownerEmail} can no longer use agent ${job.agentId}` };
+  }
 
   const logChunks: string[] = [];
   const append = (s: string) => {

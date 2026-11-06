@@ -8,7 +8,16 @@ import { useAgentPanelState } from '../hooks/useAgentPanelState';
 import { getAgentModelMenuKey } from '../agentModelMenuHelpers';
 import { AgentModelSelect } from './AgentModelSelect';
 import { AgentAuthControl } from './AgentAuthControl';
+import { AgentShareLink } from './AgentShareLink';
 import './AgentAuthControl.css';
+
+function accessStatusText(entry: AccessEntry): string {
+  if (!entry.status) return '';
+  const until = entry.expiresAt ? new Date(entry.expiresAt).toLocaleDateString() : '';
+  if (entry.status === 'pending') return `· invited, link not opened yet (until ${until})`;
+  if (entry.status === 'expired') return `· expired ${until}${entry.extensionDays ? ' · extension requested' : ''}`;
+  return `· until ${until}${entry.extensionDays ? ' · extension requested' : ''}`;
+}
 
 function getAgentLocationLabel(agent: Agent): string {
   if (!agent.relay) return `@${agent.id}`;
@@ -85,6 +94,7 @@ export function AgentsPanel({
     deleteAgent,
     addAccess,
     removeAccess,
+    renewAccess,
     openAgentSettings,
     openModelMenuKey,
     setOpenModelMenuKey,
@@ -331,8 +341,9 @@ export function AgentsPanel({
               </label>
               {!settingsAgentConfig.public && (
                 <>
-                  <p style={{ fontSize: '12px', color: '#666', margin: '0 0 8px' }}>Only listed users (and admins) can talk to this agent.</p>
-                  <div className="agentAccessGrantRow">
+                  <p style={{ fontSize: '12px', color: '#666', margin: '0 0 8px' }}>Only listed users (and admins) can talk to this agent.{isAdmin ? '' : ' Only admins can share it.'}</p>
+                  {isAdmin && settingsAgentId && <AgentShareLink agentId={settingsAgentId} />}
+                  {isAdmin && <div className="agentAccessGrantRow">
                     <input
                       value={newAccessEmail}
                       onChange={(e) => setNewAccessEmail(e.target.value)}
@@ -341,13 +352,14 @@ export function AgentsPanel({
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addAccess(); } }}
                     />
                     <button className="primary inlinePrimary" onClick={() => void addAccess()} disabled={agentSettingsLoading || agentAccessLoading || !newAccessEmail.trim()}>Grant</button>
-                  </div>
+                  </div>}
                   {agentAccessList.length > 0 ? (
                     <div style={{ maxHeight: '120px', overflowY: 'auto', fontSize: '12px' }}>
                       {(agentAccessList as AccessEntry[]).map((entry) => (
                         <div key={entry.email} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                          <span>{entry.email}</span>
-                          <button onClick={() => void removeAccess(entry.email)} disabled={agentSettingsLoading || agentAccessLoading} aria-label={`Revoke access for ${entry.email}`} style={{ fontSize: '11px', padding: '2px 6px', background: 'transparent', color: '#e55', border: '1px solid #e55', borderRadius: '3px', cursor: 'pointer' }}>✕</button>
+                          <span>{entry.email} <span style={{ color: entry.status === 'expired' ? '#e55' : '#888' }}>{accessStatusText(entry)}</span></span>
+                          {isAdmin && entry.status && entry.status !== 'pending' && <button onClick={() => void renewAccess(entry.email, entry.extensionDays ?? undefined)} disabled={agentSettingsLoading || agentAccessLoading} aria-label={`Renew access for ${entry.email}`} style={{ fontSize: '11px', padding: '2px 6px', marginLeft: 'auto', marginRight: '4px' }}>{entry.extensionDays ? `Approve +${entry.extensionDays}d` : 'Renew'}</button>}
+                          {isAdmin && <button onClick={() => void removeAccess(entry.email)} disabled={agentSettingsLoading || agentAccessLoading} aria-label={`Revoke access for ${entry.email}`} style={{ fontSize: '11px', padding: '2px 6px', background: 'transparent', color: '#e55', border: '1px solid #e55', borderRadius: '3px', cursor: 'pointer' }}>✕</button>}
                         </div>
                       ))}
                     </div>
