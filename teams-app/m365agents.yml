@@ -1,0 +1,16 @@
+# Template for sharing the Teams bot app with chosen colleagues through the Microsoft 365 Agents
+# Toolkit CLI (atk). Copy this folder outside the repo (script deployments: shared/teams-app/),
+# put the app package downloaded from the Teams Developer Portal at appPackage/teams-app.zip, and
+# copy env/.env.dev.example to env/.env.dev. See docs/teams-bot.md#share-the-bot-with-colleagues.
+# yaml-language-server: $schema=https://aka.ms/m365-agents-toolkits/v1.10/yaml.schema.json
+version: v1.10
+provision:
+  - uses: teamsApp/extendToM365
+    with:
+      appPackagePath: ./appPackage/teams-app.zip
+      # "shared" makes the app visible only to the people you add with `atk share`.
+      scope: shared
+    writeToEnvironmentFile:
+      titleId: M365_TITLE_ID
+      appId: M365_APP_ID
+      shareLink: SHARE_LINK

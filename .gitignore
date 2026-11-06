@@ -15,5 +15,8 @@ logs/*
 server.log
 server-error.log
 
+teams-app/env/*
+!teams-app/env/.env.dev.example
+teams-app/appPackage/
 .worktrees/
 .superpowers/

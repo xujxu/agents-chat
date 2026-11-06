@@ -165,9 +165,57 @@ curl.exe -s -o NUL -w "%{http_code}`n" -X POST https://<public-host>/api/teams/m
    (see [Group chats](#group-chats)). Do not grant the `ChatMessage.Read.Chat` (RSC) permission;
    the bot does not need it.
 3. Use **Preview in Teams**, or **Publish → Download app package** and upload it in Teams through
-   **Apps → Manage your apps → Upload an app**. To make it available to others, publish it to your
-   organization's app catalog.
+   **Apps → Manage your apps → Upload an app**. To make it available to chosen colleagues, see
+   [Share the bot with colleagues](#share-the-bot-with-colleagues).
 4. Open the bot in Teams and send `/whoami`. It should show your agents-chat account.
+
+### Share the bot with colleagues
+
+A custom-uploaded app is visible only to you. To give specific people in your tenant the bot,
+without publishing it to the org catalog, upload it with **shared** scope and share it with them
+through the [Microsoft 365 Agents Toolkit CLI](https://learn.microsoft.com/microsoftteams/platform/toolkit/microsoft-365-agents-toolkit-cli)
+(`atk`). Only the people you add can find it; it does not appear in the store for anyone else.
+Your tenant's app-upload policy must allow this.
+
+The repo has a template in `teams-app/`. The filled-in copy holds your app package and the shared
+app's ids, so keep it out of git, like `.env.local`. For script deployments, keep it in
+`shared/teams-app/`.
+
+1. **Set up the folder** (once):
+
+   ```powershell
+   npm install -g @microsoft/m365agentstoolkit-cli
+   $dir = 'C:\agents-chat\shared\teams-app'   # Linux: /opt/agents-chat/shared/teams-app
+   New-Item -ItemType Directory -Force "$dir\env", "$dir\appPackage" | Out-Null
+   Copy-Item teams-app\m365agents.yml $dir
+   Copy-Item teams-app\env\.env.dev.example "$dir\env\.env.dev"
+   ```
+
+   In the Developer Portal, open your app, select **Publish → Download app package**, and save it as
+   `appPackage\teams-app.zip` in that folder.
+
+2. **Sign in and upload** (once, and again after each app change):
+
+   ```powershell
+   atk auth login m365
+   atk provision --env dev -f $dir -i false
+   ```
+
+   The first upload writes `M365_TITLE_ID`, `M365_APP_ID`, and `SHARE_LINK` to `env\.env.dev`. Keep
+   that file: later uploads and shares use it to find the same app. Without it, `atk provision`
+   creates a second shared copy. Before uploading a changed package, increase its `version`.
+
+3. **Share** with each colleague, then send them `SHARE_LINK`. After they accept it, the bot appears
+   in their Teams apps.
+
+   ```powershell
+   atk share --env dev -f $dir --scope users --email 'alice@contoso.com,bob@contoso.com' -i false
+   atk share remove --env dev -f $dir --users 'bob@contoso.com' -i false   # revoke
+   ```
+
+4. **Allow them in agents-chat.** Sharing the Teams app does not grant any access to agents-chat.
+   Add each person to `TEAMS_ALLOWED_USERS` (the bot ignores everyone else) and make sure they can
+   sign in to agents-chat and use the Teams agent, then restart the service.
 
 ## Option B: Key Vault token (no client secret)
 
@@ -288,8 +336,10 @@ lasts about 24 hours, so a few failed runs cause no outage.
   "not allowed" message), so the bot does not reveal itself to people who find or add it.
 - **Keeping the app private.** Do not use **Publish → Publish to your org** in the Developer Portal;
   install it for yourself with **Preview in Teams** or a custom upload, keep yourself as the only
-  owner, and do not share the app package. Teams cannot stop someone who learns the bot app id from
-  uploading their own package for it, which is why the allow-list is enforced on the server.
+  owner, and share it only through [shared scope](#share-the-bot-with-colleagues), not by handing
+  out the app package. Keep the app package and your `teams-app` folder out of git. Teams cannot
+  stop someone who learns the bot app id from uploading their own package for it, which is why the
+  allow-list is enforced on the server.
 - **Session.** The bridge mints a short-lived (1 hour) NextAuth session token in memory and uses it
   only on the loopback call to `/api/acp`. It is never sent to Teams or written to disk.
 - **Credentials.** Option B stores no credential on the server or in Azure. Key Vault holds only the
