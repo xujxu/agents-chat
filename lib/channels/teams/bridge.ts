@@ -457,7 +457,7 @@ async function runTurn(config: TeamsConfig, ref: ConversationRef, user: TeamsUse
   const agentId = activeAgentId(config, user, ref.conversationId);
   state.agentId = agentId;
   const agentName = agentDisplayName(agentId);
-  const streamer = new TeamsStreamer(config, ref, undefined, `🤖 **${agentName}**`);
+  const streamer = new TeamsStreamer(config, ref, undefined, `*🤖 ${agentName}*`);
   const indicator = streamer.informative(thinkingLine(agentName));
   const slowTimers: ReturnType<typeof setTimeout>[] = [];
   try {

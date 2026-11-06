@@ -109,7 +109,7 @@ async function main() {
     const aliceChatId = r.acp[0].chatId;
     // Replies say which agent answered (its id when the agent has no record).
     const finals = (posts: any[]) => posts.filter((p) => p.type === 'message').map((p) => p.text as string); // eslint-disable-line @typescript-eslint/no-explicit-any
-    assert.deepEqual(finals(r.posts), ['🤖 **teams**\n\nanswer']);
+    assert.deepEqual(finals(r.posts), ['*🤖 teams*\n\nanswer']);
 
     // Plain replies in a group @mention the asker.
     r = await run(activity('29:bob', '<at>agent-xujx</at> /help', [botMention]));
@@ -240,7 +240,7 @@ async function main() {
     assert.equal((await chatStore.getChat('alice@contoso.com', mcChatId))?.agentId, 'mcagent', 'web chat belongs to the agent');
     r = await say('follow-up');
     assert.equal(sendOf(r).chatId, mcChatId, 'agent chat continues');
-    assert.deepEqual(finals(r.posts), ['🤖 **MC Agent**\n\nanswer'], 'reply labeled with the agent name');
+    assert.deepEqual(finals(r.posts), ['*🤖 MC Agent*\n\nanswer'], 'reply labeled with the agent name');
     assert.match(await command('/whoami'), /Agent: \*\*mcagent\*\*/);
     assert.match(await command('/model'), /\*\*mcagent\*\* agent has no model list/);
     reply = await command('/agent');
@@ -275,7 +275,7 @@ async function main() {
     // Switching back resumes the earlier chat; /new only resets the current agent's chat.
     assert.match(await command('/agent 1'), /Now talking to `teams` – default .*earlier conversation with it continues/);
     r = await say('back to teams');
-    assert.deepEqual(finals(r.posts), ['🤖 **teams**\n\nanswer']);
+    assert.deepEqual(finals(r.posts), ['*🤖 teams*\n\nanswer']);
     sent = sendOf(r);
     assert.deepEqual([sent.agentId, sent.chatId], ['teams', teamsChatId]);
     assert.match(await command('/agent shared'), /Now talking to `shared`/);
@@ -358,10 +358,10 @@ async function main() {
     // Long replies are split; only the first message carries the agent label.
     const { TeamsStreamer } = await import('../lib/channels/teams/stream');
     start = calls.length;
-    const longReply = new TeamsStreamer(config, { serviceUrl: SERVICE_URL, conversationId: 'personal-long', botId: BOT_ID, userId: '29:alice' }, 12, '🤖 **teams**');
+    const longReply = new TeamsStreamer(config, { serviceUrl: SERVICE_URL, conversationId: 'personal-long', botId: BOT_ID, userId: '29:alice' }, 12, '*🤖 teams*');
     await longReply.update('first part.');
     await longReply.finish('first part.\n\nsecond part');
-    assert.deepEqual(finals(since(start).posts), ['🤖 **teams**\n\nfirst part.', 'second part']);
+    assert.deepEqual(finals(since(start).posts), ['*🤖 teams*\n\nfirst part.', 'second part']);
 
     // Warm-up fetches the bot token once, so the first message does not wait for it.
     const auth = await import('../lib/channels/teams/auth');
