@@ -43,7 +43,9 @@ flowchart LR
 3. Each Teams 1:1 conversation maps to one agents-chat chat named `Teams: …`. In a group chat, each
    person gets their own agents-chat chat. `/new` starts a new one. If you switch agents with
    `/agent`, each agent gets its own chat in that conversation, filed under that agent in the web UI.
-4. The bridge polls the turn and streams the growing answer to Teams. Agent questions and
+4. The bridge polls the turn and streams the growing answer to Teams. Each reply starts with the
+   answering agent's name (for example `🤖 **teams**`), and the progress line reads
+   `<agent> is thinking…`, so you can always tell which agent you are talking to. Agent questions and
    permission prompts are posted as numbered lists. Reply with the number or label; free-text
    questions take one answer per line.
 

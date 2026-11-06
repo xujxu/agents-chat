@@ -26,8 +26,13 @@ export class TeamsStreamer {
   private anySent = false;
   private fallback = false;
   private busy: Promise<void> = Promise.resolve();
+  /** True until the first message of the response (which carries the header) is delivered. */
+  private headerPending: boolean;
 
-  constructor(private readonly config: TeamsConfig, private readonly ref: ConversationRef, private readonly maxText = TEAMS_MAX_TEXT) {}
+  /** `header` (e.g. the agent name) is shown above the first message of the response. */
+  constructor(private readonly config: TeamsConfig, private readonly ref: ConversationRef, private readonly maxText = TEAMS_MAX_TEXT, private readonly header = '') {
+    this.headerPending = !!header;
+  }
 
   /** Status line shown before any content arrives in the current stream. */
   informative(text: string): Promise<void> {
@@ -55,7 +60,7 @@ export class TeamsStreamer {
       if (!segment.trim() || segment === this.lastSegment) return;
       // Teams requires each streamed chunk to extend the previous one.
       if (this.lastSegment && !segment.startsWith(this.lastSegment)) return;
-      if (await this.post('streaming', segment)) this.lastSegment = segment;
+      if (await this.post('streaming', this.withHeader(segment))) this.lastSegment = segment;
     });
   }
 
@@ -69,7 +74,8 @@ export class TeamsStreamer {
     return this.enqueue(async () => {
       await this.commitRemaining(finalText);
       if (!this.anySent) {
-        await sendText(this.config, this.ref, '_(no response)_');
+        await sendText(this.config, this.ref, this.withHeader('_(no response)_'));
+        this.headerPending = false;
         this.anySent = true;
       }
     });
@@ -80,7 +86,8 @@ export class TeamsStreamer {
     if (remaining.trim()) {
       for (const chunk of splitForTeams(remaining, this.maxText)) {
         if (!(await this.commit(chunk))) {
-          await sendText(this.config, this.ref, chunk);
+          await sendText(this.config, this.ref, this.withHeader(chunk));
+          this.headerPending = false;
           this.anySent = true;
         }
       }
@@ -93,7 +100,8 @@ export class TeamsStreamer {
   }
 
   /** Send `text` as a final message, closing the current stream if any. Returns false if it could not be delivered. */
-  private async commit(text: string): Promise<boolean> {
+  private async commit(segment: string): Promise<boolean> {
+    const text = this.withHeader(segment);
     try {
       if (this.streamId && !this.fallback) {
         await sendActivity(this.config, this.ref, {
@@ -107,6 +115,7 @@ export class TeamsStreamer {
         await sendText(this.config, this.ref, text);
       }
       this.anySent = true;
+      this.headerPending = false;
       this.lastSentAt = Date.now();
       return true;
     } catch (err) {
@@ -115,6 +124,10 @@ export class TeamsStreamer {
     } finally {
       this.resetStream();
     }
+  }
+
+  private withHeader(text: string): string {
+    return this.headerPending ? `${this.header}\n\n${text}` : text;
   }
 
   private advance(segment: string, length: number): void {

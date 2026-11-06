@@ -454,12 +454,13 @@ async function runTurn(config: TeamsConfig, ref: ConversationRef, user: TeamsUse
   state.pendingRequest = undefined;
   // Show progress before anything else: saving the chat and `send` (which starts a cold agent
   // process) can take several seconds.
-  const streamer = new TeamsStreamer(config, ref);
-  const indicator = streamer.informative('Thinking…');
+  const agentId = activeAgentId(config, user, ref.conversationId);
+  state.agentId = agentId;
+  const agentName = agentDisplayName(agentId);
+  const streamer = new TeamsStreamer(config, ref, undefined, `🤖 **${agentName}**`);
+  const indicator = streamer.informative(thinkingLine(agentName));
   const slowTimers: ReturnType<typeof setTimeout>[] = [];
   try {
-    const agentId = activeAgentId(config, user, ref.conversationId);
-    state.agentId = agentId;
     const chat = await ensureChat(config, user, agentId, ref.conversationId, prompt);
     state.chatId = chat.id;
     const userTs = Date.now();
@@ -478,7 +479,7 @@ async function runTurn(config: TeamsConfig, ref: ConversationRef, user: TeamsUse
       return;
     }
 
-    await pollTurn(config, ref, user, state, agentId, chat.id, agentMessageId, streamer);
+    await pollTurn(config, ref, user, state, agentId, agentName, chat.id, agentMessageId, streamer);
   } finally {
     slowTimers.forEach(clearTimeout);
     state.running = false;
@@ -501,6 +502,7 @@ async function pollTurn(
   user: TeamsUser,
   state: ConversationState,
   agentId: string,
+  agentName: string,
   chatId: string,
   agentMessageId: string,
   streamer: TeamsStreamer,
@@ -554,7 +556,7 @@ async function pollTurn(
 
     if (!state.pendingRequest) {
       if (fullText) await streamer.update(fullText);
-      else await streamer.informative(statusLine(turn.statusText));
+      else await streamer.informative(statusLine(agentName, turn.statusText));
     }
     lastText = fullText;
   }
@@ -562,9 +564,18 @@ async function pollTurn(
   await streamer.finish(`${lastText}\n\n⚠️ Stopped waiting after ${MAX_TURN_MS / 60_000} minutes. Check the agents-chat web UI.`.trim());
 }
 
-function statusLine(statusText: unknown): string {
+/** Name shown on replies so users can tell which agent answered. */
+function agentDisplayName(agentId: string): string {
+  return configStore.getAgentById(agentId)?.name?.trim() || agentId;
+}
+
+function thinkingLine(agentName: string): string {
+  return `${agentName} is thinking…`;
+}
+
+function statusLine(agentName: string, statusText: unknown): string {
   const text = typeof statusText === 'string' ? statusText.trim() : '';
-  return !text || text === 'Thinking' ? 'Thinking…' : text;
+  return !text || text === 'Thinking' ? thinkingLine(agentName) : text;
 }
 
 async function answerPendingRequest(config: TeamsConfig, ref: ConversationRef, user: TeamsUser, state: ConversationState, text: string): Promise<void> {
