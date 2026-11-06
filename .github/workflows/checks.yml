@@ -32,11 +32,8 @@ jobs:
       - name: Unit tests
         shell: bash
         run: |
-          # Out of date source-text assertions; remove from this list once fixed.
-          skip=" account-details-popover.test.mjs agent-user-request-route.test.mjs chat-git-context-api.test.mjs page-under-200-domain-refactor.test.mjs "
           js=(); ts=()
           for f in tests/*.test.mjs tests/*.test.js tests/*.test.ts; do
-            [[ "$skip" == *" $(basename "$f") "* ]] && continue
             if [[ "$f" == *.ts ]]; then ts+=("$f"); else js+=("$f"); fi
           done
           node --test "${js[@]}"
