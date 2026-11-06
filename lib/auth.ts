@@ -55,6 +55,19 @@ export function getDbRole(email: string | undefined): 'admin' | 'member' | null 
   }
 }
 
+/** GitHub account id an email is linked to (`configStore.github_identity_bindings`), registered like the role lookup. */
+type GitHubBindingLookup = (email: string) => string | null;
+const bindingLookupHolder = globalThis as unknown as { __agentsChatGitHubBindingLookup?: GitHubBindingLookup };
+
+export function setGitHubBindingLookup(lookup: GitHubBindingLookup | null): void {
+  bindingLookupHolder.__agentsChatGitHubBindingLookup = lookup ?? undefined;
+}
+
+export function getGitHubBinding(email: string): string | null {
+  const lookup = bindingLookupHolder.__agentsChatGitHubBindingLookup;
+  return lookup ? lookup(email) : null;
+}
+
 export function isEnvAdminEmail(email: string | undefined): boolean {
   const normalized = (email || '').trim().toLowerCase();
   return Boolean(normalized) && parseEmailList(process.env.ADMIN_EMAILS).includes(normalized);
@@ -66,7 +79,7 @@ export function isAdminToken(token: any): boolean {
   if (token.sub === 'admin') return true;
   // The role claim is never trusted on its own (older OAuth cookies carry no provider and could keep a revoked
   // admin claim), so every other token is re-evaluated against env and the UI roles.
-  const email = ((token.email as string) || '').toLowerCase();
+  const email = getUserEmail(token);
   if (!email) return false;
   return isEnvAdminEmail(email) || getDbRole(email) === 'admin';
 }
@@ -133,7 +146,18 @@ export function resolveUserRole(token: any, hasAnyAgentAccess: (email: string) =
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getUserEmail(token: any): string {
   if (!token) return '';
-  return ((token.email as string) || '').toLowerCase();
+  const email = ((token.email as string) || '').toLowerCase();
+  // A GitHub session only owns its email while the email stays linked to that account (lookup errors deny).
+  if (email && token.provider === 'github') {
+    let boundId: string | null;
+    try {
+      boundId = getGitHubBinding(email);
+    } catch {
+      return '';
+    }
+    if (boundId && boundId !== String(token.sub ?? '')) return '';
+  }
+  return email;
 }
 
 /**

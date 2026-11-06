@@ -4,7 +4,14 @@ import {
   parseEmailList,
   shouldUseSecureAuthCookies,
 } from '../lib/auth';
-import { authOptions } from '../app/api/auth/[...nextauth]/route';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
+// signIn links GitHub accounts in the config DB, so keep it out of the working tree.
+process.chdir(mkdtempSync(path.join(tmpdir(), 'agents-chat-auth-')));
+type AuthOptions = typeof import('../app/api/auth/[...nextauth]/route').authOptions;
+let authOptions: AuthOptions;
 
 function expectEqual<T>(actual: T, expected: T, label: string): void {
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
@@ -71,7 +78,7 @@ async function testSignInCallback(): Promise<void> {
     expectEqual(
       await signIn({
         user: { email: 'allowed@example.com' },
-        account: { provider: 'github' },
+        account: { provider: 'github', providerAccountId: '101' },
         profile: { email: 'allowed@example.com' },
       } as never),
       true,
@@ -80,7 +87,7 @@ async function testSignInCallback(): Promise<void> {
     expectEqual(
       await signIn({
         user: { email: 'other@example.com' },
-        account: { provider: 'github' },
+        account: { provider: 'github', providerAccountId: '102' },
         profile: { email: 'other@example.com' },
       } as never),
       false,
@@ -91,7 +98,7 @@ async function testSignInCallback(): Promise<void> {
     expectEqual(
       await signIn({
         user: { email: 'admin@example.com' },
-        account: { provider: 'github' },
+        account: { provider: 'github', providerAccountId: '103' },
         profile: { email: 'admin@example.com' },
       } as never),
       true,
@@ -102,7 +109,7 @@ async function testSignInCallback(): Promise<void> {
     expectEqual(
       await signIn({
         user: { email: 'admin@example.com' },
-        account: { provider: 'github' },
+        account: { provider: 'github', providerAccountId: '104' },
         profile: { email: 'admin@example.com' },
       } as never),
       '/login?error=GitHubAllowlistNotConfigured',
@@ -117,8 +124,9 @@ async function testSignInCallback(): Promise<void> {
 }
 
 async function testGitHubPrivateEmailJwt(): Promise<void> {
+  const signIn = authOptions.callbacks?.signIn;
   const jwt = authOptions.callbacks?.jwt;
-  if (!jwt) throw new Error('NextAuth jwt callback is not configured');
+  if (!signIn || !jwt) throw new Error('NextAuth callbacks are not configured');
 
   const originalFetch = global.fetch;
   const originalAdminEmails = process.env.ADMIN_EMAILS;
@@ -128,12 +136,11 @@ async function testGitHubPrivateEmailJwt(): Promise<void> {
       { email: 'x12jiang@outlook.com', primary: true, verified: true },
     ]), { status: 200 });
 
-    const token = await jwt({
-      token: { email: 'xujxu@users.noreply.github.com' },
-      user: { email: 'xujxu@users.noreply.github.com' },
-      account: { provider: 'github', access_token: 'test-token' },
-      profile: { email: null },
-    } as never);
+    const user = { id: '202', email: '202+xujxu@users.noreply.github.com' };
+    const account = { provider: 'github', providerAccountId: '202', access_token: 'test-token' };
+    const profile = { id: 202, login: 'xujxu', email: null };
+    expectEqual(await signIn({ user, account, profile } as never), true, 'admits a private-email GitHub admin');
+    const token = await jwt({ token: { email: user.email, sub: '202' }, user, account, profile } as never);
 
     expectEqual(
       token.email,
@@ -149,6 +156,7 @@ async function testGitHubPrivateEmailJwt(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  ({ authOptions } = await import('../app/api/auth/[...nextauth]/route'));
   await testSignInCallback();
   await testGitHubPrivateEmailJwt();
 }

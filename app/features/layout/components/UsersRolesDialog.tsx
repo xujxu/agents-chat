@@ -12,6 +12,7 @@ type UserEntry = {
   envMember?: string;
   grantedBy?: string;
   agents: { id: string; name: string }[];
+  github?: { id: string; login: string };
 };
 type UsersResponse = {
   ok: boolean;
@@ -100,6 +101,21 @@ export function UsersRolesDialog({ onClose }: UsersRolesDialogProps) {
     }
   };
 
+  const resetGitHubLink = async (user: UserEntry) => {
+    const login = user.github?.login ? `@${user.github.login}` : 'the linked GitHub account';
+    if (!window.confirm(`Unlink ${login} from ${user.email}?\n\nThe next GitHub account that signs in with this verified email will be linked instead.`)) return;
+    setBusy(true);
+    try {
+      if (await apply(await fetch(`/api/users?email=${encodeURIComponent(user.email)}&link=github`, { method: 'DELETE' }))) {
+        setNotice(`Unlinked ${login} from ${user.email}.`);
+      }
+    } catch {
+      setError('Could not reset the GitHub link.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const onAdd = async (event: FormEvent) => {
     event.preventDefault();
     if (await setUserRole(email.trim(), role)) setEmail('');
@@ -154,12 +170,16 @@ export function UsersRolesDialog({ onClose }: UsersRolesDialogProps) {
                           {source === 'env' && user.envMember && user.envMember !== user.email ? `env (${user.envMember})` : SOURCE_LABEL[source]}
                         </span>
                       ))}
+                      {user.github ? <span className="usersRolesSource" title={`Only GitHub account ${user.github.id} can sign in with this email`}>GitHub @{user.github.login || user.github.id}</span> : null}
                       {user.agents.length ? <span className="usersRolesAgents" title={user.agents.map((a) => a.name).join(', ')}>{user.agents.length} agent{user.agents.length === 1 ? '' : 's'}</span> : null}
                     </span>
                   </div>
-                  {!isMe && !envAdmin ? (
+                  {!isMe && (!envAdmin || user.github) ? (
                     <div className="usersRolesActions">
-                      <select
+                      {user.github ? (
+                        <button type="button" className="secondary" disabled={busy} onClick={() => void resetGitHubLink(user)}>Reset GitHub link</button>
+                      ) : null}
+                      {envAdmin ? null : <select
                         aria-label={`UI role for ${user.email}`}
                         value={user.uiRole || ''}
                         disabled={busy}
@@ -172,7 +192,7 @@ export function UsersRolesDialog({ onClose }: UsersRolesDialogProps) {
                         <option value="">{user.uiRole ? 'Remove UI role' : '— no UI role —'}</option>
                         <option value="member">Member</option>
                         <option value="admin">Admin</option>
-                      </select>
+                      </select>}
                     </div>
                   ) : null}
                 </li>

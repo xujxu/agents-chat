@@ -16,6 +16,7 @@ import {
 import { isAdminToken, getUserEmail, canModify, canTalkTo, getAuthToken } from '@/lib/auth';
 import { canUseAgent, getUserRole } from '@/lib/rbac';
 import * as configStore from '@/lib/configStore';
+import { pruneGitHubBindings } from '@/lib/githubIdentity';
 import type { AcpPromptPart, AgentConfig, AgentModel, AgentProcess, PromptAttachment, StoredContentPart, TurnEvent, TurnPhase, TurnState, UserSession, WarmLocalAgentResult } from '@/lib/acp/types';
 import { AttachmentValidationError, buildPromptParts, normalizePromptAttachments } from '@/lib/acp/attachments';
 import { createNdjsonRpc, createRelayNdjsonRpc } from '@/lib/acp/rpc';
@@ -1979,6 +1980,7 @@ export async function POST(req: NextRequest) {
       }
 
       configStore.deleteAgent(agentId);
+      pruneGitHubBindings();
       return NextResponse.json({ ok: true });
     }
 
@@ -2007,6 +2009,7 @@ export async function POST(req: NextRequest) {
       const email = (body?.email as string || '').trim().toLowerCase();
       if (!email) return NextResponse.json({ ok: false, error: 'missing_email' }, { status: 400 });
       configStore.removeAgentAccess(agentId, email);
+      pruneGitHubBindings();
       return NextResponse.json({ ok: true });
     }
 

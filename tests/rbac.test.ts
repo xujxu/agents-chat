@@ -81,7 +81,7 @@ test('role-based access control', async (t) => {
     try {
       assert.equal(getUserRole({ email: 'bob@contoso.com', provider: 'azure-ad' }), null);
       assert.equal(await signIn({ user: { email: 'bob@contoso.com' }, account: { provider: 'azure-ad' }, profile: { email: 'bob@contoso.com' } } as never), '/login?error=NotAuthorized');
-      assert.notEqual(await signIn({ user: { email: 'bob@contoso.com' }, account: { provider: 'github' }, profile: { email: 'bob@contoso.com' } } as never), true);
+      assert.notEqual(await signIn({ user: { email: 'bob@contoso.com' }, account: { provider: 'github', providerAccountId: 'gh-bob' }, profile: { email: 'bob@contoso.com' } } as never), true);
       assert.equal(await signIn({ user: { email: 'guest@outside.com' }, account: { provider: 'azure-ad' }, profile: { email: 'guest@outside.com' } } as never), true, 'an agent grant still admits its guest');
     } finally {
       process.env.ADMIN_EMAILS = 'admin@contoso.com';
@@ -162,7 +162,7 @@ test('role-based access control', async (t) => {
     const signIn = authOptions.callbacks?.signIn;
     assert.ok(signIn);
     const entra = (email: string) => signIn({ user: { email }, account: { provider: 'azure-ad' }, profile: { email } } as never);
-    const github = (email: string) => signIn({ user: { email }, account: { provider: 'github' }, profile: { email } } as never);
+    const github = (email: string) => signIn({ user: { email }, account: { provider: 'github', providerAccountId: `gh-${email}` }, profile: { email } } as never);
 
     assert.equal(await entra('bob@contoso.com'), true);
     assert.equal(await entra('guest@outside.com'), true);
@@ -193,7 +193,7 @@ test('role-based access control', async (t) => {
     assert.equal(getUserRole({ ...entra, role: 'user' }), 'admin', 'promotion does not wait for a token refresh');
 
     const signIn = authOptions.callbacks!.signIn!;
-    assert.equal(await signIn({ user: { email: 'carol@outside.com' }, account: { provider: 'github' }, profile: { email: 'carol@outside.com' } } as never), true);
+    assert.equal(await signIn({ user: { email: 'carol@outside.com' }, account: { provider: 'github', providerAccountId: 'gh-carol' }, profile: { email: 'carol@outside.com' } } as never), true);
 
     const jwt = authOptions.callbacks!.jwt!;
     const refreshed = await jwt({ token: { email: 'carol@outside.com', provider: 'azure-ad', sub: 'carol' } } as never);
@@ -203,6 +203,42 @@ test('role-based access control', async (t) => {
     assert.equal(getUserRole({ ...entra, role: 'admin' }), null, 'a stale admin claim on an OAuth token is ignored');
     assert.equal(getUserRole({ email: 'carol@outside.com', role: 'admin' }), null, 'nor is one on a provider-less token');
     assert.equal((await jwt({ token: { ...refreshed } } as never)).role, 'user');
+  });
+
+  await t.test('a GitHub sign-in links the email to that account id', async () => {
+    const signIn = authOptions.callbacks!.signIn!;
+    const githubAs = async (id: string, login: string, emails: string[]) => {
+      const user: { id: string; email: string } = { id, email: emails[0] || `${id}+${login}@users.noreply.github.com` };
+      const originalFetch = global.fetch;
+      global.fetch = async () => new Response(JSON.stringify(emails.map((email, i) => ({ email, primary: i === 0, verified: true }))));
+      try {
+        const result = await signIn({ user, account: { provider: 'github', providerAccountId: id, access_token: 't' }, profile: { id: Number(id), login, email: null } } as never);
+        return result === true ? user.email : result;
+      } finally {
+        global.fetch = originalFetch;
+      }
+    };
+    configStore.setUserRole('frank@outside.com', 'member', 'admin@contoso.com');
+
+    assert.equal(await githubAs('501', 'frank', ['frank-private@home.net', 'frank@outside.com']), 'frank@outside.com', 'a private verified email with a role is chosen');
+    assert.equal(configStore.getGitHubBindingId('frank@outside.com'), '501');
+    assert.equal(await githubAs('502', 'mallory', ['frank@outside.com']), false, 'another account cannot reuse a linked email');
+    assert.equal(getUserRole({ email: 'frank@outside.com', provider: 'github', sub: '502' }), null);
+    assert.equal(getUserRole({ email: 'frank@outside.com', provider: 'github', sub: '501' }), 'member');
+    assert.equal(getUserRole({ email: 'frank@outside.com', provider: 'azure-ad', sub: 'x' }), 'member', 'links only constrain GitHub sessions');
+    assert.equal(await githubAs('501', 'frank', ['frank@new-job.com']), 'frank@outside.com', 'the link survives a GitHub email change');
+    assert.equal(await githubAs('503', 'ghost', ['nobody@outside.com']), false);
+
+    configStore.setUserRole('grace@outside.com', 'admin', 'admin@contoso.com');
+    assert.equal(await githubAs('501', 'frank', ['grace@outside.com']), 'grace@outside.com', 'the highest role wins');
+    configStore.removeUserRole('grace@outside.com');
+
+    configStore.removeUserRole('frank@outside.com');
+    await githubAs('503', 'ghost', []);
+    assert.equal(configStore.getGitHubBindingId('frank@outside.com'), null, 'links are dropped once the email has no role');
+    configStore.setUserRole('frank@outside.com', 'member', 'admin@contoso.com');
+    assert.equal(await githubAs('502', 'mallory', ['frank@outside.com']), 'frank@outside.com', 'a re-added email can be linked afresh');
+    configStore.removeUserRole('frank@outside.com');
   });
 
   await t.test('/api/users is admin-only and protects env admins and the caller', async () => {
@@ -255,5 +291,13 @@ test('role-based access control', async (t) => {
     assert.deepEqual(removed.remaining, { role: 'member', envMember: '@contoso.com' }, 'a domain pattern keeps the user a member');
     assert.ok(removed.users.some((user: { email: string; sources: string[] }) => user.email === 'erin@contoso.com' && user.sources.join() === 'env'));
     assert.equal(getUserRole({ email: 'erin@contoso.com' }), 'member');
+
+    configStore.bindGitHubEmail('erin@contoso.com', '777', 'erin-gh');
+    const linked = (await (await route.GET(await request('admin@contoso.com', 'GET'))).json()).users.find((user: { email: string }) => user.email === 'erin@contoso.com');
+    assert.deepEqual(linked.github, { id: '777', login: 'erin-gh' });
+    assert.equal((await route.DELETE(await request('admin@contoso.com', 'DELETE', '?email=erin%40contoso.com&link=github'))).status, 200);
+    assert.equal(configStore.getGitHubBindingId('erin@contoso.com'), null, 'admins can reset a GitHub link');
+    assert.equal((await route.DELETE(await request('admin@contoso.com', 'DELETE', '?email=erin%40contoso.com&link=github'))).status, 404);
+    assert.equal(getUserRole({ email: 'erin@contoso.com' }), 'member', 'resetting a link keeps the role');
   });
 });

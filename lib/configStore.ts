@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import Database from 'better-sqlite3';
 import { createLogger } from '@/lib/logger';
-import { setDbRoleLookup } from '@/lib/auth';
+import { setDbRoleLookup, setGitHubBindingLookup } from '@/lib/auth';
 
 const logger = createLogger('configStore');
 
@@ -105,6 +105,13 @@ function getDb(): ReturnType<typeof Database> {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS github_identity_bindings (
+      email TEXT PRIMARY KEY,
+      github_id TEXT NOT NULL,
+      github_login TEXT NOT NULL DEFAULT '',
+      bound_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_github_identity_bindings_id ON github_identity_bindings(github_id);
     CREATE TABLE IF NOT EXISTS user_agent_model_prefs (
       user_email TEXT NOT NULL,
       agent_id   TEXT NOT NULL,
@@ -579,6 +586,44 @@ export function removeUserRole(email: string): boolean {
 }
 
 setDbRoleLookup(getDbUserRole);
+
+// ─── GitHub identity bindings (an allowed email is linked to the GitHub account that first signs in with it) ───
+
+export type GitHubBinding = { email: string; githubId: string; githubLogin: string; boundAt: string };
+
+function toGitHubBinding(r: any): GitHubBinding {
+  return { email: r.email, githubId: r.github_id, githubLogin: r.github_login, boundAt: r.bound_at };
+}
+
+export function listGitHubBindings(): GitHubBinding[] {
+  return (getDb().prepare('SELECT email, github_id, github_login, bound_at FROM github_identity_bindings ORDER BY email').all() as any[]).map(toGitHubBinding);
+}
+
+export function getGitHubBindingsForId(githubId: string): GitHubBinding[] {
+  return (getDb().prepare('SELECT email, github_id, github_login, bound_at FROM github_identity_bindings WHERE github_id = ? ORDER BY bound_at, email').all(githubId) as any[]).map(toGitHubBinding);
+}
+
+export function getGitHubBindingId(email: string): string | null {
+  const row = getDb().prepare('SELECT github_id FROM github_identity_bindings WHERE email = ?').get(email.trim().toLowerCase()) as { github_id: string } | undefined;
+  return row?.github_id ?? null;
+}
+
+/** Links the email to the account unless another account already holds it; true when the account holds it. */
+export function bindGitHubEmail(email: string, githubId: string, githubLogin: string): boolean {
+  const normalized = email.trim().toLowerCase();
+  const db = getDb();
+  db.prepare('INSERT INTO github_identity_bindings (email, github_id, github_login) VALUES (?, ?, ?) ON CONFLICT(email) DO NOTHING')
+    .run(normalized, githubId, githubLogin);
+  if (getGitHubBindingId(normalized) !== githubId) return false;
+  db.prepare('UPDATE github_identity_bindings SET github_login = ? WHERE github_id = ?').run(githubLogin, githubId);
+  return true;
+}
+
+export function removeGitHubBinding(email: string): boolean {
+  return getDb().prepare('DELETE FROM github_identity_bindings WHERE email = ?').run(email.trim().toLowerCase()).changes > 0;
+}
+
+setGitHubBindingLookup(getGitHubBindingId);
 
 // ─── User Agent Model Preferences ───
 
