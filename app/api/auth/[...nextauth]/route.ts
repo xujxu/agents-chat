@@ -5,14 +5,16 @@ import GitHubProvider from 'next-auth/providers/github';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { type NextRequest } from 'next/server';
 import {
+  getDbRole,
   getGitHubAllowedEmails,
+  isEnvAdminEmail,
   isGitHubEmailAllowed,
   isMemberEmail,
   parseEmailList,
   resolveUserRole,
   shouldUseSecureAuthCookies,
 } from '@/lib/auth';
-import { hasAnyAgentAccess } from '@/lib/configStore';
+import { hasAnyAgentAccess, listUserRoles } from '@/lib/configStore';
 
 /** Constant-time string comparison to prevent timing attacks. */
 function safeEqual(a: string, b: string): boolean {
@@ -188,8 +190,10 @@ export const authOptions: AuthOptions = {
         // A MEMBER_EMAILS wildcard is meant for the Entra tenant, so it never opens GitHub sign-in.
         const memberPatterns = parseEmailList(process.env.MEMBER_EMAILS).filter((entry) => entry !== '*').join(',');
         if (isGitHubEmailAllowed(email, allowedEmails) || isMemberEmail(email, memberPatterns, '')) return true;
-        if (email && hasAnyAgentAccess(email)) return true;
-        return allowedEmails.length === 0 && !memberPatterns ? '/login?error=GitHubAllowlistNotConfigured' : false;
+        if (email && (getDbRole(email) || hasAnyAgentAccess(email))) return true;
+        return allowedEmails.length === 0 && !memberPatterns && listUserRoles().length === 0
+          ? '/login?error=GitHubAllowlistNotConfigured'
+          : false;
       }
 
       email = email || user.email || '';
@@ -221,32 +225,15 @@ export const authOptions: AuthOptions = {
         }
       }
       if (account?.provider) token.provider = account.provider;
-      if (user) {
+      if (user && (user as any).role === 'admin') {
         // Credentials login with role=admin → always admin
-        if ((user as any).role === 'admin') {
-          token.role = 'admin';
-        } else {
-          // Azure AD / OAuth users: check ADMIN_EMAILS env var
-          const adminEmails = (process.env.ADMIN_EMAILS || '')
-            .split(',')
-            .map((e) => e.trim().toLowerCase())
-            .filter(Boolean);
-          // Check both user.email and token.email — Azure AD may populate
-          // the email on the token (from the id_token) rather than user object
-          const userEmail = (token.email || user.email || '').toString().toLowerCase();
-          token.role = adminEmails.includes(userEmail) ? 'admin' : 'user';
-        }
-      } else {
-        // Re-evaluate admin role on every request so ADMIN_EMAILS changes
-        // take effect without requiring the user to sign out and back in.
-        if (token.sub !== 'admin' && token.email) {
-          const adminEmails = (process.env.ADMIN_EMAILS || '')
-            .split(',')
-            .map((e) => e.trim().toLowerCase())
-            .filter(Boolean);
-          const email = (token.email as string).toLowerCase();
-          token.role = adminEmails.includes(email) ? 'admin' : 'user';
-        }
+        token.role = 'admin';
+      } else if (token.sub !== 'admin') {
+        // Azure AD / OAuth users: ADMIN_EMAILS or an admin role granted in the UI. Re-evaluated on every
+        // session refresh so role changes take effect without signing out. Azure AD may populate the
+        // email on the token (from the id_token) rather than the user object.
+        const email = (token.email || user?.email || '').toString().toLowerCase();
+        token.role = email && (isEnvAdminEmail(email) || getDbRole(email) === 'admin') ? 'admin' : 'user';
       }
       return token;
     },

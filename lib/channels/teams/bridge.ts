@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { encode } from 'next-auth/jwt';
+import { isAdminToken } from '@/lib/auth';
 import { canUseAgent } from '@/lib/rbac';
 import { appendMessageToChat, getChat, listChats, saveChat, searchChats } from '@/lib/chatStore';
 import * as configStore from '@/lib/configStore';
@@ -305,9 +306,8 @@ function activeAgentId(config: TeamsConfig, user: TeamsUser, conversationId: str
 }
 
 function userRole(user: TeamsUser): 'admin' | 'user' {
-  // Mirror the NextAuth jwt callback parsing so Teams and web always agree on admin role.
-  const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
-  return adminEmails.includes(user.email) ? 'admin' : 'user';
+  // Same rule as the web: ADMIN_EMAILS or an admin role granted in the UI.
+  return isAdminToken({ email: user.email }) ? 'admin' : 'user';
 }
 
 /** Agents this user may talk to, using the same rule as the web UI and /api/acp. */
@@ -447,7 +447,7 @@ async function sessionCookie(user: TeamsUser): Promise<string> {
   const secret = process.env.NEXTAUTH_SECRET;
   if (!secret) throw new Error('NEXTAUTH_SECRET is not configured');
   const value = await encode({
-    token: { name: user.name, email: user.email, sub: user.aadObjectId, role: userRole(user) },
+    token: { name: user.name, email: user.email, sub: user.aadObjectId, role: userRole(user), provider: 'teams' },
     secret,
     maxAge: SESSION_TOKEN_TTL_S,
   });

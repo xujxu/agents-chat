@@ -13,6 +13,7 @@ export type PageHeaderProps = {
   userEmail?: string | null;
   userImage?: string | null;
   onSignOut: () => void;
+  onOpenUsersRoles?: () => void;
   themeMenu: ReactNode;
   showChatsPanel: boolean;
   showAgentsPanel: boolean;
@@ -40,6 +41,7 @@ export function PageHeader({
   userEmail,
   userImage,
   onSignOut,
+  onOpenUsersRoles,
   themeMenu,
   showChatsPanel,
   showAgentsPanel,
@@ -272,6 +274,9 @@ export function PageHeader({
                 <div className="accountMenuRow"><span className="accountMenuLabel">Email</span><span className="accountMenuValue">{userEmail || '—'}</span></div>
                 <div className="accountMenuRow"><span className="accountMenuLabel">Role</span><span className="accountMenuValue">{isAdmin ? 'Administrator' : 'User'}</span></div>
                 <div className="accountMenuSeparator" />
+                {isAdmin && onOpenUsersRoles ? (
+                  <button type="button" className="accountMenuSignOut accountMenuAction" onClick={() => { if (isMobileLayout) onMobileOverlayClose(); else setShowAccount(false); onOpenUsersRoles(); }}>Users &amp; roles</button>
+                ) : null}
                 <button type="button" className="accountMenuSignOut" data-mobile-overlay-initial-focus={isMobileLayout ? true : undefined} onClick={() => { if (isMobileLayout) onMobileOverlayClose(); else setShowAccount(false); onSignOut(); }}>Sign out</button>
               </div>
             )}

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-const ENV_KEYS = ['ADMIN_EMAILS', 'MEMBER_EMAILS', 'GITHUB_ALLOWED_EMAILS'] as const;
+const ENV_KEYS = ['ADMIN_EMAILS', 'MEMBER_EMAILS', 'GITHUB_ALLOWED_EMAILS', 'NEXTAUTH_SECRET'] as const;
 
 test('role-based access control', async (t) => {
   const originalCwd = process.cwd();
@@ -106,5 +106,73 @@ test('role-based access control', async (t) => {
     } finally {
       process.env.MEMBER_EMAILS = '@contoso.com,partner@fabrikam.com';
     }
+  });
+
+  await t.test('roles granted in the UI apply immediately and override stale token claims', async () => {
+    const entra = { email: 'carol@outside.com', provider: 'azure-ad' };
+    assert.equal(getUserRole(entra), null);
+
+    configStore.setUserRole('Carol@Outside.com', 'member', 'admin@contoso.com');
+    assert.equal(getUserRole(entra), 'member');
+    assert.equal(getUserRole({ ...entra, provider: 'github' }), 'member', 'explicit UI roles admit GitHub users');
+    assert.deepEqual(usableAgents(entra).map((agent) => agent.id), ['public']);
+
+    configStore.setUserRole('carol@outside.com', 'admin', 'admin@contoso.com');
+    assert.equal(getUserRole(entra), 'admin');
+    assert.equal(getUserRole({ ...entra, role: 'user' }), 'admin', 'promotion does not wait for a token refresh');
+
+    const signIn = authOptions.callbacks!.signIn!;
+    assert.equal(await signIn({ user: { email: 'carol@outside.com' }, account: { provider: 'github' }, profile: { email: 'carol@outside.com' } } as never), true);
+
+    const jwt = authOptions.callbacks!.jwt!;
+    const refreshed = await jwt({ token: { email: 'carol@outside.com', provider: 'azure-ad', sub: 'carol' } } as never);
+    assert.equal(refreshed.role, 'admin');
+
+    assert.equal(configStore.removeUserRole('carol@outside.com'), true);
+    assert.equal(getUserRole({ ...entra, role: 'admin' }), null, 'a stale admin claim on an OAuth token is ignored');
+    assert.equal(getUserRole({ email: 'carol@outside.com', role: 'admin' }), 'admin', 'provider-less internal tokens keep their claim');
+    assert.equal((await jwt({ token: { ...refreshed } } as never)).role, 'user');
+  });
+
+  await t.test('/api/users is admin-only and protects env admins and the caller', async () => {
+    process.env.NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET || 'rbac-test-secret';
+    const { encode } = await import('next-auth/jwt');
+    const { NextRequest } = await import('next/server');
+    const route = await import('../app/api/users/route');
+    const request = async (email: string, method: string, query = '', body?: unknown) => {
+      const cookie = await encode({ token: { email, sub: email, provider: 'azure-ad' }, secret: process.env.NEXTAUTH_SECRET! });
+      return new NextRequest(`http://localhost/api/users${query}`, {
+        method,
+        headers: { cookie: `next-auth.session-token=${cookie}`, 'content-type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    };
+
+    assert.equal((await route.GET(await request('bob@contoso.com', 'GET'))).status, 403, 'members cannot list roles');
+    assert.equal((await route.POST(await request('bob@contoso.com', 'POST', '', { email: 'x@y.com', role: 'admin' }))).status, 403, 'members cannot grant roles');
+
+    const created = await route.POST(await request('admin@contoso.com', 'POST', '', { email: 'Dave@Outside.com', role: 'member' }));
+    assert.equal(created.status, 200);
+    const users = (await created.json()).users as { email: string; role: string; sources: string[]; uiRole: string | null; grantedBy?: string }[];
+    const dave = users.find((user) => user.email === 'dave@outside.com');
+    assert.deepEqual([dave?.role, dave?.sources, dave?.uiRole, dave?.grantedBy], ['member', ['ui'], 'member', 'admin@contoso.com']);
+    assert.ok(users.some((user) => user.email === 'guest@outside.com' && user.role === 'guest' && user.sources.includes('grant')));
+    assert.equal(getUserRole({ email: 'dave@outside.com' }), 'member');
+
+    const post = async (email: string, role: unknown) => route.POST(await request('admin@contoso.com', 'POST', '', { email, role }));
+    assert.equal((await post('not-an-email', 'member')).status, 400);
+    assert.equal((await post('eve@outside.com', 'guest')).status, 400, 'guests come from agent grants only');
+    assert.equal((await post('admin@contoso.com', 'member')).status, 400, 'admins cannot change their own role');
+    process.env.ADMIN_EMAILS = 'admin@contoso.com,env-admin@contoso.com';
+    try {
+      assert.equal((await post('env-admin@contoso.com', 'member')).status, 409, 'env admins are managed in env');
+    } finally {
+      process.env.ADMIN_EMAILS = 'admin@contoso.com';
+    }
+
+    assert.equal((await route.DELETE(await request('admin@contoso.com', 'DELETE', '?email=admin%40contoso.com'))).status, 400);
+    assert.equal((await route.DELETE(await request('admin@contoso.com', 'DELETE', '?email=dave%40outside.com'))).status, 200);
+    assert.equal((await route.DELETE(await request('admin@contoso.com', 'DELETE', '?email=dave%40outside.com'))).status, 404);
+    assert.equal(getUserRole({ email: 'dave@outside.com' }), null);
   });
 });

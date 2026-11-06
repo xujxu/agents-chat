@@ -10,19 +10,13 @@ import { getGitContextOptions, isValidStoredGitContext, validateGitContext, type
 import { getAgentById, getAllAgents, getUserChatLastUsedAgent, getUserLastUsedAgent, getUserSettings } from '@/lib/configStore';
 import { getUserRole, usableAgents } from '@/lib/rbac';
 import { createLogger } from '@/lib/logger';
+import { isAdminToken } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 const logger = createLogger('api.chats');
 
 function getUserId(token: any): string { // eslint-disable-line @typescript-eslint/no-explicit-any
   return token?.email || token?.name || token?.sub || 'anonymous';
-}
-
-function isAdminToken(token: any): boolean { // eslint-disable-line @typescript-eslint/no-explicit-any
-  if (!token) return false;
-  if (token.role === 'admin' || token.sub === 'admin') return true;
-  const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map((e: string) => e.trim().toLowerCase()).filter(Boolean);
-  return adminEmails.includes((token.email || '').toLowerCase());
 }
 
 const LAST_USED_AGENT_SCOPE_KEY = 'last_used_agent_scope';

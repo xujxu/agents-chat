@@ -32,24 +32,51 @@ export function shouldUseSecureAuthCookies(
   return nextAuthUrl ? nextAuthUrl.startsWith('https://') : nodeEnv === 'production';
 }
 
+/**
+ * Roles granted in the admin UI live in SQLite (`configStore.user_roles`). This module stays free of the DB
+ * import, so configStore registers its lookup here when it loads. Kept on globalThis so every server bundle
+ * that imports this module sees the same lookup.
+ */
+type DbRoleLookup = (email: string) => 'admin' | 'member' | null;
+const roleLookupHolder = globalThis as unknown as { __agentsChatDbRoleLookup?: DbRoleLookup };
+
+export function setDbRoleLookup(lookup: DbRoleLookup | null): void {
+  roleLookupHolder.__agentsChatDbRoleLookup = lookup ?? undefined;
+}
+
+export function getDbRole(email: string | undefined): 'admin' | 'member' | null {
+  const normalized = (email || '').trim().toLowerCase();
+  const lookup = roleLookupHolder.__agentsChatDbRoleLookup;
+  if (!normalized || !lookup) return null;
+  try {
+    return lookup(normalized);
+  } catch {
+    return null;
+  }
+}
+
+export function isEnvAdminEmail(email: string | undefined): boolean {
+  const normalized = (email || '').trim().toLowerCase();
+  return Boolean(normalized) && parseEmailList(process.env.ADMIN_EMAILS).includes(normalized);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function isAdminToken(token: any): boolean {
   if (!token) return false;
-  if (token.role === 'admin') return true;
   if (token.sub === 'admin') return true;
-  const adminEmails = (process.env.ADMIN_EMAILS || '')
-    .split(',')
-    .map((e: string) => e.trim().toLowerCase())
-    .filter(Boolean);
-  if (adminEmails.length === 0) return false;
+  // OAuth sessions (token.provider set) are re-evaluated below so a role removed in the UI takes effect
+  // immediately; only provider-less tokens (minted internally) carry a trusted role claim.
+  if (token.role === 'admin' && !token.provider) return true;
   const email = ((token.email as string) || '').toLowerCase();
-  return adminEmails.includes(email);
+  if (!email) return false;
+  return isEnvAdminEmail(email) || getDbRole(email) === 'admin';
 }
 
 /**
- * Global roles: `admin` (ADMIN_EMAILS or the admin login) can do everything; `member` (MEMBER_EMAILS,
- * plus GITHUB_ALLOWED_EMAILS) can create agents and use public, own and granted agents; `guest`
- * (anyone else with at least one agent access grant) can only use the agents granted to them.
+ * Global roles: `admin` (ADMIN_EMAILS, the admin login, or granted in the UI) can do everything; `member`
+ * (MEMBER_EMAILS, GITHUB_ALLOWED_EMAILS, or granted in the UI) can create agents and use public, own and
+ * granted agents; `guest` (anyone else with at least one agent access grant) can only use the agents
+ * granted to them.
  */
 export type UserRole = 'admin' | 'member' | 'guest';
 
@@ -82,6 +109,7 @@ export function resolveUserRole(token: any, hasAnyAgentAccess: (email: string) =
     ? parseEmailList(process.env.MEMBER_EMAILS).filter((entry) => entry !== '*').join(',')
     : process.env.MEMBER_EMAILS;
   if (isMemberEmail(email, memberEmails)) return 'member';
+  if (getDbRole(email) === 'member') return 'member';
   return hasAnyAgentAccess(email) ? 'guest' : null;
 }
 

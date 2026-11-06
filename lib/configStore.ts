@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import Database from 'better-sqlite3';
 import { createLogger } from '@/lib/logger';
+import { setDbRoleLookup } from '@/lib/auth';
 
 const logger = createLogger('configStore');
 
@@ -96,6 +97,13 @@ function getDb(): ReturnType<typeof Database> {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       PRIMARY KEY (agent_id, email),
       FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS user_roles (
+      email TEXT PRIMARY KEY,
+      role TEXT NOT NULL CHECK (role IN ('admin', 'member')),
+      granted_by TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE TABLE IF NOT EXISTS user_agent_model_prefs (
       user_email TEXT NOT NULL,
@@ -533,6 +541,44 @@ export function hasAnyAgentAccess(email: string): boolean {
   const db = getDb();
   return !!db.prepare('SELECT 1 FROM agent_access WHERE email = ? LIMIT 1').get(email.toLowerCase());
 }
+
+/** Every agent access grant, for the admin "Users & roles" view. */
+export function listAllAgentAccess(): { agentId: string; email: string; grantedBy: string; createdAt: string }[] {
+  const db = getDb();
+  const rows = db.prepare('SELECT agent_id, email, granted_by, created_at FROM agent_access ORDER BY email, agent_id').all() as any[];
+  return rows.map(r => ({ agentId: r.agent_id, email: r.email, grantedBy: r.granted_by, createdAt: r.created_at }));
+}
+
+// ─── Global User Roles (managed in the UI; env roles live in ADMIN_EMAILS / MEMBER_EMAILS) ───
+
+export type DbUserRole = 'admin' | 'member';
+export type UserRoleRecord = { email: string; role: DbUserRole; grantedBy: string; createdAt: string; updatedAt: string };
+
+export function listUserRoles(): UserRoleRecord[] {
+  const db = getDb();
+  const rows = db.prepare('SELECT email, role, granted_by, created_at, updated_at FROM user_roles ORDER BY email').all() as any[];
+  return rows.map(r => ({ email: r.email, role: r.role, grantedBy: r.granted_by, createdAt: r.created_at, updatedAt: r.updated_at }));
+}
+
+export function getDbUserRole(email: string): DbUserRole | null {
+  const normalized = (email || '').trim().toLowerCase();
+  if (!normalized) return null;
+  const row = getDb().prepare('SELECT role FROM user_roles WHERE email = ?').get(normalized) as { role: DbUserRole } | undefined;
+  return row?.role ?? null;
+}
+
+export function setUserRole(email: string, role: DbUserRole, grantedBy: string): void {
+  getDb().prepare(`
+    INSERT INTO user_roles (email, role, granted_by) VALUES (?, ?, ?)
+    ON CONFLICT(email) DO UPDATE SET role = excluded.role, granted_by = excluded.granted_by, updated_at = datetime('now')
+  `).run(email.trim().toLowerCase(), role, grantedBy.toLowerCase());
+}
+
+export function removeUserRole(email: string): boolean {
+  return getDb().prepare('DELETE FROM user_roles WHERE email = ?').run(email.trim().toLowerCase()).changes > 0;
+}
+
+setDbRoleLookup(getDbUserRole);
 
 // ─── User Agent Model Preferences ───
 
