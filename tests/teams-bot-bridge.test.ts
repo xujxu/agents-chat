@@ -299,6 +299,8 @@ async function main() {
     assert.match(reply, /1\. `teams`\n2\. MC Agent \(`mcagent`\)\n3\. `shared` – default ✅/);
     configStore.removeAgentAccess('shared', 'alice@contoso.com');
     assert.equal(sendOf(await say('hello again', '29:alice', 'personal-recipient')).agentId, 'teams');
+    configStore.setUserSetting('alice@contoso.com', configStore.DEFAULT_AGENT_SETTING, 'secret');
+    assert.equal(sendOf(await say('forged default', '29:alice', 'personal-recipient')).agentId, 'teams', 'a default she may not use is ignored');
     configStore.addAgentAccess('shared', 'alice@contoso.com', 'carol@contoso.com');
     configStore.acceptAgentInvite('shared', 'alice@contoso.com');
     configStore.setUserSetting('alice@contoso.com', configStore.DEFAULT_AGENT_SETTING, '');
@@ -359,7 +361,9 @@ async function main() {
     assert.equal(welcome[0].replyToId, undefined);
     welcome = await welcomeFor('29:alice', 'personal', 'personal-1');
     assert.equal(welcome.length, 1);
-    assert.match(welcome[0].text, /I connect you to the/);
+    assert.match(welcome[0].text, /I connect you to the \*\*teams\*\* agent/);
+    welcome = await welcomeFor('29:bob', 'personal', 'personal-bob-welcome');
+    assert.match(welcome[0].text, /I connect you to the \*\*MC Agent\*\* agent/, '1:1 welcome names this person\'s default agent');
     for (const from of ['29:carol', '29:external']) {
       assert.equal((await welcomeFor(from, 'groupChat', 'group-2')).length, 0, `${from} adds bot to a group`);
       assert.equal((await welcomeFor(from, 'personal', `personal-${from}`)).length, 0, `${from} installs bot`);
