@@ -3,6 +3,7 @@ import * as configStore from '@/lib/configStore';
 import { getAuthToken, getUserEmail } from '@/lib/auth';
 import { canUseAgent, getUserRole } from '@/lib/rbac';
 import { notifyExtensionDecision, sendShareReminders } from '@/lib/channels/teams/shareReminders';
+import { offerTeamsSwitch } from '@/lib/channels/teams/defaultAgent';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,7 +57,11 @@ export async function POST(req: NextRequest) {
     }
     if (email) configStore.setUserLastUsedAgent(email, agent.id);
     // Recipients start with the shared agent in new web chats and in Teams.
-    if (email && accepted) configStore.setUserSetting(email, configStore.DEFAULT_AGENT_SETTING, agent.id);
+    if (email && accepted) {
+      configStore.setUserSetting(email, configStore.DEFAULT_AGENT_SETTING, agent.id);
+      // People already using another agent in Teams are asked there before it switches; best-effort.
+      void offerTeamsSwitch(email).catch(() => undefined);
+    }
     return json({ ok: true, agentId: agent.id, agentName: agent.name || agent.id });
   }
 

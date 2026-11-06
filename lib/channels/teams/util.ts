@@ -4,11 +4,11 @@ import { createHash } from 'node:crypto';
 /** Max characters per Teams text message (Teams caps activities at ~100 KB; stay well below it). */
 export const TEAMS_MAX_TEXT = 20000;
 
-export type TeamsCommandName = 'new' | 'stop' | 'help' | 'whoami' | 'model' | 'agent' | 'session' | 'extend' | 'approve' | 'deny';
+export type TeamsCommandName = 'new' | 'stop' | 'help' | 'whoami' | 'model' | 'agent' | 'session' | 'extend' | 'approve' | 'deny' | 'default';
 export type TeamsCommand = { name: TeamsCommandName; args: string } | null;
 
 export function parseCommand(text: string): TeamsCommand {
-  const match = /^\/(new|stop|help|whoami|model|agent|session|extend|approve|deny)(?:\s+([\s\S]*))?$/i.exec(text.trim());
+  const match = /^\/(new|stop|help|whoami|model|agent|session|extend|approve|deny|default)(?:\s+([\s\S]*))?$/i.exec(text.trim());
   if (!match) return null;
   return { name: match[1].toLowerCase() as TeamsCommandName, args: (match[2] || '').trim() };
 }

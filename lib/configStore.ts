@@ -1028,3 +1028,8 @@ export const DEFAULT_AGENT_SETTING = 'default_agent';
 export function getUserDefaultAgent(userEmail: string): string | null {
   return getUserSettings(userEmail)[DEFAULT_AGENT_SETTING] || null;
 }
+
+/** User setting holding the default agent the person chose in Teams with `/default` (or the switch prompt). */
+export const TEAMS_DEFAULT_AGENT_SETTING = 'teams_default_agent';
+/** User setting holding the shared agent the person was last asked about switching to in Teams. */
+export const TEAMS_SWITCH_ASKED_SETTING = 'teams_switch_asked';

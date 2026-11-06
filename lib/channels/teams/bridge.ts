@@ -1,13 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { encode } from 'next-auth/jwt';
-import { isAdminToken } from '@/lib/auth';
-import { canUseAgent } from '@/lib/rbac';
 import { appendMessageToChat, getChat, listChats, saveChat, searchChats } from '@/lib/chatStore';
 import * as configStore from '@/lib/configStore';
 import type { AgentModel } from '@/lib/configStore';
 import { createLogger } from '@/lib/logger';
 import type { TeamsConfig } from './config';
-import { getMember, sendText, type ConversationRef } from './connector';
+import { getMember, sendActivity, sendText, type ConversationRef } from './connector';
+import * as defaults from './defaultAgent';
 import { decideCommand, extendCommand } from './shareCommands';
 import { TeamsStreamer } from './stream';
 import {
@@ -37,8 +36,6 @@ const IDENTITY_REFRESH_MS = 60 * 60_000;
 /** ...and after this long without a successful refresh, the next message waits for a fresh lookup. */
 const IDENTITY_MAX_AGE_MS = 24 * 60 * 60_000;
 const SESSION_TOKEN_TTL_S = 60 * 60;
-/** Internal agent that the web UI also hides from its agent lists. */
-const SCHEDULER_AGENT_ID = 'scheduler';
 /** Sessions shown per `/session` list or search. */
 const SESSION_LIST_LIMIT = 10;
 
@@ -98,6 +95,7 @@ const HELP_TEXT = [
   '- `/stop` – stop the current response',
   '- `/whoami` – show which agents-chat account, agent, model, and chat you are using',
   '- `/agent [number or name]` – list agents you can use, or switch to one (each agent keeps its own conversation)',
+  '- `/default [number or name]` – show or change your default agent in Teams',
   '- `/session [number or words]` – list your sessions with the current agent, switch to one, or search them',
   '- `/model [number or name]` – list models, or switch to one',
   '- `/extend [number]` – ask for more time on an agent shared with you that expires soon (1:1 chat only)',
@@ -155,6 +153,7 @@ export async function handleActivity(activity: TeamsActivity, config: TeamsConfi
     if (conversationType === 'personal') {
       rememberPersonalChat(ref, user);
       await sendText(config, { ...ref, replyToId: undefined }, `Hi! I connect you to the **${agentDisplayName(activeAgentId(config, user, conversationId))}** agent in agents-chat.\n\n${HELP_TEXT}`);
+      await askToSwitch(config, { ...ref, replyToId: undefined }, user);
     } else {
       await sendText(config, { ...ref, replyToId: undefined }, `Hi! I connect you to the **${config.agentId}** agent in agents-chat. @mention me with your question.\n\n${GROUP_HELP_TEXT}`);
     }
@@ -238,6 +237,8 @@ async function handleMessage(
   // Group chats keep separate state per person so nobody can answer or stop someone else's turn.
   const state = getConversationState(isGroup ? `${ref.conversationId}|${ref.userId}` : ref.conversationId);
   const command = parseCommand(text);
+  // Ask about a newly shared agent once, in a 1:1 chat, if the share-time message could not reach them.
+  if (!isGroup && command?.name !== 'default') await askToSwitch(config, ref, user);
 
   if (state.running) {
     if (command?.name === 'stop') {
@@ -266,6 +267,9 @@ async function handleMessage(
     case 'agent':
       await sendText(config, ref, changeAgent(config, user, ref.conversationId, command.args));
       return;
+    case 'default':
+      await sendText(config, ref, changeDefaultAgent(config, user, ref.conversationId, command.args));
+      return;
     case 'model':
       await sendText(config, ref, changeModel(user, activeAgentId(config, user, ref.conversationId), command.args));
       return;
@@ -283,7 +287,7 @@ async function handleMessage(
       } else if (command.name === 'extend') {
         await sendText(config, ref, extendCommand(config, user.email, command.args));
       } else {
-        const admin = { email: user.email, isAdmin: userRole(user) === 'admin' };
+        const admin = { email: user.email, isAdmin: defaults.userRole(user.email) === 'admin' };
         await sendText(config, ref, decideCommand(config, admin, ref.conversationId, command.args, command.name === 'approve'));
       }
       return;
@@ -331,31 +335,31 @@ function currentChatId(config: TeamsConfig, user: TeamsUser, agentId: string, co
 /** The agent this user talks to in this conversation: their `/agent` choice, else their default agent. */
 function activeAgentId(config: TeamsConfig, user: TeamsUser, conversationId: string): string {
   const chosen = configStore.getUserSettings(user.email)[conversationAgentKey(conversationId)];
-  return chosen && configStore.getAgentById(chosen) ? chosen : defaultAgentId(config, user);
+  return chosen && configStore.getAgentById(chosen) ? chosen : defaults.defaultAgentId(config, user.email);
 }
 
-/**
- * This user's default agent: the one shared with them (set when they accept the share link), else
- * TEAMS_AGENT_ID, else the first agent they may use. Falls back to TEAMS_AGENT_ID (which then answers
- * with the "no access" message) when they may use none.
- */
-function defaultAgentId(config: TeamsConfig, user: TeamsUser): string {
-  const agents = talkableAgents(config, user);
-  const preferred = configStore.getUserDefaultAgent(user.email);
-  if (preferred && agents.some((agent) => agent.id === preferred)) return preferred;
-  if (agents.some((agent) => agent.id === config.agentId)) return config.agentId;
-  return agents[0]?.id ?? config.agentId;
+/** In a 1:1 chat, asks once whether to switch to an agent newly shared with this user (see `defaultAgent.ts`). */
+async function askToSwitch(config: TeamsConfig, ref: ConversationRef, user: TeamsUser): Promise<void> {
+  const agent = defaults.pendingSwitchAgent(config, user.email);
+  if (!agent) return;
+  try {
+    await sendActivity(config, ref, defaults.switchPromptActivity(config, user.email, agent));
+    defaults.markSwitchAsked(user.email, agent.id);
+  } catch (err) {
+    logger.warn({ err: err instanceof Error ? err.message : String(err) }, 'Could not ask about switching to a shared agent');
+  }
 }
 
-function userRole(user: TeamsUser): 'admin' | 'user' {
-  // Same rule as the web: ADMIN_EMAILS or an admin role granted in the UI.
-  return isAdminToken({ email: user.email }) ? 'admin' : 'user';
+function agentLabelFor(agent: configStore.AgentRecord): string {
+  return agent.name && agent.name !== agent.id ? `${agent.name} (\`${agent.id}\`)` : `\`${agent.id}\``;
 }
 
-/** Agents this user may talk to, using the same rule as the web UI and /api/acp. */
-function talkableAgents(config: TeamsConfig, user: TeamsUser): configStore.AgentRecord[] {
-  const token = { email: user.email, role: userRole(user) };
-  return configStore.getAllAgents().filter((agent) => agent.id !== SCHEDULER_AGENT_ID && canUseAgent(token, agent));
+/** Finds agents by list number, exact id or name, else by partial id or name. */
+function matchAgents(agents: configStore.AgentRecord[], args: string): configStore.AgentRecord[] {
+  const query = args.trim().toLowerCase();
+  const index = /^\d+$/.test(query) ? Number(query) - 1 : -1;
+  const exact = agents[index] ?? agents.find((agent) => agent.id.toLowerCase() === query || agent.name?.toLowerCase() === query);
+  return exact ? [exact] : agents.filter((agent) => agent.id.toLowerCase().includes(query) || !!agent.name?.toLowerCase().includes(query));
 }
 
 /**
@@ -364,20 +368,17 @@ function talkableAgents(config: TeamsConfig, user: TeamsUser): configStore.Agent
  * switching back continues the earlier conversation.
  */
 function changeAgent(config: TeamsConfig, user: TeamsUser, conversationId: string, args: string): string {
-  const agents = talkableAgents(config, user);
+  const agents = defaults.talkableAgents(user.email);
   const current = activeAgentId(config, user, conversationId);
-  const fallback = defaultAgentId(config, user);
-  const label = (agent: configStore.AgentRecord) => `${agent.name && agent.name !== agent.id ? `${agent.name} (\`${agent.id}\`)` : `\`${agent.id}\``}${agent.id === fallback ? ' – default' : ''}`;
+  const fallback = defaults.defaultAgentId(config, user.email, agents);
+  const label = (agent: configStore.AgentRecord) => `${agentLabelFor(agent)}${agent.id === fallback ? ' – default' : ''}`;
   const list = (items: configStore.AgentRecord[]) => items.map((agent) => `${agents.indexOf(agent) + 1}. ${label(agent)}${agent.id === current ? ' ✅' : ''}`).join('\n');
-  const query = args.trim().toLowerCase();
-  if (!query) {
+  if (!args.trim()) {
     if (agents.length === 0) return `No agents are available. You are using **${current}**.`;
     return `**Agents** (✅ = current)\n${list(agents)}\n\nSend \`/agent <number or name>\` to switch.`;
   }
 
-  const index = /^\d+$/.test(query) ? Number(query) - 1 : -1;
-  const exact = agents[index] ?? agents.find((agent) => agent.id.toLowerCase() === query || agent.name?.toLowerCase() === query);
-  const matches = exact ? [exact] : agents.filter((agent) => agent.id.toLowerCase().includes(query) || !!agent.name?.toLowerCase().includes(query));
+  const matches = matchAgents(agents, args);
   if (matches.length === 0) return `No agent you can use matches "${args.trim()}". Send \`/agent\` to see the list.`;
   if (matches.length > 1) return `"${args.trim()}" matches several agents:\n${list(matches)}\n\nSend \`/agent <number>\` to pick one.`;
 
@@ -385,6 +386,34 @@ function changeAgent(config: TeamsConfig, user: TeamsUser, conversationId: strin
   configStore.setUserSetting(user.email, conversationAgentKey(conversationId), agent.id === fallback ? '' : agent.id);
   const resumed = currentChatId(config, user, agent.id, conversationId);
   return `Now talking to ${label(agent)} in this chat. ${resumed ? 'Your earlier conversation with it continues; send `/new` to start fresh.' : 'Your next message starts a new conversation with it.'}`;
+}
+
+/**
+ * `/default` shows this user's default agent in Teams; `/default <number|id|name>` changes it for every
+ * Teams chat that has no `/agent` choice, and switches this chat to it. The switch prompt's buttons send it.
+ */
+function changeDefaultAgent(config: TeamsConfig, user: TeamsUser, conversationId: string, args: string): string {
+  const agents = defaults.talkableAgents(user.email);
+  const current = defaults.defaultAgentId(config, user.email, agents);
+  const list = (items: configStore.AgentRecord[]) => items.map((agent) => `${agents.indexOf(agent) + 1}. ${agentLabelFor(agent)}${agent.id === current ? ' ✅' : ''}`).join('\n');
+  if (!args.trim()) {
+    if (agents.length === 0) return `No agents are available. Your default is **${current}**.`;
+    return `**Your default agent in Teams** (✅)\n${list(agents)}\n\nSend \`/default <number or name>\` to change it.`;
+  }
+
+  const matches = matchAgents(agents, args);
+  if (matches.length === 0) return `No agent you can use matches "${args.trim()}". Send \`/default\` to see the list.`;
+  if (matches.length > 1) return `"${args.trim()}" matches several agents:\n${list(matches)}\n\nSend \`/default <number>\` to pick one.`;
+
+  const agent = matches[0];
+  configStore.setUserSetting(user.email, configStore.TEAMS_DEFAULT_AGENT_SETTING, agent.id);
+  configStore.setUserSetting(user.email, conversationAgentKey(conversationId), '');
+  // Answering (or choosing a default directly) settles any pending switch question.
+  const shared = configStore.getUserDefaultAgent(user.email);
+  if (shared) defaults.markSwitchAsked(user.email, shared);
+  const others = 'Chats where you picked an agent with `/agent` keep that agent.';
+  if (agent.id === current) return `Your default agent in Teams stays ${agentLabelFor(agent)}, and this chat uses it. ${others}`;
+  return `Your default agent in Teams is now ${agentLabelFor(agent)}, and this chat uses it. ${others}`;
 }
 
 type ChatSummary = { id: string; name: string; ts: number; agentId?: string };
@@ -490,7 +519,7 @@ async function sessionCookie(user: TeamsUser): Promise<string> {
   const secret = process.env.NEXTAUTH_SECRET;
   if (!secret) throw new Error('NEXTAUTH_SECRET is not configured');
   const value = await encode({
-    token: { name: user.name, email: user.email, sub: user.aadObjectId, role: userRole(user), provider: 'teams' },
+    token: { name: user.name, email: user.email, sub: user.aadObjectId, role: defaults.userRole(user.email), provider: 'teams' },
     secret,
     maxAge: SESSION_TOKEN_TTL_S,
   });

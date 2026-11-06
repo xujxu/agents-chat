@@ -291,19 +291,70 @@ async function main() {
     sent = sendOf(await say('fallback'));
     assert.deepEqual([sent.agentId, sent.chatId], ['teams', teamsChatId]);
 
-    // Accepting a share link makes the shared agent the recipient's default; it stops being the
-    // default once their access ends.
-    configStore.setUserSetting('alice@contoso.com', configStore.DEFAULT_AGENT_SETTING, 'shared');
-    assert.equal(sendOf(await say('hello', '29:alice', 'personal-recipient')).agentId, 'shared');
+    // Accepting a share link makes the shared agent the recipient's default. Alice may use TEAMS_AGENT_ID,
+    // so Teams asks her once (1:1 only) before switching; until she answers she stays on it.
+    const alice = 'alice@contoso.com';
+    const teamsDefaults = await import('../lib/channels/teams/defaultAgent');
+    const prompts = (posts: any[]) => posts.filter((p) => p.suggestedActions); // eslint-disable-line @typescript-eslint/no-explicit-any
+    configStore.setUserSetting(alice, configStore.DEFAULT_AGENT_SETTING, 'shared');
+    r = await run(activity('29:alice', '<at>agent-xujx</at> in the group', [botMention]));
+    assert.deepEqual([prompts(r.posts).length, sendOf(r).agentId], [0, 'teams'], 'never asked in a group chat');
+    r = await say('hello', '29:alice', 'personal-recipient');
+    let [ask] = prompts(r.posts);
+    assert.match(ask.text, /The \*\*shared\*\* agent was shared with you\. Switch your Teams chats to it\?\n\nYou are using \*\*teams\*\* now/);
+    assert.deepEqual(ask.suggestedActions.actions.map((a: { title: string; value: string }) => [a.title, a.value]), [['Yes, switch', '/default shared'], ['No, stay on teams', '/default teams']]);
+    assert.equal(sendOf(r).agentId, 'teams', 'no switch before she answers');
+    r = await say('again', '29:alice', 'personal-recipient');
+    assert.deepEqual([prompts(r.posts).length, sendOf(r).agentId], [0, 'teams'], 'asked only once');
+    // "No" keeps her agent; "Yes" switches every Teams chat without an /agent choice, and /agent shows the new default.
+    assert.match((await say('/default teams', '29:alice', 'personal-recipient')).posts[0].text, /default agent in Teams stays `teams`/);
+    assert.equal(sendOf(await say('after no', '29:alice', 'personal-recipient')).agentId, 'teams');
+    assert.match((await say('/default shared', '29:alice', 'personal-recipient')).posts[0].text, /default agent in Teams is now `shared`, and this chat uses it/);
+    assert.equal(sendOf(await say('after yes', '29:alice', 'personal-recipient')).agentId, 'shared');
+    assert.equal(sendOf(await say('other chat', '29:alice', 'personal-other')).agentId, 'shared');
+    configStore.setUserSetting(alice, conversationAgentKey('personal-1'), 'mcagent');
+    assert.equal(sendOf(await say('picked chat')).agentId, 'mcagent', 'an /agent choice still wins');
     reply = (await say('/agent', '29:alice', 'personal-recipient')).posts[0].text;
     assert.match(reply, /1\. `teams`\n2\. MC Agent \(`mcagent`\)\n3\. `shared` – default ✅/);
-    configStore.removeAgentAccess('shared', 'alice@contoso.com');
+    assert.match((await say('/default', '29:alice', 'personal-recipient')).posts[0].text, /3\. `shared` ✅/);
+    assert.match((await say('/default secret', '29:alice', 'personal-recipient')).posts[0].text, /No agent you can use matches "secret"/);
+    // It stops being the default once her access ends; defaults naming agents she may not use are ignored.
+    configStore.removeAgentAccess('shared', alice);
     assert.equal(sendOf(await say('hello again', '29:alice', 'personal-recipient')).agentId, 'teams');
-    configStore.setUserSetting('alice@contoso.com', configStore.DEFAULT_AGENT_SETTING, 'secret');
-    assert.equal(sendOf(await say('forged default', '29:alice', 'personal-recipient')).agentId, 'teams', 'a default she may not use is ignored');
-    configStore.addAgentAccess('shared', 'alice@contoso.com', 'carol@contoso.com');
-    configStore.acceptAgentInvite('shared', 'alice@contoso.com');
-    configStore.setUserSetting('alice@contoso.com', configStore.DEFAULT_AGENT_SETTING, '');
+    configStore.setUserSetting(alice, configStore.DEFAULT_AGENT_SETTING, 'secret');
+    configStore.setUserSetting(alice, configStore.TEAMS_DEFAULT_AGENT_SETTING, 'secret');
+    r = await say('forged default', '29:alice', 'personal-recipient');
+    assert.deepEqual([prompts(r.posts).length, sendOf(r).agentId], [0, 'teams'], 'a default she may not use is ignored');
+    configStore.addAgentAccess('shared', alice, 'carol@contoso.com');
+    configStore.acceptAgentInvite('shared', alice);
+    configStore.setUserSetting(alice, configStore.TEAMS_DEFAULT_AGENT_SETTING, '');
+    // A share accepted later is offered in her stored 1:1 chat right away, and on install when the bot cannot reach her yet.
+    configStore.setUserSetting(alice, configStore.DEFAULT_AGENT_SETTING, 'shared');
+    configStore.setUserSetting(alice, configStore.TEAMS_SWITCH_ASKED_SETTING, '');
+    let offerStart = calls.length;
+    assert.equal(await teamsDefaults.offerTeamsSwitch(alice, config), true);
+    [ask] = prompts(since(offerStart).posts);
+    assert.equal(calls.slice(offerStart).some((c) => c.url.includes(`/conversations/${encodeURIComponent(configStore.getTeamsConversation(alice)!.conversationId)}/activities`)), true, 'sent to her stored 1:1 chat');
+    assert.match(ask.text, /\*\*shared\*\* agent was shared with you/);
+    assert.equal(await teamsDefaults.offerTeamsSwitch(alice, config), false, 'not asked twice');
+    configStore.setUserSetting(alice, configStore.TEAMS_SWITCH_ASKED_SETTING, '');
+    assert.equal(await teamsDefaults.offerTeamsSwitch(alice, { ...config, allowedUsers: [] }), false, 'only TEAMS_ALLOWED_USERS');
+    offerStart = calls.length;
+    await handleActivity({ ...activity('29:alice', '', [], 'personal', 'personal-installed'), type: 'conversationUpdate', membersAdded: [{ id: BOT_ID }] }, config);
+    const installed = since(offerStart).posts;
+    assert.deepEqual([installed.length, prompts(installed).length], [2, 1], 'welcome, then the question');
+    assert.match(installed[0].text, /I connect you to the \*\*teams\*\* agent/);
+    // People who may not use TEAMS_AGENT_ID switch without being asked.
+    configStore.addAgentAccess('shared', 'bob@contoso.com', 'carol@contoso.com');
+    configStore.acceptAgentInvite('shared', 'bob@contoso.com');
+    configStore.setUserSetting('bob@contoso.com', configStore.DEFAULT_AGENT_SETTING, 'shared');
+    assert.equal(await teamsDefaults.offerTeamsSwitch('bob@contoso.com', config), false);
+    r = await say('hi', '29:bob', 'personal-bob-shared');
+    assert.deepEqual([prompts(r.posts).length, sendOf(r).agentId], [0, 'shared']);
+    configStore.removeAgentAccess('shared', 'bob@contoso.com');
+    configStore.setUserSetting('bob@contoso.com', configStore.DEFAULT_AGENT_SETTING, '');
+    configStore.setUserSetting(alice, configStore.DEFAULT_AGENT_SETTING, '');
+    configStore.setUserSetting('alice@contoso.com', conversationAgentKey('personal-1'), '');
 
     // /session lists this person's sessions with the current agent (including web chats), switches by
     // number, chat id or search (the web UI's chat search), and keeps each agent's sessions separate.

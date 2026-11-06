@@ -59,15 +59,22 @@ flowchart LR
 | `/agent [number or name]` | List the agents you can use, or switch this conversation to one. The choice is per person and per conversation; switching back continues that agent's earlier chat |
 | `/session [number or words]` | List your sessions (agents-chat chats) with the current agent, switch this conversation to one by number or chat id, or search them by name and message text like the web UI's chat search |
 | `/model [number or name]` | List the agent's models, or switch to one (also changes your model for this agent in the web UI) |
+| `/default [number or name]` | Show or set your default agent in Teams (used by every conversation where you have not picked one with `/agent`) |
 | `/extend`, `/approve`, `/deny` | Request or review more time on shared agents (1:1 chat; see [Sharing reminders](#sharing-reminders)) |
 | `/help` | Show help |
 
 Teams turns use the same model as the web UI: the model you last picked for this agent in agents-chat, otherwise the agent's default model.
 
 `/agent` lists the same agents you can talk to in the web UI (public agents, your own, ones shared
-with you, and all agents for admins). Your default agent is the one most recently shared with you
-(set when you accept its share link), else `TEAMS_AGENT_ID`, else the first agent you may use; it is
+with you, and all agents for admins). Your default agent is the one you chose with `/default`, else
+`TEAMS_AGENT_ID`, else the agent most recently shared with you, else the first agent you may use; it is
 marked "– default". `/model` and `/new` apply to whichever agent you are currently using.
+
+When you accept an agent's share link, people who may not use `TEAMS_AGENT_ID` switch to it
+automatically. People who may (and are in `TEAMS_ALLOWED_USERS`) are asked once in their 1:1 chat
+with the bot — right away if the bot has talked with them before, otherwise when they install it or next
+message it: **Yes, switch** sets it as the Teams default, **No, stay** keeps the current one. Group chats
+never ask. The web UI's default for new chats still switches to the shared agent.
 
 `/session` shows your 10 most recent sessions with the current agent, including chats started in
 the web UI, newest first (✅ marks the one in use). `/session <number>` picks from the last list or
