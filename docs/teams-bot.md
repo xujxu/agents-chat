@@ -177,6 +177,19 @@ through the [Microsoft 365 Agents Toolkit CLI](https://learn.microsoft.com/micro
 (`atk`). Only the people you add can find it; it does not appear in the store for anyone else.
 Your tenant's app-upload policy must allow this.
 
+The usual flow for a colleague:
+
+1. An admin shares an agent with them from the agent's settings → **Access Control** (their email
+   and the agent's share link). They open the link, sign in to agents-chat, and can use the agent
+   on the web.
+2. If they also want to use it from Teams, they ask the admin for the bot.
+3. The admin runs `scripts\teams-share.ps1 add <their email>`
+   ([below](#add-or-remove-colleagues-with-one-command)), which shares the bot with them and
+   allows them in `TEAMS_ALLOWED_USERS`. The script does not grant agent access; that was step 1.
+
+Setting up the shared app is a one-time job (steps 1–3 below). After that, each new colleague
+needs only the script run.
+
 The repo has a template in `teams-app/`. The filled-in copy holds your app package and the shared
 app's ids, so keep it out of git, like `.env.local`. For script deployments, keep it in
 `shared/teams-app/`.
@@ -261,8 +274,8 @@ Do not use `atk share --scope tenant`: it shares the app with everyone in the te
 
 #### Add or remove colleagues with one command
 
-Once steps 1–3 are done, `scripts\teams-share.ps1` does steps 4 and 5 for you (except the
-agents-chat role). Like `update.ps1`, it is a thin wrapper around a Node.js script
+Once steps 1–3 are done, `scripts\teams-share.ps1` does steps 4 and 5 for you, except agent
+access, which the colleague already has from the agent's share link. Like `update.ps1`, it is a thin wrapper around a Node.js script
 (`scripts\teams-share\cli.mjs`); on Linux use `scripts/teams-share.sh` with the `--option` names
 shown by `--help`. Run it from an **elevated** PowerShell, because it restarts the service:
 

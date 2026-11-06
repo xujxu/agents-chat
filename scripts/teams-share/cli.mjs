@@ -243,7 +243,7 @@ async function apply(ctx) {
   if (ctx.op === 'add') {
     const link = readEnvValue(path.join(ctx.teamsDir, 'env', `.env.${ctx.env}`), 'SHARE_LINK');
     say('The bot now appears in their Teams apps' + (link ? `; you can also send them ${link}` : '') + '.');
-    say('They also need an agents-chat role and access to the agents they should use.');
+    say('The bot answers them only for agents they can already use (shared with them from the agent\'s Access Control).');
   }
   return 0;
 }
