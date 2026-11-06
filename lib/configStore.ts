@@ -529,6 +529,11 @@ export function hasAgentAccess(agentId: string, email: string): boolean {
   return !!row;
 }
 
+export function hasAnyAgentAccess(email: string): boolean {
+  const db = getDb();
+  return !!db.prepare('SELECT 1 FROM agent_access WHERE email = ? LIMIT 1').get(email.toLowerCase());
+}
+
 // ─── User Agent Model Preferences ───
 
 export function getUserAgentModelPref(userEmail: string, agentId: string): string | null {

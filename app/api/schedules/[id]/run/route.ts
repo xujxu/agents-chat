@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthToken, isAdminToken } from "../../../../../lib/auth";
 import { openScheduleStore } from "../../../../../lib/scheduler/scheduleStore";
 import { ensureRuntime } from "../../../../../lib/scheduler/schedulerRuntime";
+import { denyRole } from '@/lib/rbac';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const token = await getAuthToken(req);
+  const denied = token ? denyRole(token, ['admin', 'member']) : null;
+  if (denied) return denied;
   const store = openScheduleStore();
   const job = store.getJob(id);
   if (!job) return NextResponse.json({ error: "not found" }, { status: 404 });

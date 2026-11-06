@@ -7,8 +7,12 @@ import { type NextRequest } from 'next/server';
 import {
   getGitHubAllowedEmails,
   isGitHubEmailAllowed,
+  isMemberEmail,
+  parseEmailList,
+  resolveUserRole,
   shouldUseSecureAuthCookies,
 } from '@/lib/auth';
+import { hasAnyAgentAccess } from '@/lib/configStore';
 
 /** Constant-time string comparison to prevent timing attacks. */
 function safeEqual(a: string, b: string): boolean {
@@ -154,37 +158,42 @@ export const authOptions: AuthOptions = {
   },
   callbacks: {
     async signIn({ user, account, profile }) {
-      if (account?.provider !== 'github') return true;
-
-      const allowedEmails = getGitHubAllowedEmails(
-        process.env.GITHUB_ALLOWED_EMAILS,
-        process.env.ADMIN_EMAILS,
-      );
-      if (allowedEmails.length === 0) {
-        return '/login?error=GitHubAllowlistNotConfigured';
-      }
+      if (!account || account.provider === 'admin-login') return true;
 
       let email = typeof profile?.email === 'string' ? profile.email : '';
-      if (!email && account.access_token) {
-        try {
-          const res = await fetch('https://api.github.com/user/emails', {
-            headers: {
-              Authorization: `Bearer ${account.access_token}`,
-              Accept: 'application/vnd.github+json',
-            },
-          });
-          if (res.ok) {
-            const emails = (await res.json()) as Array<{ email: string; primary: boolean; verified: boolean }>;
-            const verified = emails.find((entry) => entry.primary && entry.verified)
-              || emails.find((entry) => entry.verified);
-            email = verified?.email || '';
+      if (account.provider === 'github') {
+        if (!email && account.access_token) {
+          try {
+            const res = await fetch('https://api.github.com/user/emails', {
+              headers: {
+                Authorization: `Bearer ${account.access_token}`,
+                Accept: 'application/vnd.github+json',
+              },
+            });
+            if (res.ok) {
+              const emails = (await res.json()) as Array<{ email: string; primary: boolean; verified: boolean }>;
+              const verified = emails.find((entry) => entry.primary && entry.verified)
+                || emails.find((entry) => entry.verified);
+              email = verified?.email || '';
+            }
+          } catch {
+            return false;
           }
-        } catch {
-          return false;
         }
+        email = email || user.email || '';
+        const allowedEmails = getGitHubAllowedEmails(
+          process.env.GITHUB_ALLOWED_EMAILS,
+          process.env.ADMIN_EMAILS,
+        );
+        // A MEMBER_EMAILS wildcard is meant for the Entra tenant, so it never opens GitHub sign-in.
+        const memberPatterns = parseEmailList(process.env.MEMBER_EMAILS).filter((entry) => entry !== '*').join(',');
+        if (isGitHubEmailAllowed(email, allowedEmails) || isMemberEmail(email, memberPatterns, '')) return true;
+        if (email && hasAnyAgentAccess(email)) return true;
+        return allowedEmails.length === 0 && !memberPatterns ? '/login?error=GitHubAllowlistNotConfigured' : false;
       }
 
-      return isGitHubEmailAllowed(email || user.email || undefined, allowedEmails);
+      email = email || user.email || '';
+      return resolveUserRole({ email }, hasAnyAgentAccess) ? true : '/login?error=NotAuthorized';
     },
     async jwt({ token, user, account, profile }) {
       // GitHub's profile helper supplies a noreply fallback when the public
@@ -211,6 +220,7 @@ export const authOptions: AuthOptions = {
           // ignore — fall back to whatever the profile() helper provided
         }
       }
+      if (account?.provider) token.provider = account.provider;
       if (user) {
         // Credentials login with role=admin → always admin
         if ((user as any).role === 'admin') {

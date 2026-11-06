@@ -4,7 +4,8 @@ import * as path from 'path';
 import { existsSync, statSync, realpathSync } from 'fs';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { getAuthToken, canTalkTo } from '@/lib/auth';
+import { getAuthToken } from '@/lib/auth';
+import { canUseAgent } from '@/lib/rbac';
 import * as configStore from '@/lib/configStore';
 import { getAgentProcess, getAgentProcesses } from '@/lib/acp/runtimeState';
 import { createRelayNdjsonRpc } from '@/lib/acp/rpc';
@@ -128,7 +129,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Permission check: same as agent access (public, admin, owner, or allowlisted)
-  if (!canTalkTo(token, agent.owner || '', agentId, !!agent.public, configStore.hasAgentAccess)) {
+  if (!canUseAgent(token, agent)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
@@ -325,7 +326,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Permission check: same as agent access
-  if (!canTalkTo(token, agent.owner || '', agentId, !!agent.public, configStore.hasAgentAccess)) {
+  if (!canUseAgent(token, agent)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 

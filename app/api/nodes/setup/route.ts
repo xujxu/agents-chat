@@ -1,4 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
+import { getAuthToken } from '@/lib/auth';
+import { denyRole } from '@/lib/rbac';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as os from 'os';
@@ -15,7 +17,12 @@ export const runtime = 'nodejs';
 const SETUP_FILES_DIR = path.join(process.cwd(), 'setup-files');
 const execFileAsync = promisify(execFile);
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
+  // The setup script embeds relay configuration, so only users who may create agents can download it.
+  const token = await getAuthToken(req);
+  if (!token) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+  const denied = denyRole(token, ['admin', 'member']);
+  if (denied) return denied;
   try {
     const url = new URL(req.url);
     const launcher = normalizeLauncher(url.searchParams.get('launcher') ?? undefined);

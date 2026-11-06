@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { encode } from 'next-auth/jwt';
-import { canTalkTo } from '@/lib/auth';
+import { canUseAgent } from '@/lib/rbac';
 import { appendMessageToChat, getChat, listChats, saveChat, searchChats } from '@/lib/chatStore';
 import * as configStore from '@/lib/configStore';
 import type { AgentModel } from '@/lib/configStore';
@@ -313,8 +313,7 @@ function userRole(user: TeamsUser): 'admin' | 'user' {
 /** Agents this user may talk to, using the same rule as the web UI and /api/acp. */
 function talkableAgents(config: TeamsConfig, user: TeamsUser): configStore.AgentRecord[] {
   const token = { email: user.email, role: userRole(user) };
-  return configStore.getAllAgents().filter((agent) => agent.id !== SCHEDULER_AGENT_ID
-    && canTalkTo(token, agent.owner, agent.id, agent.public, configStore.hasAgentAccess));
+  return configStore.getAllAgents().filter((agent) => agent.id !== SCHEDULER_AGENT_ID && canUseAgent(token, agent));
 }
 
 /**

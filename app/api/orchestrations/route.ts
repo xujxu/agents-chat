@@ -7,6 +7,7 @@ import {
   deleteOrchestrationsForChat,
   StoredOrchestration,
 } from '@/lib/chatStore';
+import { getUserRole } from '@/lib/rbac';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +17,8 @@ function getUserId(token: any): string { // eslint-disable-line @typescript-esli
 
 async function auth(req: NextRequest) {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, cookieName: 'next-auth.session-token' });
-  if (!token) return null;
+  const role = token ? getUserRole(token) : null;
+  if (!role || role === 'guest') return null;
   return getUserId(token);
 }
 

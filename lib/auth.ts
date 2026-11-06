@@ -46,6 +46,45 @@ export function isAdminToken(token: any): boolean {
   return adminEmails.includes(email);
 }
 
+/**
+ * Global roles: `admin` (ADMIN_EMAILS or the admin login) can do everything; `member` (MEMBER_EMAILS,
+ * plus GITHUB_ALLOWED_EMAILS) can create agents and use public, own and granted agents; `guest`
+ * (anyone else with at least one agent access grant) can only use the agents granted to them.
+ */
+export type UserRole = 'admin' | 'member' | 'guest';
+
+/**
+ * MEMBER_EMAILS entries are emails, `@domain` suffixes or `*` (every signed-in user).
+ * GITHUB_ALLOWED_EMAILS entries are members too, since that list already granted full access.
+ */
+export function isMemberEmail(
+  email: string | undefined,
+  memberEmails: string | undefined = process.env.MEMBER_EMAILS,
+  githubAllowedEmails: string | undefined = process.env.GITHUB_ALLOWED_EMAILS,
+): boolean {
+  const normalized = (email || '').trim().toLowerCase();
+  if (!normalized) return false;
+  if (parseEmailList(githubAllowedEmails).includes(normalized)) return true;
+  return parseEmailList(memberEmails).some((pattern) => pattern === '*'
+    || pattern === normalized
+    || (pattern.startsWith('@') && normalized.endsWith(pattern)));
+}
+
+/** The user's role, or null when they may not use the app at all. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function resolveUserRole(token: any, hasAnyAgentAccess: (email: string) => boolean): UserRole | null {
+  if (!token) return null;
+  if (isAdminToken(token)) return 'admin';
+  const email = getUserEmail(token);
+  if (!email) return null;
+  // A MEMBER_EMAILS wildcard is meant for the Entra tenant, never for any GitHub account.
+  const memberEmails = token.provider === 'github'
+    ? parseEmailList(process.env.MEMBER_EMAILS).filter((entry) => entry !== '*').join(',')
+    : process.env.MEMBER_EMAILS;
+  if (isMemberEmail(email, memberEmails)) return 'member';
+  return hasAnyAgentAccess(email) ? 'guest' : null;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getUserEmail(token: any): string {
   if (!token) return '';

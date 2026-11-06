@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { listUserWorkflows, saveUserWorkflow } from '@/lib/workflowStore';
 import { loadRepoWorkflows } from '@/lib/workflow/repoWorkflows.mjs';
+import { denyRole } from '@/lib/rbac';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,8 @@ function getUserId(token: any): string { // eslint-disable-line @typescript-esli
 export async function GET(req: NextRequest) {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, cookieName: 'next-auth.session-token' });
   if (!token) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+  const denied = denyRole(token, ['admin', 'member']);
+  if (denied) return denied;
   const userId = getUserId(token);
   const [user, repo] = await Promise.all([
     Promise.resolve(listUserWorkflows(userId)),
@@ -23,6 +26,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, cookieName: 'next-auth.session-token' });
   if (!token) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+  const denied = denyRole(token, ['admin', 'member']);
+  if (denied) return denied;
   const userId = getUserId(token);
   const body = await req.json().catch(() => ({}));
   const { id, name, plan } = body || {};

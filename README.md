@@ -361,6 +361,7 @@ cp .env.example .env.local
 | `ADMIN_USERNAME` | Optional | Local admin username for credentials login |
 | `ADMIN_PASSWORD` | Optional | Local admin password |
 | `ADMIN_EMAILS` | Optional | Comma-separated emails granted admin role for Azure AD users |
+| `MEMBER_EMAILS` | Optional | Comma-separated members: exact emails, `@domain` suffixes, or `*` for every Entra sign-in (never GitHub). See [Roles](#roles). |
 | `RELAY_SEND_CONNECTION_STRING` | Optional | Azure Relay send connection string; required for relay agents and node probing |
 | `RELAY_KEY_VAULT_NAME` | Optional | Key Vault name used when generating the node setup ZIP |
 | `RELAY_KEY_VAULT_SECRET_NAME` | Optional | Key Vault secret name used when generating the node setup ZIP |
@@ -368,6 +369,20 @@ cp .env.example .env.local
 | `RELAY_RESOURCE_GROUP` | Optional | Azure resource group used by node setup ZIPs and relay node auto-discovery |
 | `RELAY_NAMESPACE` | Optional | Azure Relay namespace name |
 | `TEAMS_*` | Optional | Microsoft Teams bot settings (`TEAMS_BOT_APP_ID`, `TEAMS_TENANT_ID`, `TEAMS_AGENT_ID`, and a credential). See [docs/teams-bot.md](docs/teams-bot.md#4-configure-agents-chat) |
+
+### Roles
+
+Every request is checked against a server-side role:
+
+| Role | Who | Can |
+|------|-----|-----|
+| Admin | `ADMIN_EMAILS` or the local admin login | Everything, including every agent and node |
+| Member | `MEMBER_EMAILS` or `GITHUB_ALLOWED_EMAILS` | Create agents, use public, own and granted agents, workflows and schedules |
+| Guest | Anyone else with an agent access grant | Chat with granted agents only (including `/model` and `/session`); no agent creation or configuration, workflows, schedules, nodes, or other agents' sessions and files |
+
+Users without a role are refused at sign-in. **Upgrade note:** Entra sign-in used to admit any tenant user; set `MEMBER_EMAILS=*` to keep that behaviour. The same rules apply to the Teams bot, so Teams users also need a role.
+
+`/api/file` limits non-admins to files inside the workspaces of agents they can use, and serves HTML and SVG with a sandboxing `Content-Security-Policy`.
 
 ### Agents
 

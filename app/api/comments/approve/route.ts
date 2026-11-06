@@ -1,3 +1,4 @@
+import { denyRole } from '@/lib/rbac';
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import {
@@ -20,6 +21,8 @@ function getUserId(token: any): string {
 export async function POST(req: NextRequest) {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, cookieName: 'next-auth.session-token' });
   if (!token) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+  const denied = denyRole(token, ['admin', 'member']);
+  if (denied) return denied;
 
   const body = await req.json().catch(() => ({}));
   const { commentId, fileContent } = body;

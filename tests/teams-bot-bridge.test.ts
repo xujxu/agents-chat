@@ -88,6 +88,7 @@ async function main() {
   const originalCwd = process.cwd();
   const dir = await mkdtemp(path.join(tmpdir(), 'agents-chat-teams-'));
   process.env.NEXTAUTH_SECRET = 'test-only-nextauth-secret-0123456789';
+  process.env.MEMBER_EMAILS = '@contoso.com';
   try {
     process.chdir(dir);
     const { handleActivity, SLOW_START_STATUS } = await import('../lib/channels/teams/bridge');
