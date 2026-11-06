@@ -3,22 +3,12 @@
 import { signIn } from 'next-auth/react';
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-
-/** Where to go after sign-in: the requested page (e.g. an invite link) when it is on this site, else home. */
-function safeCallbackUrl(raw: string | null): string {
-  if (!raw || typeof window === 'undefined') return '/';
-  try {
-    const url = new URL(raw, window.location.origin);
-    return url.origin === window.location.origin ? `${url.pathname}${url.search}${url.hash}` : '/';
-  } catch {
-    return '/';
-  }
-}
+import { safeCallbackPath } from '@/lib/safeCallbackUrl';
 
 function LoginContent() {
   const searchParams = useSearchParams();
   const error = searchParams.get('error');
-  const callbackUrl = safeCallbackUrl(searchParams.get('callbackUrl'));
+  const callbackUrl = typeof window === 'undefined' ? '/' : safeCallbackPath(searchParams.get('callbackUrl'), window.location.origin);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
