@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { encode } from 'next-auth/jwt';
 import { appendMessageToChat, getChat, saveChat } from '@/lib/chatStore';
 import * as configStore from '@/lib/configStore';
+import type { AgentModel } from '@/lib/configStore';
 import { createLogger } from '@/lib/logger';
 import type { TeamsConfig } from './config';
 import { getMember, sendText, type ConversationRef } from './connector';
@@ -68,7 +69,8 @@ const HELP_TEXT = [
   '**Commands**',
   '- `/new [prompt]` – start a new conversation (optionally with a first prompt)',
   '- `/stop` – stop the current response',
-  '- `/whoami` – show which agents-chat account and chat you are using',
+  '- `/whoami` – show which agents-chat account, model, and chat you are using',
+  '- `/model [number or name]` – list models, or switch to one',
   '- `/help` – show this help',
   '',
   'Anything else is sent to the agent. Conversations also appear in the agents-chat web UI.',
@@ -226,6 +228,9 @@ async function handleMessage(
       await sendText(config, ref, `Account: **${user.email}**\nAgent: **${config.agentId}**\nModel: ${modelId ? `\`${modelId}\`` : "(agent's default)"}\nChat: ${chatId ? `\`${chatId}\`` : '(none yet)'}`);
       return;
     }
+    case 'model':
+      await sendText(config, ref, changeModel(config, user, command.args));
+      return;
     case 'stop':
       await sendText(config, ref, 'Nothing is running.');
       return;
@@ -312,6 +317,29 @@ function selectedModelId(config: TeamsConfig, user: TeamsUser): string | undefin
   if (preferred && (models.length === 0 || known(preferred))) return preferred;
   if (known(agent?.defaultModelId)) return agent!.defaultModelId;
   return models[0]?.modelId;
+}
+
+/**
+ * `/model` lists the agent's models; `/model <number|id|name>` saves the choice as the user's
+ * model preference for this agent (the same one the web UI's model picker saves).
+ */
+function changeModel(config: TeamsConfig, user: TeamsUser, args: string): string {
+  const models = configStore.getAgentById(config.agentId)?.models ?? [];
+  if (models.length === 0) return `The **${config.agentId}** agent has no model list, so its model cannot be changed here.`;
+  const current = selectedModelId(config, user);
+  const label = (model: AgentModel) => (model.name && model.name !== model.modelId ? `${model.name} (\`${model.modelId}\`)` : `\`${model.modelId}\``);
+  const list = (items: AgentModel[]) => items.map((model) => `${models.indexOf(model) + 1}. ${label(model)}${model.modelId === current ? ' ✅' : ''}`).join('\n');
+  const query = args.trim().toLowerCase();
+  if (!query) return `**Models** (✅ = current)\n${list(models)}\n\nSend \`/model <number or name>\` to switch.`;
+
+  const index = /^\d+$/.test(query) ? Number(query) - 1 : -1;
+  const exact = models[index] ?? models.find((model) => model.modelId.toLowerCase() === query || model.name?.toLowerCase() === query);
+  const matches = exact ? [exact] : models.filter((model) => model.modelId.toLowerCase().includes(query) || !!model.name?.toLowerCase().includes(query));
+  if (matches.length === 0) return `No model matches "${args.trim()}". Send \`/model\` to see the list.`;
+  if (matches.length > 1) return `"${args.trim()}" matches several models:\n${list(matches)}\n\nSend \`/model <number>\` to pick one.`;
+
+  configStore.setUserAgentModelPref(user.email, config.agentId, matches[0].modelId);
+  return `Model set to ${label(matches[0])}. It applies from your next message here and in the agents-chat web UI.`;
 }
 
 async function ensureChat(config: TeamsConfig, user: TeamsUser, conversationId: string, prompt: string): Promise<{ id: string; name: string }> {

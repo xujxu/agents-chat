@@ -17,6 +17,7 @@ import {
 // Commands
 assert.deepEqual(parseCommand('/new hello world'), { name: 'new', args: 'hello world' });
 assert.deepEqual(parseCommand('/STOP'), { name: 'stop', args: '' });
+assert.deepEqual(parseCommand('/model  opus '), { name: 'model', args: 'opus' });
 assert.equal(parseCommand('/unknown'), null);
 assert.equal(parseCommand('hello /new'), null);
 

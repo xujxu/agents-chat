@@ -181,6 +181,28 @@ async function main() {
     configStore.setUserAgentModelPref('alice@contoso.com', 'teams', 'retired-model');
     assert.equal(await sendModel(), 'claude-sonnet-5.5', 'unknown saved model falls back to the default');
 
+    // /model lists models and switches the user's saved choice (shared with the web UI).
+    configStore.updateAgent('teams', { models: [{ modelId: 'claude-sonnet-5.5', name: 'Claude Sonnet 5.5' }, { modelId: 'claude-opus-5.5', name: 'Claude Opus 5.5' }, { modelId: 'gpt-6.1-sol' }] });
+    const model = async (text: string) => { const res = await run(activity('29:alice', text, [], 'personal', 'personal-1')); assert.equal(res.acp.length, 0, text); return res.posts[0].text as string; };
+    let reply = await model('/model');
+    assert.match(reply, /1\. Claude Sonnet 5\.5 \(`claude-sonnet-5\.5`\) ✅\n2\. Claude Opus 5\.5 \(`claude-opus-5\.5`\)\n3\. `gpt-6\.1-sol`/);
+    assert.match(await model('/model 2'), /Model set to Claude Opus 5\.5/);
+    assert.equal(configStore.getUserAgentModelPref('alice@contoso.com', 'teams'), 'claude-opus-5.5');
+    assert.equal(await sendModel(), 'claude-opus-5.5', 'switched by number');
+    assert.match(await model('/model GPT'), /Model set to `gpt-6\.1-sol`/);
+    assert.equal(await sendModel(), 'gpt-6.1-sol', 'switched by unique partial name');
+    reply = await model('/model claude');
+    assert.match(reply, /matches several models/);
+    assert.match(await model('/model nope'), /No model matches "nope"/);
+    assert.match(await model('/model 9'), /No model matches "9"/);
+    assert.equal(configStore.getUserAgentModelPref('alice@contoso.com', 'teams'), 'gpt-6.1-sol', 'failed lookups keep the choice');
+    assert.match(await model('/model Claude Sonnet 5.5'), /Model set to Claude Sonnet 5\.5/);
+    // Bob's choice is his own, even in the same group chat.
+    r = await run(activity('29:bob', '<at>agent-xujx</at> /model opus', [botMention]));
+    assert.match(r.posts[0].text, /Model set to Claude Opus 5\.5/);
+    assert.equal(configStore.getUserAgentModelPref('alice@contoso.com', 'teams'), 'claude-sonnet-5.5');
+    assert.equal(configStore.getUserAgentModelPref('bob@contoso.com', 'teams'), 'claude-opus-5.5');
+
     // Welcome messages go only to allowed users who install the bot or add it to a group chat.
     const welcomeFor = async (from: string, conversationType: string, conversationId: string) => {
       const start = calls.length;
