@@ -259,6 +259,39 @@ after the install, open a new window, or call it by its full path
 
 Do not use `atk share --scope tenant`: it shares the app with everyone in the tenant.
 
+#### Add or remove colleagues with one command
+
+Once steps 1–3 are done, `scripts/teams-share/cli.mjs` does steps 4 and 5 for you (except the
+agents-chat role). Run it from an **elevated** PowerShell, because it restarts the service:
+
+```powershell
+$cli = 'C:\path\to\agents-chat\current\scripts\teams-share\cli.mjs'
+node $cli add 'alice@contoso.com,bob@contoso.com'   # share, allow, restart
+node $cli remove 'bob@contoso.com'                   # disallow, restart, revoke the share
+node $cli list                                       # current allow-list and share link
+node $cli add 'alice@contoso.com' --dry-run          # check everything, change nothing
+```
+
+It finds the deployment root from where it is installed (`current\scripts\...`); from a source
+checkout, pass `--project-dir C:\path\to\agents-chat` or set `AGENTS_CHAT_PROJECT_DIR`. Other
+options: `--teams-app-dir` (default `<root>\shared\teams-app`), `--env` (default `dev`),
+`--no-restart` (no elevation needed; restart yourself later), and `--wait <seconds>`. Run with
+`--help` for the full list.
+
+How it handles failures:
+
+- **Checks first.** Before changing anything it checks `.env.local`, the `teams-app` folder and its
+  `M365_TITLE_ID`, the `atk` install and sign-in, elevation, and that no deployment is running. It
+  lists every problem and exits with code 2 without changing anything.
+- **Safe order.** `add` shares in Teams before allowing in agents-chat; `remove` takes people off
+  the allow-list and restarts before revoking the share. If a step fails part-way, nobody ends up
+  with access you did not intend to give.
+- **Clear recovery.** On a failure it prints `FAILED`, what was already done, and the exact
+  commands to finish, then exits with code 1. Every step is safe to repeat, so rerunning the same
+  command is usually enough.
+- **Backup.** Before changing `.env.local`, it saves the previous version as `.env.local.bak`. If
+  the file does not read back correctly after the write, it restores the backup.
+
 ## Option B: Key Vault token (no client secret)
 
 No long-lived credential is stored anywhere. A scheduled Container Apps job signs in with a
