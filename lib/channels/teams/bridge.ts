@@ -115,28 +115,70 @@ export async function handleActivity(activity: TeamsActivity, config: TeamsConfi
   if (activity.type === 'conversationUpdate') {
     const botAdded = activity.membersAdded?.some((m) => m.id === activity.recipient?.id);
     const conversationType = activity.conversation?.conversationType;
-    if (botAdded && conversationType === 'personal') {
+    if (!botAdded || (conversationType !== 'personal' && conversationType !== 'groupChat')) return;
+    // Welcome only allowed users, so the bot stays silent to anyone else who installs or adds it.
+    if (!(await authorize(config, ref, activity))) return;
+    if (conversationType === 'personal') {
       await sendText(config, { ...ref, replyToId: undefined }, `Hi! I connect you to the **${config.agentId}** agent in agents-chat.\n\n${HELP_TEXT}`);
-    } else if (botAdded && conversationType === 'groupChat') {
+    } else {
       await sendText(config, { ...ref, replyToId: undefined }, `Hi! I connect you to the **${config.agentId}** agent in agents-chat. @mention me with your question.\n\n${GROUP_HELP_TEXT}`);
     }
     return;
   }
   if (activity.type !== 'message') return;
 
+  let authorized = false;
   try {
-    await handleMessage(activity, config, ref);
+    await handleMessage(activity, config, ref, () => { authorized = true; });
   } catch (err) {
     logger.error({ err: err instanceof Error ? err.message : String(err) }, 'Teams message handling failed');
-    await sendText(config, ref, '⚠️ Something went wrong while handling your message. Please try again.').catch(() => undefined);
+    if (authorized) await sendText(config, ref, '⚠️ Something went wrong while handling your message. Please try again.').catch(() => undefined);
   }
 }
 
-async function handleMessage(activity: TeamsActivity, config: TeamsConfig, conversationRef: ConversationRef): Promise<void> {
+/**
+ * Returns the user only if they may use the bot. Everyone else is ignored without a reply, so the
+ * bot does not reveal itself: other organizations, anonymous users, accounts without an email, and
+ * anyone not in TEAMS_ALLOWED_USERS (deny by default: an empty list lets nobody in).
+ */
+async function authorize(config: TeamsConfig, ref: ConversationRef, activity: TeamsActivity): Promise<TeamsUser | null> {
+  let user: Awaited<ReturnType<typeof resolveUser>>;
+  try {
+    user = await resolveUser(config, ref, activity);
+  } catch (err) {
+    logger.warn({ err: err instanceof Error ? err.message : String(err) }, 'Ignoring Teams user: roster lookup failed');
+    return null;
+  }
+  if (user === 'external') {
+    logger.warn('Ignoring Teams user from another organization or an anonymous user');
+    return null;
+  }
+  if (!user) {
+    logger.warn('Ignoring Teams user without an email address');
+    return null;
+  }
+  if (!config.allowedUsers.includes(user.email)) {
+    logger.warn(
+      { email: user.email },
+      config.allowedUsers.length ? 'Ignoring Teams user not in TEAMS_ALLOWED_USERS' : 'TEAMS_ALLOWED_USERS is empty; ignoring all Teams users',
+    );
+    return null;
+  }
+  return user;
+}
+
+async function handleMessage(
+  activity: TeamsActivity,
+  config: TeamsConfig,
+  conversationRef: ConversationRef,
+  onAuthorized: () => void,
+): Promise<void> {
   const conversationType = activity.conversation?.conversationType;
   const mentioned = isBotMentioned(activity.entities, conversationRef.botId);
   if (conversationType !== 'personal' && conversationType !== 'groupChat') {
-    if (mentioned) await sendText(config, conversationRef, 'I only work in 1:1 chats and group chats.');
+    if (mentioned && (await authorize(config, conversationRef, activity))) {
+      await sendText(config, conversationRef, 'I only work in 1:1 chats and group chats.');
+    }
     return;
   }
   const isGroup = conversationType === 'groupChat';
@@ -145,24 +187,9 @@ async function handleMessage(activity: TeamsActivity, config: TeamsConfig, conve
   if (isGroup && !mentioned) return;
   const ref: ConversationRef = { ...conversationRef, isGroup };
 
-  const user = await resolveUser(config, ref, activity);
-  if (user === 'external') {
-    await sendText(config, ref, 'Sorry, only members of this organization can use this bot.');
-    return;
-  }
-  if (!user) {
-    await sendText(config, ref, '⚠️ I could not determine your email address, so I cannot map you to an agents-chat account.');
-    return;
-  }
-  // Deny by default: an empty TEAMS_ALLOWED_USERS lets nobody in.
-  if (!config.allowedUsers.includes(user.email)) {
-    logger.warn(
-      { email: user.email },
-      config.allowedUsers.length ? 'Teams user is not in TEAMS_ALLOWED_USERS' : 'TEAMS_ALLOWED_USERS is empty; refusing all Teams users',
-    );
-    await sendText(config, ref, `Sorry, ${user.email} is not allowed to use this bot.`);
-    return;
-  }
+  const user = await authorize(config, ref, activity);
+  if (!user) return;
+  onAuthorized();
 
   const text = cleanIncomingText(activity.text, activity.entities, ref.botId);
   if (!text) {

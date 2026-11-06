@@ -32,6 +32,8 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
     const id = decodeURIComponent(url.split('/members/')[1]);
     if (id === '29:external') return json({ id, email: 'x@other.com', tenantId: 'other-tenant' });
     if (id === '29:anon') return json({ id, userRole: 'anonymous', tenantId: TENANT });
+    if (id === '29:noemail') return json({ id, name: 'No Email', tenantId: TENANT });
+    if (id === '29:broken') return json({ error: 'boom' }, 500);
     return json({ id, email: `${id.slice(3)}@contoso.com`, name: id.slice(3), tenantId: TENANT, aadObjectId: `aad-${id}` });
   }
   if (url.startsWith(SERVICE_URL)) return json({ id: `act-${calls.length}` });
@@ -134,29 +136,25 @@ async function main() {
     assert.deepEqual(r.acp.map((a) => [a.action, a.chatId, a.optionId]), [['respond-user-request', aliceChatId, 'allow']]);
     await aliceTurn;
 
-    // People from other organizations and anonymous users are refused before any agent call.
-    for (const from of ['29:external', '29:anon']) {
+    // Anyone who may not use the bot gets no reply at all, so the bot does not reveal itself:
+    // other organizations, anonymous users, accounts without an email, failed roster lookups,
+    // and users not in TEAMS_ALLOWED_USERS, in group chats and 1:1 chats.
+    for (const from of ['29:external', '29:anon', '29:noemail', '29:broken', '29:carol']) {
       r = await run(activity(from, '<at>agent-xujx</at> hi', [botMention]));
-      assert.equal(r.acp.length, 0, from);
-      assert.match(r.posts[0].text, /only members of this organization/, from);
+      assert.deepEqual([r.posts.length, r.acp.length], [0, 0], `${from} (group)`);
+      r = await run(activity(from, 'hi', [], 'personal', `personal-${from}`));
+      assert.deepEqual([r.posts.length, r.acp.length], [0, 0], `${from} (1:1)`);
     }
 
-    // Only users in TEAMS_ALLOWED_USERS may talk to the bot, in 1:1 and group chats.
-    r = await run(activity('29:carol', '<at>agent-xujx</at> hi', [botMention]));
-    assert.equal(r.acp.length, 0, 'carol (group)');
-    assert.match(r.posts[0].text, /carol@contoso\.com is not allowed to use this bot/);
-    r = await run(activity('29:carol', 'hi', [], 'personal', 'personal-carol'));
-    assert.equal(r.acp.length, 0, 'carol (1:1)');
-    assert.match(r.posts[0].text, /not allowed to use this bot/);
-
-    // Deny by default: an empty allow-list refuses everyone, including previously allowed users.
+    // Deny by default: an empty allow-list ignores everyone, including previously allowed users.
     r = await (async () => { const start = calls.length; await handleActivity(activity('29:alice', 'hi', [], 'personal', 'personal-1'), { ...config, allowedUsers: [] }); return since(start); })();
-    assert.equal(r.acp.length, 0, 'empty allow-list');
-    assert.match(r.posts[0].text, /alice@contoso\.com is not allowed to use this bot/);
+    assert.deepEqual([r.posts.length, r.acp.length], [0, 0], 'empty allow-list');
 
-    // Team channels: silent unless mentioned, then a short notice.
+    // Team channels: silent unless an allowed user mentions the bot, then a short notice.
     r = await run(activity('29:alice', 'hi', [], 'channel', 'channel-1'));
     assert.deepEqual([r.posts.length, r.acp.length], [0, 0]);
+    r = await run(activity('29:carol', '<at>agent-xujx</at> hi', [botMention], 'channel', 'channel-1'));
+    assert.deepEqual([r.posts.length, r.acp.length], [0, 0], 'unlisted user in a channel');
     r = await run(activity('29:alice', '<at>agent-xujx</at> hi', [botMention], 'channel', 'channel-1'));
     assert.equal(r.acp.length, 0);
     assert.equal(r.posts[0].text, 'I only work in 1:1 chats and group chats.');
@@ -169,13 +167,23 @@ async function main() {
     r = await run(activity('29:alice', '/help', [], 'personal', 'personal-1'));
     assert.doesNotMatch(r.posts[0].text, /group chat|<at>/);
 
-    // Welcome message when the bot is added to a group chat.
-    const start = calls.length;
-    await handleActivity({ ...activity('29:alice', '', []), type: 'conversationUpdate', membersAdded: [{ id: BOT_ID }] }, config);
-    const welcome = since(start).posts;
+    // Welcome messages go only to allowed users who install the bot or add it to a group chat.
+    const welcomeFor = async (from: string, conversationType: string, conversationId: string) => {
+      const start = calls.length;
+      await handleActivity({ ...activity(from, '', [], conversationType, conversationId), type: 'conversationUpdate', membersAdded: [{ id: BOT_ID }] }, config);
+      return since(start).posts;
+    };
+    let welcome = await welcomeFor('29:alice', 'groupChat', 'group-1');
     assert.equal(welcome.length, 1);
     assert.match(welcome[0].text, /@mention me with your question/);
     assert.equal(welcome[0].replyToId, undefined);
+    welcome = await welcomeFor('29:alice', 'personal', 'personal-1');
+    assert.equal(welcome.length, 1);
+    assert.match(welcome[0].text, /I connect you to the/);
+    for (const from of ['29:carol', '29:external']) {
+      assert.equal((await welcomeFor(from, 'groupChat', 'group-2')).length, 0, `${from} adds bot to a group`);
+      assert.equal((await welcomeFor(from, 'personal', `personal-${from}`)).length, 0, `${from} installs bot`);
+    }
 
     console.log('teams bot bridge checks passed');
   } finally {
