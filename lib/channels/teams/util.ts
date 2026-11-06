@@ -4,11 +4,11 @@ import { createHash } from 'node:crypto';
 /** Max characters per Teams text message (Teams caps activities at ~100 KB; stay well below it). */
 export const TEAMS_MAX_TEXT = 20000;
 
-export type TeamsCommandName = 'new' | 'stop' | 'help' | 'whoami' | 'model' | 'agent';
+export type TeamsCommandName = 'new' | 'stop' | 'help' | 'whoami' | 'model' | 'agent' | 'session';
 export type TeamsCommand = { name: TeamsCommandName; args: string } | null;
 
 export function parseCommand(text: string): TeamsCommand {
-  const match = /^\/(new|stop|help|whoami|model|agent)(?:\s+([\s\S]*))?$/i.exec(text.trim());
+  const match = /^\/(new|stop|help|whoami|model|agent|session)(?:\s+([\s\S]*))?$/i.exec(text.trim());
   if (!match) return null;
   return { name: match[1].toLowerCase() as TeamsCommandName, args: (match[2] || '').trim() };
 }
@@ -53,8 +53,24 @@ export function hashId(value: string, length = 16): string {
   return createHash('sha256').update(value).digest('hex').slice(0, length);
 }
 
+/** Prefix of every agents-chat chat id created from this Teams conversation. */
+export function teamsChatPrefix(conversationId: string): string {
+  return `teams-${hashId(conversationId, 12)}-`;
+}
+
 export function newTeamsChatId(conversationId: string, now = Date.now()): string {
-  return `teams-${hashId(conversationId, 12)}-${now.toString(36)}`;
+  return `${teamsChatPrefix(conversationId)}${now.toString(36)}`;
+}
+
+/** Short "how long ago" text for session lists. */
+export function formatAge(ts: number, now = Date.now()): string {
+  const minutes = Math.floor(Math.max(0, now - ts) / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return days < 30 ? `${days}d ago` : new Date(ts).toISOString().slice(0, 10);
 }
 
 /**

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { encode } from 'next-auth/jwt';
 import { canTalkTo } from '@/lib/auth';
-import { appendMessageToChat, getChat, saveChat } from '@/lib/chatStore';
+import { appendMessageToChat, getChat, listChats, saveChat, searchChats } from '@/lib/chatStore';
 import * as configStore from '@/lib/configStore';
 import type { AgentModel } from '@/lib/configStore';
 import { createLogger } from '@/lib/logger';
@@ -14,11 +14,13 @@ import {
   cleanIncomingText,
   conversationAgentKey,
   conversationSettingKey,
+  formatAge,
   formatUserRequest,
   isAllowedServiceUrl,
   isBotMentioned,
   newTeamsChatId,
   parseCommand,
+  teamsChatPrefix,
   type TeamsEntity,
   type UserRequestLike,
 } from './util';
@@ -35,6 +37,8 @@ const IDENTITY_MAX_AGE_MS = 24 * 60 * 60_000;
 const SESSION_TOKEN_TTL_S = 60 * 60;
 /** Internal agent that the web UI also hides from its agent lists. */
 const SCHEDULER_AGENT_ID = 'scheduler';
+/** Sessions shown per `/session` list or search. */
+const SESSION_LIST_LIMIT = 10;
 
 /** Status lines shown while `send` waits for a cold agent to start. Mutable for tests. */
 export const SLOW_START_STATUS = [
@@ -75,6 +79,7 @@ type Globals = {
   __teamsIdentities?: Map<string, CachedIdentity>;
   __teamsIdentityRefreshes?: Map<string, Promise<unknown>>;
   __teamsSessionTokens?: Map<string, { value: string; expiresAt: number }>;
+  __teamsSessionLists?: Map<string, string[]>;
 };
 const g = globalThis as Globals;
 const processed = g.__teamsProcessed ??= new Map();
@@ -82,6 +87,8 @@ const conversations = g.__teamsConversations ??= new Map();
 const identities = g.__teamsIdentities ??= new Map();
 const identityRefreshes = g.__teamsIdentityRefreshes ??= new Map();
 const sessionTokens = g.__teamsSessionTokens ??= new Map();
+/** Chat ids of the last `/session` list per person, conversation and agent, so `/session <number>` picks from it. */
+const sessionLists = g.__teamsSessionLists ??= new Map();
 
 const HELP_TEXT = [
   '**Commands**',
@@ -89,6 +96,7 @@ const HELP_TEXT = [
   '- `/stop` – stop the current response',
   '- `/whoami` – show which agents-chat account, agent, model, and chat you are using',
   '- `/agent [number or name]` – list agents you can use, or switch to one (each agent keeps its own conversation)',
+  '- `/session [number or words]` – list your sessions with the current agent, switch to one, or search them',
   '- `/model [number or name]` – list models, or switch to one',
   '- `/help` – show this help',
   '',
@@ -97,7 +105,7 @@ const HELP_TEXT = [
 
 const GROUP_HELP_TEXT = [
   'In this group chat I only respond when you **@mention** me, and everyone here sees my replies.',
-  'Each person gets their own agents-chat conversation and uses their own access.',
+  'Each person gets their own agents-chat conversation and uses their own access. `/session` only shows sessions started in this group chat.',
   '',
   HELP_TEXT,
 ].join('\n');
@@ -254,6 +262,9 @@ async function handleMessage(
     case 'model':
       await sendText(config, ref, changeModel(user, activeAgentId(config, user, ref.conversationId), command.args));
       return;
+    case 'session':
+      await sendText(config, ref, await changeSession(config, ref, user, command.args));
+      return;
     case 'stop':
       await sendText(config, ref, 'Nothing is running.');
       return;
@@ -332,6 +343,64 @@ function changeAgent(config: TeamsConfig, user: TeamsUser, conversationId: strin
   configStore.setUserSetting(user.email, conversationAgentKey(conversationId), agent.id === config.agentId ? '' : agent.id);
   const resumed = currentChatId(config, user, agent.id, conversationId);
   return `Now talking to ${label(agent)} in this chat. ${resumed ? 'Your earlier conversation with it continues; send `/new` to start fresh.' : 'Your next message starts a new conversation with it.'}`;
+}
+
+type ChatSummary = { id: string; name: string; ts: number; agentId?: string };
+
+/**
+ * `/session` lists this user's sessions (agents-chat chats) with the current agent, `/session <number>`
+ * switches this Teams conversation to one, `/session <chat id>` opens it directly, and `/session <words>`
+ * (or `/session search <words>`) searches them the same way the web UI does. Everyone in a group chat
+ * sees the replies, so there only sessions started in that group chat are listed or opened.
+ */
+async function changeSession(config: TeamsConfig, ref: ConversationRef, user: TeamsUser, args: string): Promise<string> {
+  const agentId = activeAgentId(config, user, ref.conversationId);
+  const agentName = agentDisplayName(agentId);
+  const current = currentChatId(config, user, agentId, ref.conversationId);
+  const groupPrefix = teamsChatPrefix(ref.conversationId);
+  const visible = (chat: ChatSummary) => chat.agentId === agentId && (!ref.isGroup || chat.id.startsWith(groupPrefix));
+  const listKey = `${user.email}|${ref.conversationId}|${agentId}`;
+  const where = ref.isGroup ? ' in this group chat' : '';
+
+  const show = (title: string, chats: ChatSummary[]) => {
+    const shown = chats.slice(0, SESSION_LIST_LIMIT);
+    sessionLists.delete(listKey);
+    sessionLists.set(listKey, shown.map((chat) => chat.id));
+    if (sessionLists.size > 1000) sessionLists.delete(sessionLists.keys().next().value!);
+    const lines = shown.map((chat, i) => `${i + 1}. ${chat.name || chat.id} – ${formatAge(chat.ts)}${chat.id === current ? ' ✅' : ''}`);
+    const more = chats.length > shown.length ? `\n_…and ${chats.length - shown.length} more. Send \`/session <words>\` to search._` : '';
+    return `${title}\n${lines.join('\n')}${more}\n\nSend \`/session <number>\` to switch, \`/session <words>\` to search, or \`/new\` to start a new session.`;
+  };
+  const open = (chat: ChatSummary) => {
+    if (chat.id === current) return `You are already in session **${chat.name || chat.id}** with **${agentName}**.`;
+    configStore.setUserSetting(user.email, chatSettingKey(config, agentId, ref.conversationId), chat.id);
+    return `Switched to session **${chat.name || chat.id}** with **${agentName}** (last active ${formatAge(chat.ts)}). Your next message continues it.`;
+  };
+
+  let query = args.trim();
+  if (!query) {
+    const chats = (await listChats(user.email)).filter(visible);
+    if (chats.length === 0) return `You have no sessions with **${agentName}**${where} yet. Your next message starts one.`;
+    return show(`**Your sessions with ${agentName}**${where} (✅ = current)`, chats);
+  }
+
+  if (/^\d+$/.test(query)) {
+    const ids = sessionLists.get(listKey) ?? (await listChats(user.email)).filter(visible).slice(0, SESSION_LIST_LIMIT).map((chat) => chat.id);
+    const id = ids[Number(query) - 1];
+    const chat = id ? await getChat(user.email, id) : null;
+    if (!chat || !visible(chat)) return `There is no session ${query}. Send \`/session\` to see the list.`;
+    return open(chat);
+  }
+
+  const search = /^search\s+([\s\S]+)$/i.exec(query);
+  if (search) query = search[1].trim();
+  else {
+    const chat = await getChat(user.email, query);
+    if (chat && visible(chat)) return open(chat);
+  }
+  const results = (await searchChats(user.email, query)).filter(visible);
+  if (results.length === 0) return `No sessions with **${agentName}**${where} match "${query}". Send \`/session\` to see the list.`;
+  return show(`**Sessions with ${agentName}${where} matching "${query}"**`, results);
 }
 
 /**

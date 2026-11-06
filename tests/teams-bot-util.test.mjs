@@ -9,6 +9,8 @@ import {
   isAllowedServiceUrl,
   isBotMentioned,
   newTeamsChatId,
+  formatAge,
+  teamsChatPrefix,
   normalizeServiceUrl,
   parseCommand,
   parseEmailList,
@@ -50,6 +52,16 @@ assert.ok(conversationSettingKey('a:1-conv', 'mcagent').startsWith(`${key}.`), '
 assert.notEqual(conversationSettingKey('a:1-conv', 'mcagent'), conversationSettingKey('a:1-conv', 'dev'));
 assert.match(conversationAgentKey('a:1-conv'), /^teams\.agent\.[0-9a-f]{16}$/);
 assert.match(newTeamsChatId('a:1-conv', 1700000000000), /^teams-[0-9a-f]{12}-[0-9a-z]+$/);
+assert.ok(newTeamsChatId('a:1-conv').startsWith(teamsChatPrefix('a:1-conv')));
+assert.ok(!newTeamsChatId('a:2-conv').startsWith(teamsChatPrefix('a:1-conv')));
+assert.equal(parseCommand('/session search foo').name, 'session');
+const NOW = Date.UTC(2026, 10, 6, 12);
+assert.equal(formatAge(NOW - 30_000, NOW), 'just now');
+assert.equal(formatAge(NOW + 60_000, NOW), 'just now');
+assert.equal(formatAge(NOW - 5 * 60_000, NOW), '5m ago');
+assert.equal(formatAge(NOW - 3 * 3600_000, NOW), '3h ago');
+assert.equal(formatAge(NOW - 2 * 86400_000, NOW), '2d ago');
+assert.equal(formatAge(Date.UTC(2026, 0, 2), NOW), '2026-01-02');
 assert.ok(chatNameFromPrompt('x'.repeat(200)).length <= 'Teams: '.length + 60);
 assert.ok(chatNameFromPrompt('fix build').startsWith('Teams: '));
 

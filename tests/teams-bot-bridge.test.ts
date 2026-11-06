@@ -289,6 +289,50 @@ async function main() {
     sent = sendOf(await say('fallback'));
     assert.deepEqual([sent.agentId, sent.chatId], ['teams', teamsChatId]);
 
+    // /session lists this person's sessions with the current agent (including web chats), switches by
+    // number, chat id or search (the web UI's chat search), and keeps each agent's sessions separate.
+    const webChat = { id: 'web-chat-1', name: 'Connector failure triage', ts: Date.now() - 3 * 3600_000, agentId: 'teams', messages: [], agentSessions: {} };
+    await chatStore.saveChat('alice@contoso.com', webChat);
+    await chatStore.saveChat('alice@contoso.com', { ...webChat, id: 'web-mc', name: 'MC web chat', agentId: 'mcagent' });
+    await chatStore.saveChat('bob@contoso.com', { ...webChat, id: 'web-bob', name: 'Bob connector notes' });
+    reply = await command('/session');
+    assert.match(reply, /^\*\*Your sessions with teams\*\* \(✅ = current\)\n1\. /);
+    assert.match(reply, /\. Teams: hello – (just now|\dm ago) ✅$/m);
+    assert.match(reply, /\. Connector failure triage – 3h ago$/m);
+    assert.match(reply, /\. Teams: what is up with Bob\?/m, '1:1 chats list sessions from everywhere');
+    assert.doesNotMatch(reply, /MC web chat|analyze the connector|Bob connector/, 'only this agent and this person');
+    reply = await command('/session connector');
+    assert.match(reply, /^\*\*Sessions with teams matching "connector"\*\*\n1\. Connector failure triage – 3h ago\n\n/);
+    assert.match(await command('/session 1'), /Switched to session \*\*Connector failure triage\*\* with \*\*teams\*\* \(last active 3h ago\)/);
+    assert.equal(sendOf(await say('continue the web chat')).chatId, 'web-chat-1');
+    assert.match(await command('/session 1'), /already in session \*\*Connector failure triage\*\*/);
+    assert.match(await command('/session 2'), /There is no session 2/);
+    assert.match(await command('/session search before switching'), /1\. Teams: hello/);
+    assert.match(await command('/session 1'), /Switched to session \*\*Teams: hello\*\*/);
+    assert.equal(sendOf(await say('back again')).chatId, teamsChatId);
+    assert.match(await command('/session web-chat-1'), /Switched to session \*\*Connector failure triage\*\*/);
+    assert.match(await command('/session web-mc'), /No sessions with \*\*teams\*\* match "web-mc"/, 'another agent\'s chat is not opened');
+    assert.match(await command('/whoami'), /Chat: `web-chat-1`/);
+    await command('/agent mcagent');
+    reply = await command('/session');
+    assert.match(reply, /Your sessions with MC Agent/);
+    assert.match(reply, /\. MC web chat – 3h ago$/m);
+    assert.doesNotMatch(reply, /Connector failure triage/);
+    await command('/agent teams');
+    assert.equal(sendOf(await say('still on the web chat')).chatId, 'web-chat-1', 'each agent remembers its session');
+    // Everyone in a group chat sees replies, so there only sessions started in that chat are listed or opened.
+    r = await run(activity('29:alice', '<at>agent-xujx</at> /session', [botMention]));
+    assert.match(r.posts[0].text, /Your sessions with teams\*\* in this group chat/);
+    assert.match(r.posts[0].text, /1\. Teams: what is up with Bob\? – /);
+    assert.doesNotMatch(r.posts[0].text, /Connector failure|Teams: hello|elsewhere/);
+    r = await run(activity('29:alice', '<at>agent-xujx</at> /session web-chat-1', [botMention]));
+    assert.match(r.posts[0].text, /No sessions with \*\*teams\*\* in this group chat match "web-chat-1"/);
+    r = await run(activity('29:alice', '<at>agent-xujx</at> /session', [botMention], 'groupChat', 'group-2'));
+    assert.match(r.posts[0].text, /no sessions with \*\*teams\*\* in this group chat yet/);
+    r = await run(activity('29:bob', '/session connector', [], 'personal', 'personal-bob'));
+    assert.match(r.posts[0].text, /1\. Bob connector notes/);
+    assert.doesNotMatch(r.posts[0].text, /Connector failure triage/, 'never another person\'s sessions');
+
     // Welcome messages go only to allowed users who install the bot or add it to a group chat.
     const welcomeFor = async (from: string, conversationType: string, conversationId: string) => {
       const start = calls.length;

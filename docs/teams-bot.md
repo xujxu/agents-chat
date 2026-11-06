@@ -57,6 +57,7 @@ flowchart LR
 | `/stop` | Stop the running response |
 | `/whoami` | Show the mapped account, agent, model, and chat id |
 | `/agent [number or name]` | List the agents you can use, or switch this conversation to one. The choice is per person and per conversation; switching back continues that agent's earlier chat |
+| `/session [number or words]` | List your sessions (agents-chat chats) with the current agent, switch this conversation to one by number or chat id, or search them by name and message text like the web UI's chat search |
 | `/model [number or name]` | List the agent's models, or switch to one (also changes your model for this agent in the web UI) |
 | `/help` | Show help |
 
@@ -65,6 +66,12 @@ Teams turns use the same model as the web UI: the model you last picked for this
 `/agent` lists the same agents you can talk to in the web UI (public agents, your own, ones shared
 with you, and all agents for admins). The bot's default agent comes from `TEAMS_AGENT_ID`; `/model`
 and `/new` apply to whichever agent you are currently using.
+
+`/session` shows your 10 most recent sessions with the current agent, including chats started in
+the web UI, newest first (✅ marks the one in use). `/session <number>` picks from the last list or
+search result, and the choice is per person, per conversation, and per agent. In group chats
+`/session` only lists and opens sessions started in that group chat, because everyone there can
+see the replies.
 
 ## Group chats
 
