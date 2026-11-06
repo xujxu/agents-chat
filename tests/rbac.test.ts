@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-const ENV_KEYS = ['ADMIN_EMAILS', 'MEMBER_EMAILS', 'GITHUB_ALLOWED_EMAILS', 'NEXTAUTH_SECRET'] as const;
+const ENV_KEYS = ['ADMIN_EMAILS', 'MEMBER_EMAILS', 'GITHUB_ALLOWED_EMAILS', 'NEXTAUTH_SECRET', 'AZURE_AD_TENANT_ID', 'GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET'] as const;
 
 test('role-based access control', async (t) => {
   const originalCwd = process.cwd();
@@ -23,6 +23,9 @@ test('role-based access control', async (t) => {
   process.env.ADMIN_EMAILS = 'admin@contoso.com';
   process.env.MEMBER_EMAILS = '@contoso.com,partner@fabrikam.com';
   process.env.GITHUB_ALLOWED_EMAILS = 'gh-member@example.com';
+  delete process.env.AZURE_AD_TENANT_ID;
+  process.env.GITHUB_CLIENT_ID = 'test-client';
+  process.env.GITHUB_CLIENT_SECRET = 'test-secret';
 
   const configStore = await import('../lib/configStore');
   const { isMemberEmail, resolveUserRole } = await import('../lib/auth');
@@ -54,15 +57,83 @@ test('role-based access control', async (t) => {
     assert.equal(getUserRole(null), null);
   });
 
-  await t.test('a MEMBER_EMAILS wildcard never admits GitHub accounts', () => {
+  await t.test('a MEMBER_EMAILS wildcard only admits accounts of a pinned Entra tenant', () => {
     process.env.MEMBER_EMAILS = '*';
     try {
-      assert.equal(resolveUserRole({ email: 'anyone@outside.com' }, () => false), 'member');
+      for (const tenant of [undefined, 'common', 'organizations', 'consumers']) {
+        if (tenant === undefined) delete process.env.AZURE_AD_TENANT_ID;
+        else process.env.AZURE_AD_TENANT_ID = tenant;
+        assert.equal(resolveUserRole({ email: 'anyone@outside.com', provider: 'azure-ad' }, () => false), null, `tenant ${tenant}`);
+      }
+      process.env.AZURE_AD_TENANT_ID = '72f988bf-86f1-41af-91ab-2d7cd011db47';
+      assert.equal(resolveUserRole({ email: 'anyone@outside.com', provider: 'azure-ad' }, () => false), 'member');
       assert.equal(resolveUserRole({ email: 'anyone@outside.com', provider: 'github' }, () => false), null);
       assert.equal(resolveUserRole({ email: 'anyone@outside.com', provider: 'github' }, () => true), 'guest');
     } finally {
       process.env.MEMBER_EMAILS = '@contoso.com,partner@fabrikam.com';
+      delete process.env.AZURE_AD_TENANT_ID;
     }
+  });
+
+  await t.test('without ADMIN_EMAILS or MEMBER_EMAILS nobody signs in except admin-granted users', async () => {
+    const signIn = authOptions.callbacks!.signIn!;
+    for (const key of ['ADMIN_EMAILS', 'MEMBER_EMAILS', 'GITHUB_ALLOWED_EMAILS'] as const) delete process.env[key];
+    try {
+      assert.equal(getUserRole({ email: 'bob@contoso.com', provider: 'azure-ad' }), null);
+      assert.equal(await signIn({ user: { email: 'bob@contoso.com' }, account: { provider: 'azure-ad' }, profile: { email: 'bob@contoso.com' } } as never), '/login?error=NotAuthorized');
+      assert.notEqual(await signIn({ user: { email: 'bob@contoso.com' }, account: { provider: 'github' }, profile: { email: 'bob@contoso.com' } } as never), true);
+      assert.equal(await signIn({ user: { email: 'guest@outside.com' }, account: { provider: 'azure-ad' }, profile: { email: 'guest@outside.com' } } as never), true, 'an agent grant still admits its guest');
+    } finally {
+      process.env.ADMIN_EMAILS = 'admin@contoso.com';
+      process.env.MEMBER_EMAILS = '@contoso.com,partner@fabrikam.com';
+      process.env.GITHUB_ALLOWED_EMAILS = 'gh-member@example.com';
+    }
+  });
+
+  await t.test('GitHub accounts without a public email fall back to the id-based noreply address', async () => {
+    const github = authOptions.providers.find((provider) => provider.id === 'github');
+    assert.ok(github);
+    const profile = (github as unknown as { options: { profile: (p: unknown, t: unknown) => { email: string } } }).options.profile;
+    assert.equal(profile({ id: 42, login: 'octo', email: null }, {}).email, '42+octo@users.noreply.github.com');
+  });
+
+  await t.test('owners demoted to guest can no longer manage their agent', async () => {
+    process.env.NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET || 'rbac-test-secret';
+    const { encode } = await import('next-auth/jwt');
+    const { NextRequest } = await import('next/server');
+    const acp = await import('../app/api/acp/route');
+    t.after(() => clearInterval((globalThis as { __acpCleanupTimer?: NodeJS.Timeout }).__acpCleanupTimer));
+    configStore.createAgent({ id: 'demoted-own', name: 'demoted-own', owner: 'demoted@outside.com' });
+    configStore.addAgentAccess('demoted-own', 'demoted@outside.com', 'admin@contoso.com');
+    const cookie = await encode({ token: { email: 'demoted@outside.com', sub: 'demoted', provider: 'azure-ad' }, secret: process.env.NEXTAUTH_SECRET! });
+    const call = (body: Record<string, unknown>) => acp.POST(new NextRequest('http://localhost/api/acp', {
+      method: 'POST',
+      headers: { cookie: `next-auth.session-token=${cookie}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ agentId: 'demoted-own', ...body }),
+    }));
+    assert.equal(getUserRole({ email: 'demoted@outside.com' }), 'guest');
+    for (const body of [
+      { action: 'update-agent-config', cwd: '/' },
+      { action: 'delete-agent' },
+      { action: 'add-agent-access', email: 'friend@outside.com' },
+      { action: 'remove-agent-access', email: 'demoted@outside.com' },
+      { action: 'list-agent-access' },
+      { action: 'acp-authenticate', methodId: 'x' },
+    ]) {
+      assert.equal((await call(body)).status, 403, body.action);
+    }
+    assert.ok(configStore.getAgentById('demoted-own'), 'the agent is untouched');
+    configStore.deleteAgent('demoted-own');
+  });
+
+  await t.test('sessions recorded in another user\'s chat are recognised as theirs', async () => {
+    const chatStore = await import('../lib/chatStore');
+    await chatStore.saveChat('alice@contoso.com', { id: 'c1', name: 'c1', ts: 1, messages: [], agentSessions: { shared: ['s-old', 's-alice'] } } as never);
+    assert.equal(chatStore.isAgentSessionOwnedByOtherUser('bob@contoso.com', 'shared', 's-alice'), true);
+    assert.equal(chatStore.isAgentSessionOwnedByOtherUser('bob@contoso.com', 'shared', 's-old'), true);
+    assert.equal(chatStore.isAgentSessionOwnedByOtherUser('alice@contoso.com', 'shared', 's-alice'), false);
+    assert.equal(chatStore.isAgentSessionOwnedByOtherUser('bob@contoso.com', 'public', 's-alice'), false);
+    assert.equal(chatStore.isAgentSessionOwnedByOtherUser('bob@contoso.com', 'shared', 's-bob'), false);
   });
 
   await t.test('guests only use agents explicitly shared with them', () => {
@@ -130,7 +201,7 @@ test('role-based access control', async (t) => {
 
     assert.equal(configStore.removeUserRole('carol@outside.com'), true);
     assert.equal(getUserRole({ ...entra, role: 'admin' }), null, 'a stale admin claim on an OAuth token is ignored');
-    assert.equal(getUserRole({ email: 'carol@outside.com', role: 'admin' }), 'admin', 'provider-less internal tokens keep their claim');
+    assert.equal(getUserRole({ email: 'carol@outside.com', role: 'admin' }), null, 'nor is one on a provider-less token');
     assert.equal((await jwt({ token: { ...refreshed } } as never)).role, 'user');
   });
 

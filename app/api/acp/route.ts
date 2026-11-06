@@ -11,6 +11,7 @@ import {
   updateChatMessage,
   StoredMessage,
   updateChatAgentSession,
+  isAgentSessionOwnedByOtherUser,
 } from '@/lib/chatStore';
 import { isAdminToken, getUserEmail, canModify, canTalkTo, getAuthToken } from '@/lib/auth';
 import { canUseAgent, getUserRole } from '@/lib/rbac';
@@ -629,6 +630,20 @@ function getLastStoredSessionId(value: unknown): string | null {
 async function getStoredChatAgentSessionId(userId: string, chatId: string, agentId: string): Promise<string | null> {
   const chat = await getChat(userId, chatId);
   return getLastStoredSessionId(chat?.agentSessions?.[agentId]);
+}
+
+/**
+ * Whether another user already uses `sessionId` on this agent, live or in one of their saved chats. Everyone
+ * sharing an agent runs as its owner, so session IDs are the only boundary between their conversations.
+ */
+function isSessionOfAnotherUser(agentId: string, userId: string, sessionId: string): boolean {
+  const ownKey = userSessionKey(agentId, userId);
+  for (const [key, other] of getUserSessions().entries()) {
+    if (key === ownKey || !key.startsWith(`${agentId}:`)) continue;
+    if (other.sessionId === sessionId) return true;
+    for (const list of other.chatSessions?.values() ?? []) if (list.includes(sessionId)) return true;
+  }
+  return isAgentSessionOwnedByOtherUser(userId, agentId, sessionId);
 }
 
 async function getStoredChatHistoryForRecovery(userId: string, chatId: string): Promise<{ type: string; content: string; agentId?: string }[] | undefined> {
@@ -1599,6 +1614,9 @@ export async function POST(req: NextRequest) {
     const authToken = await getAuthToken(req);
     const userRole = getUserRole(authToken);
     if (!userRole) return NextResponse.json({ ok: false, error: 'not_authorized' }, { status: 403 });
+    // Changing an agent (config, sign-in, access list, deletion) needs a member or admin role on top of ownership,
+    // so an owner later demoted to guest can no longer reconfigure what runs on the server.
+    const canManageAgent = (owner: string | undefined) => userRole !== 'guest' && canModify(authToken, owner || '');
 
     // ─── Diagnostic endpoint ───
     if (action === 'diag') {
@@ -1726,7 +1744,7 @@ export async function POST(req: NextRequest) {
       const userEmail = getUserEmail(token);
       if (!userEmail) return NextResponse.json({ ok: false, error: 'unauthenticated' }, { status: 401 });
       const record = configStore.getAgentById(agentId);
-      if (!record || !canModify(token, record.owner)) {
+      if (!record || !canManageAgent(record.owner)) {
         return NextResponse.json({ ok: false, error: 'permission_denied' }, { status: 403 });
       }
       const methodId = typeof body?.methodId === 'string' ? body.methodId : '';
@@ -1851,10 +1869,9 @@ export async function POST(req: NextRequest) {
 
     if (action === 'update-agent-config') {
       if (!agentId) return NextResponse.json({ ok: false, error: 'missing_agentId' }, { status: 400 });
-      const token = await getAuthToken(req);
       const agent = configStore.getAgentById(agentId);
       if (!agent) return NextResponse.json({ ok: false, error: 'agent_not_found' }, { status: 404 });
-      if (!canModify(token, agent.owner)) {
+      if (!canManageAgent(agent.owner)) {
         return NextResponse.json({ ok: false, error: 'permission_denied' }, { status: 403 });
       }
 
@@ -1943,10 +1960,9 @@ export async function POST(req: NextRequest) {
 
     if (action === 'delete-agent') {
       if (!agentId) return NextResponse.json({ ok: false, error: 'missing_agentId' }, { status: 400 });
-      const token = await getAuthToken(req);
       const agent = configStore.getAgentById(agentId);
       if (!agent) return NextResponse.json({ ok: false, error: 'agent_not_found' }, { status: 404 });
-      if (!canModify(token, agent.owner)) {
+      if (!canManageAgent(agent.owner)) {
         return NextResponse.json({ ok: false, error: 'permission_denied' }, { status: 403 });
       }
 
@@ -1970,24 +1986,22 @@ export async function POST(req: NextRequest) {
 
     if (action === 'add-agent-access') {
       if (!agentId) return NextResponse.json({ ok: false, error: 'missing_agentId' }, { status: 400 });
-      const token = await getAuthToken(req);
       const agent = configStore.getAgentById(agentId);
       if (!agent) return NextResponse.json({ ok: false, error: 'agent_not_found' }, { status: 404 });
-      if (!canModify(token, agent.owner)) {
+      if (!canManageAgent(agent.owner)) {
         return NextResponse.json({ ok: false, error: 'permission_denied' }, { status: 403 });
       }
       const email = (body?.email as string || '').trim().toLowerCase();
       if (!email) return NextResponse.json({ ok: false, error: 'missing_email' }, { status: 400 });
-      configStore.addAgentAccess(agentId, email, getUserEmail(token));
+      configStore.addAgentAccess(agentId, email, getUserEmail(authToken));
       return NextResponse.json({ ok: true });
     }
 
     if (action === 'remove-agent-access') {
       if (!agentId) return NextResponse.json({ ok: false, error: 'missing_agentId' }, { status: 400 });
-      const token = await getAuthToken(req);
       const agent = configStore.getAgentById(agentId);
       if (!agent) return NextResponse.json({ ok: false, error: 'agent_not_found' }, { status: 404 });
-      if (!canModify(token, agent.owner)) {
+      if (!canManageAgent(agent.owner)) {
         return NextResponse.json({ ok: false, error: 'permission_denied' }, { status: 403 });
       }
       const email = (body?.email as string || '').trim().toLowerCase();
@@ -1998,10 +2012,9 @@ export async function POST(req: NextRequest) {
 
     if (action === 'list-agent-access') {
       if (!agentId) return NextResponse.json({ ok: false, error: 'missing_agentId' }, { status: 400 });
-      const token = await getAuthToken(req);
       const agent = configStore.getAgentById(agentId);
       if (!agent) return NextResponse.json({ ok: false, error: 'agent_not_found' }, { status: 404 });
-      if (!canModify(token, agent.owner)) {
+      if (!canManageAgent(agent.owner)) {
         return NextResponse.json({ ok: false, error: 'permission_denied' }, { status: 403 });
       }
       const accessList = configStore.getAgentAccessList(agentId);
@@ -2397,6 +2410,9 @@ export async function POST(req: NextRequest) {
       const chatId = body?.chatId as string | undefined;
       if (!savedSessionId) {
         return NextResponse.json({ ok: false, error: 'missing_sessionId' }, { status: 400 });
+      }
+      if (!isAdmin && isSessionOfAnotherUser(agentId, userId, savedSessionId)) {
+        return NextResponse.json({ ok: false, error: 'session_not_found' }, { status: 404 });
       }
       const turnChatKey = chatId || '__default';
       const chatTurn = sess.activeTurns.get(turnChatKey);

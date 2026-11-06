@@ -10,7 +10,7 @@ import {
   isEnvAdminEmail,
   isGitHubEmailAllowed,
   isMemberEmail,
-  parseEmailList,
+  memberEmailsFor,
   resolveUserRole,
   shouldUseSecureAuthCookies,
 } from '@/lib/auth';
@@ -63,7 +63,9 @@ if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
         return {
           id: String(profile.id),
           name: profile.name || profile.login,
-          email: profile.email || `${profile.login}@users.noreply.github.com`,
+          // GitHub's own noreply form: the numeric id never changes hands, unlike a login that can be
+          // renamed and re-registered by someone else.
+          email: profile.email || `${profile.id}+${profile.login}@users.noreply.github.com`,
           image: profile.avatar_url,
           // Stash the OAuth access token so we can fetch primary email later
           // if the profile.email is null (private email setting).
@@ -187,8 +189,8 @@ export const authOptions: AuthOptions = {
           process.env.GITHUB_ALLOWED_EMAILS,
           process.env.ADMIN_EMAILS,
         );
-        // A MEMBER_EMAILS wildcard is meant for the Entra tenant, so it never opens GitHub sign-in.
-        const memberPatterns = parseEmailList(process.env.MEMBER_EMAILS).filter((entry) => entry !== '*').join(',');
+        // MEMBER_EMAILS minus the `*` wildcard, which never opens GitHub sign-in.
+        const memberPatterns = memberEmailsFor('github');
         if (isGitHubEmailAllowed(email, allowedEmails) || isMemberEmail(email, memberPatterns, '')) return true;
         if (email && (getDbRole(email) || hasAnyAgentAccess(email))) return true;
         return allowedEmails.length === 0 && !memberPatterns && listUserRoles().length === 0
@@ -197,7 +199,7 @@ export const authOptions: AuthOptions = {
       }
 
       email = email || user.email || '';
-      return resolveUserRole({ email }, hasAnyAgentAccess) ? true : '/login?error=NotAuthorized';
+      return resolveUserRole({ email, provider: account.provider }, hasAnyAgentAccess) ? true : '/login?error=NotAuthorized';
     },
     async jwt({ token, user, account, profile }) {
       // GitHub's profile helper supplies a noreply fallback when the public

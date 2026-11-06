@@ -49,14 +49,18 @@ export async function GET(req: NextRequest) {
   }
 
   // Non-admins may only read files inside the workspace of a local agent they can use.
-  if (role !== 'admin' && !isInsideUsableWorkspace(token, resolved)) {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  let readPath = resolved;
+  if (role !== 'admin') {
+    const realFile = usableWorkspaceFile(token, resolved);
+    if (!realFile) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+    readPath = realFile;
   }
 
   const ext = path.extname(resolved).toLowerCase();
   const contentType = MIME[ext] || 'application/octet-stream';
 
-  const body = fs.readFileSync(resolved);
+  const body = role === 'admin' ? fs.readFileSync(readPath) : readCheckedFile(readPath);
+  if (!body) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   const headers: Record<string, string> = {
     'Content-Type': contentType,
     'Content-Length': String(body.length),
@@ -67,15 +71,37 @@ export async function GET(req: NextRequest) {
   return new NextResponse(body, { headers });
 }
 
+/** The real path of `filePath` when it lies inside the workspace of a local agent this user can use. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function isInsideUsableWorkspace(token: any, filePath: string): boolean {
+function usableWorkspaceFile(token: any, filePath: string): string | null {
   let realFile: string;
-  try { realFile = fs.realpathSync.native(filePath); } catch { return false; }
-  return usableAgents(token).some((agent) => {
+  try { realFile = fs.realpathSync.native(filePath); } catch { return null; }
+  const inside = usableAgents(token).some((agent) => {
     if (agent.relay || !agent.cwd) return false;
     let root: string;
     try { root = fs.realpathSync.native(agent.cwd); } catch { return false; }
     const relative = path.relative(root, realFile);
     return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
   });
+  return inside ? realFile : null;
+}
+
+/**
+ * Reads the checked real path, refusing when it was swapped (e.g. a directory replaced by a symlink) between
+ * the workspace check and the open: the opened file must still be the one the real path names.
+ */
+function readCheckedFile(realFile: string): Buffer | null {
+  let fd: number;
+  try { fd = fs.openSync(realFile, 'r'); } catch { return null; }
+  try {
+    const opened = fs.fstatSync(fd);
+    const current = fs.statSync(realFile);
+    if (!opened.isFile() || fs.realpathSync.native(realFile) !== realFile
+      || opened.ino !== current.ino || opened.dev !== current.dev) return null;
+    return fs.readFileSync(fd);
+  } catch {
+    return null;
+  } finally {
+    fs.closeSync(fd);
+  }
 }

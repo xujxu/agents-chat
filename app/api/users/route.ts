@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import * as configStore from '@/lib/configStore';
-import { getUserEmail, isEnvAdminEmail, parseEmailList } from '@/lib/auth';
+import { getUserEmail, isEnvAdminEmail, memberEmailsFor, parseEmailList } from '@/lib/auth';
 import { denyRole } from '@/lib/rbac';
 import { createLogger } from '@/lib/logger';
 
@@ -46,7 +46,7 @@ function listUsers(include: string[] = []): { users: UserEntry[]; envPatterns: {
     ...parseEmailList(process.env.MEMBER_EMAILS),
     ...parseEmailList(process.env.GITHUB_ALLOWED_EMAILS),
   ])];
-  const memberPatterns = parseEmailList(process.env.MEMBER_EMAILS).filter((e) => !EMAIL_RE.test(e));
+  const memberPatterns = parseEmailList(memberEmailsFor(undefined)).filter((e) => !EMAIL_RE.test(e));
   const envMemberPattern = (email: string) => memberPatterns.find((p) => p === '*' || (p.startsWith('@') && email.endsWith(p)));
   const agentNames = new Map(configStore.getAllAgents().map((agent) => [agent.id, agent.name || agent.id]));
   const users = new Map<string, UserEntry>();

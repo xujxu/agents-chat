@@ -523,6 +523,22 @@ export async function updateChatAgentSession(userId: string, chatId: string, age
   db.prepare('UPDATE chats SET agent_sessions = ? WHERE user_id = ? AND chat_id = ?').run(JSON.stringify(sessions), userId, chatId);
 }
 
+/** Whether a chat of some other user records `sessionId` as one of its sessions with `agentId`. */
+export function isAgentSessionOwnedByOtherUser(userId: string, agentId: string, sessionId: string): boolean {
+  if (!sessionId) return false;
+  const rows = getDb()
+    .prepare('SELECT agent_sessions FROM chats WHERE user_id != ? AND instr(agent_sessions, ?) > 0')
+    .all(userId, sessionId) as Array<{ agent_sessions: string | null }>;
+  return rows.some((row) => {
+    try {
+      const value = JSON.parse(row.agent_sessions || '{}')[agentId];
+      return value === sessionId || (Array.isArray(value) && value.includes(sessionId));
+    } catch {
+      return false;
+    }
+  });
+}
+
 export async function updateChatGitContext(userId: string, chatId: string, gitContext: StoredGitContext): Promise<void> {
   const db = getDb();
   // Changing git context invalidates previous ACP session affinity for this chat.

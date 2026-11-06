@@ -64,9 +64,8 @@ export function isEnvAdminEmail(email: string | undefined): boolean {
 export function isAdminToken(token: any): boolean {
   if (!token) return false;
   if (token.sub === 'admin') return true;
-  // OAuth sessions (token.provider set) are re-evaluated below so a role removed in the UI takes effect
-  // immediately; only provider-less tokens (minted internally) carry a trusted role claim.
-  if (token.role === 'admin' && !token.provider) return true;
+  // The role claim is never trusted on its own (older OAuth cookies carry no provider and could keep a revoked
+  // admin claim), so every other token is re-evaluated against env and the UI roles.
   const email = ((token.email as string) || '').toLowerCase();
   if (!email) return false;
   return isEnvAdminEmail(email) || getDbRole(email) === 'admin';
@@ -81,7 +80,7 @@ export function isAdminToken(token: any): boolean {
 export type UserRole = 'admin' | 'member' | 'guest';
 
 /**
- * MEMBER_EMAILS entries are emails, `@domain` suffixes or `*` (every signed-in user).
+ * MEMBER_EMAILS entries are emails, `@domain` suffixes or `*` (see `memberEmailsFor` for where `*` applies).
  * GITHUB_ALLOWED_EMAILS entries are members too, since that list already granted full access.
  */
 export function isMemberEmail(
@@ -97,6 +96,28 @@ export function isMemberEmail(
     || (pattern.startsWith('@') && normalized.endsWith(pattern)));
 }
 
+const MULTI_TENANT_ENTRA_IDS = new Set(['', 'common', 'organizations', 'consumers']);
+
+/** Whether AZURE_AD_TENANT_ID names one tenant, so Entra only admits that tenant's accounts. */
+export function isPinnedEntraTenant(tenantId: string | undefined = process.env.AZURE_AD_TENANT_ID): boolean {
+  return !MULTI_TENANT_ENTRA_IDS.has((tenantId || '').trim().toLowerCase());
+}
+
+/**
+ * MEMBER_EMAILS as it applies to this sign-in. The `*` wildcard admits every account of the pinned Entra
+ * tenant; it is dropped for GitHub (anyone can create an account) and when Entra is multi-tenant (any
+ * Microsoft account, with an email claim the user's own tenant controls).
+ */
+export function memberEmailsFor(
+  provider: string | undefined,
+  memberEmails: string | undefined = process.env.MEMBER_EMAILS,
+  tenantId: string | undefined = process.env.AZURE_AD_TENANT_ID,
+): string {
+  const entries = parseEmailList(memberEmails);
+  const wildcardAllowed = provider !== 'github' && isPinnedEntraTenant(tenantId);
+  return (wildcardAllowed ? entries : entries.filter((entry) => entry !== '*')).join(',');
+}
+
 /** The user's role, or null when they may not use the app at all. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function resolveUserRole(token: any, hasAnyAgentAccess: (email: string) => boolean): UserRole | null {
@@ -104,11 +125,7 @@ export function resolveUserRole(token: any, hasAnyAgentAccess: (email: string) =
   if (isAdminToken(token)) return 'admin';
   const email = getUserEmail(token);
   if (!email) return null;
-  // A MEMBER_EMAILS wildcard is meant for the Entra tenant, never for any GitHub account.
-  const memberEmails = token.provider === 'github'
-    ? parseEmailList(process.env.MEMBER_EMAILS).filter((entry) => entry !== '*').join(',')
-    : process.env.MEMBER_EMAILS;
-  if (isMemberEmail(email, memberEmails)) return 'member';
+  if (isMemberEmail(email, memberEmailsFor(token.provider))) return 'member';
   if (getDbRole(email) === 'member') return 'member';
   return hasAnyAgentAccess(email) ? 'guest' : null;
 }
