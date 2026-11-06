@@ -165,9 +165,147 @@ curl.exe -s -o NUL -w "%{http_code}`n" -X POST https://<public-host>/api/teams/m
    (see [Group chats](#group-chats)). Do not grant the `ChatMessage.Read.Chat` (RSC) permission;
    the bot does not need it.
 3. Use **Preview in Teams**, or **Publish → Download app package** and upload it in Teams through
-   **Apps → Manage your apps → Upload an app**. To make it available to others, publish it to your
-   organization's app catalog.
+   **Apps → Manage your apps → Upload an app**. To make it available to chosen colleagues, see
+   [Share the bot with colleagues](#share-the-bot-with-colleagues).
 4. Open the bot in Teams and send `/whoami`. It should show your agents-chat account.
+
+### Share the bot with colleagues
+
+A custom-uploaded app is visible only to you. To give specific people in your tenant the bot,
+without publishing it to the org catalog, upload it with **shared** scope and share it with them
+through the [Microsoft 365 Agents Toolkit CLI](https://learn.microsoft.com/microsoftteams/platform/toolkit/microsoft-365-agents-toolkit-cli)
+(`atk`). Only the people you add can find it; it does not appear in the store for anyone else.
+Your tenant's app-upload policy must allow this.
+
+The usual flow for a colleague:
+
+1. An admin shares an agent with them from the agent's settings → **Access Control** (their email
+   and the agent's share link). They open the link, sign in to agents-chat, and can use the agent
+   on the web.
+2. If they also want to use it from Teams, they ask the admin for the bot.
+3. The admin runs `scripts\teams-share.ps1 add <their email>`
+   ([below](#add-or-remove-colleagues-with-one-command)), which shares the bot with them and
+   allows them in `TEAMS_ALLOWED_USERS`. The script does not grant agent access; that was step 1.
+
+Setting up the shared app is a one-time job (steps 1–3 below). After that, each new colleague
+needs only the script run.
+
+The repo has a template in `teams-app/`. The filled-in copy holds your app package and the shared
+app's ids, so keep it out of git, like `.env.local`. For script deployments, keep it in
+`shared/teams-app/`.
+
+The commands below are PowerShell (on Linux, `atk` takes the same arguments). Set `$dir` to your
+folder in every new shell:
+
+```powershell
+$dir = 'C:\agents-chat\shared\teams-app'   # your deployment's shared\teams-app
+```
+
+1. **Set up the folder** (once). Install the CLI and, from the root of an agents-chat checkout,
+   copy the template:
+
+   ```powershell
+   npm install -g @microsoft/m365agentstoolkit-cli
+   New-Item -ItemType Directory -Force "$dir\env", "$dir\appPackage" | Out-Null
+   Copy-Item teams-app\m365agents.yml $dir
+   Copy-Item teams-app\env\.env.dev.example "$dir\env\.env.dev"
+   ```
+
+   The result is:
+
+   ```text
+   teams-app\
+     m365agents.yml          # from the template; no edits needed
+     env\.env.dev            # from .env.dev.example; leave the values empty
+     appPackage\teams-app.zip
+   ```
+
+2. **Add the app package.** In the [Developer Portal](https://dev.teams.microsoft.com/apps), open
+   your app (step 5), select **Publish → Download app package**, and save the zip as
+   `$dir\appPackage\teams-app.zip`. Do not unzip it. If you keep another file name, change
+   `appPackagePath` in `m365agents.yml` to match. Leave `scope: shared` as it is: the value must be
+   lowercase, or `atk provision` fails.
+
+3. **Sign in and upload** (once, and again after each app change). Sign in with an owner of the
+   Teams app; a browser window opens:
+
+   ```powershell
+   atk auth login m365
+   atk provision --env dev -f $dir -i false
+   ```
+
+   You do not type any ids. The first upload fills in `M365_TITLE_ID`, `M365_APP_ID`, and
+   `SHARE_LINK` in `env\.env.dev` and adds a `projectId` line to `m365agents.yml`. Check them with
+   `Get-Content "$dir\env\.env.dev"`. Keep both files: later uploads and shares use them to find the
+   same app, and without them `atk provision` creates a second shared copy. To upload a changed
+   package, increase `version` in the app's manifest (Developer Portal: **Basic information → Version**), download it again over the old zip, and run `atk provision` again.
+
+4. **Share** with each colleague. The bot then appears in their Teams apps; you can also send them
+   `SHARE_LINK` from `env\.env.dev` to open it directly.
+
+   ```powershell
+   atk share --env dev -f $dir --scope users --email 'alice@contoso.com,bob@contoso.com' -i false
+   atk share remove --env dev -f $dir --users 'bob@contoso.com' -i false   # revoke
+   ```
+
+5. **Allow them in agents-chat.** Sharing the Teams app does not grant any access to agents-chat.
+   Add each person to `TEAMS_ALLOWED_USERS` in `.env.local` (the bot ignores everyone else),
+   restart the service, and make sure they have an agents-chat role and access to the agents they
+   should use.
+
+#### `atk` command reference
+
+Run these in a PowerShell window on the machine that has the folder. If `atk` is not recognized
+after the install, open a new window, or call it by its full path
+(`& "$(npm prefix -g)\atk.cmd" ...`). `-i false` turns off the interactive prompts.
+
+| Task | Command |
+| --- | --- |
+| Sign in (opens a browser; the sign-in is cached, so this is needed only once or after it expires) | `atk auth login m365` |
+| Show the signed-in account | `atk auth list m365` |
+| Sign out | `atk auth logout m365` |
+| Upload or update the shared app | `atk provision --env dev -f $dir -i false` |
+| Share with users or groups | `atk share --env dev -f $dir --scope users --email 'a@contoso.com,b@contoso.com' -i false` |
+| Revoke a user's access | `atk share remove --env dev -f $dir --users 'a@contoso.com' -i false` |
+| Remove a co-owner | `atk share remove --env dev -f $dir --owners 'a@contoso.com' -i false` |
+| Help for any command | `atk <command> --help`, for example `atk share --help` |
+
+Do not use `atk share --scope tenant`: it shares the app with everyone in the tenant.
+
+#### Add or remove colleagues with one command
+
+Once steps 1–3 are done, `scripts\teams-share.ps1` does steps 4 and 5 for you, except agent
+access, which the colleague already has from the agent's share link. Like `update.ps1`, it is a thin wrapper around a Node.js script
+(`scripts\teams-share\cli.mjs`); on Linux use `scripts/teams-share.sh` with the `--option` names
+shown by `--help`. Run it from an **elevated** PowerShell, because it restarts the service:
+
+```powershell
+cd C:\path\to\agents-chat\current
+.\scripts\teams-share.ps1 add alice@contoso.com,bob@contoso.com   # share, allow, restart
+.\scripts\teams-share.ps1 remove bob@contoso.com                  # disallow, restart, revoke the share
+.\scripts\teams-share.ps1 list                                    # current allow-list and share link
+.\scripts\teams-share.ps1 add alice@contoso.com -DryRun           # check everything, change nothing
+```
+
+It finds the deployment root from where it is installed (`current\scripts\...`); from a source
+checkout, pass `-ProjectDir C:\path\to\agents-chat` or set `AGENTS_CHAT_PROJECT_DIR`. Other
+options: `-TeamsAppDir` (default `<root>\shared\teams-app`), `-Env` (default `dev`),
+`-NoRestart` (no elevation needed; restart yourself later), and `-WaitSeconds`. Run it with
+`-Help` for the full list.
+
+How it handles failures:
+
+- **Checks first.** Before changing anything it checks `.env.local`, the `teams-app` folder and its
+  `M365_TITLE_ID`, the `atk` install and sign-in, elevation, and that no deployment is running. It
+  lists every problem and exits with code 2 without changing anything.
+- **Safe order.** `add` shares in Teams before allowing in agents-chat; `remove` takes people off
+  the allow-list and restarts before revoking the share. If a step fails part-way, nobody ends up
+  with access you did not intend to give.
+- **Clear recovery.** On a failure it prints `FAILED`, what was already done, and the exact
+  commands to finish, then exits with code 1. Every step is safe to repeat, so rerunning the same
+  command is usually enough.
+- **Backup.** Before changing `.env.local`, it saves the previous version as `.env.local.bak`. If
+  the file does not read back correctly after the write, it restores the backup.
 
 ## Option B: Key Vault token (no client secret)
 
@@ -288,8 +426,10 @@ lasts about 24 hours, so a few failed runs cause no outage.
   "not allowed" message), so the bot does not reveal itself to people who find or add it.
 - **Keeping the app private.** Do not use **Publish → Publish to your org** in the Developer Portal;
   install it for yourself with **Preview in Teams** or a custom upload, keep yourself as the only
-  owner, and do not share the app package. Teams cannot stop someone who learns the bot app id from
-  uploading their own package for it, which is why the allow-list is enforced on the server.
+  owner, and share it only through [shared scope](#share-the-bot-with-colleagues), not by handing
+  out the app package. Keep the app package and your `teams-app` folder out of git. Teams cannot
+  stop someone who learns the bot app id from uploading their own package for it, which is why the
+  allow-list is enforced on the server.
 - **Session.** The bridge mints a short-lived (1 hour) NextAuth session token in memory and uses it
   only on the loopback call to `/api/acp`. It is never sent to Teams or written to disk.
 - **Credentials.** Option B stores no credential on the server or in Azure. Key Vault holds only the
