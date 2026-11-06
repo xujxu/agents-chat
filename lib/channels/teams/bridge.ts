@@ -457,7 +457,7 @@ async function runTurn(config: TeamsConfig, ref: ConversationRef, user: TeamsUse
   const agentId = activeAgentId(config, user, ref.conversationId);
   state.agentId = agentId;
   const agentName = agentDisplayName(agentId);
-  const streamer = new TeamsStreamer(config, ref, undefined, `*🤖 ${agentName}*`);
+  const streamer = new TeamsStreamer(config, ref, undefined, agentLabel(agentName));
   const indicator = streamer.informative(thinkingLine(agentName));
   const slowTimers: ReturnType<typeof setTimeout>[] = [];
   try {
@@ -540,7 +540,8 @@ async function pollTurn(
     if (request?.id && request.id !== state.pendingRequest?.id && request.id !== state.answeredRequestId) {
       state.pendingRequest = request;
       await streamer.flush(fullText);
-      await sendText(config, ref, ref.isGroup ? `${formatUserRequest(request)}\n_@mention me with your reply._` : formatUserRequest(request));
+      const question = `${agentLabel(agentName)}\n\n${formatUserRequest(request)}`;
+      await sendText(config, ref, ref.isGroup ? `${question}\n_@mention me with your reply._` : question);
     } else if (!request) {
       state.pendingRequest = undefined;
     }
@@ -567,6 +568,10 @@ async function pollTurn(
 /** Name shown on replies so users can tell which agent answered. */
 function agentDisplayName(agentId: string): string {
   return configStore.getAgentById(agentId)?.name?.trim() || agentId;
+}
+
+function agentLabel(agentName: string): string {
+  return `*🤖 ${agentName}*`;
 }
 
 function thinkingLine(agentName: string): string {

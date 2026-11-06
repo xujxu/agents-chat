@@ -130,7 +130,7 @@ async function main() {
     const aliceTurn = handleActivity(activity('29:alice', '<at>agent-xujx</at> deploy it', [botMention]), config);
     await waitFor(() => since(aliceStart).posts.some((p) => p.type === 'message' && /Allow/.test(p.text || '')), 'Alice permission prompt');
     const prompt = since(aliceStart).posts.find((p) => p.type === 'message' && /Allow/.test(p.text || ''));
-    assert.match(prompt.text, /^<at>alice<\/at> /);
+    assert.match(prompt.text, /^<at>alice<\/at> \*🤖 teams\*\n\n/, 'question labeled with the agent name');
     assert.match(prompt.text, /@mention me with your reply/);
 
     r = await run(activity('29:bob', '<at>agent-xujx</at> 1', [botMention]));
