@@ -240,6 +240,25 @@ $dir = 'C:\agents-chat\shared\teams-app'   # your deployment's shared\teams-app
    restart the service, and make sure they have an agents-chat role and access to the agents they
    should use.
 
+#### `atk` command reference
+
+Run these in a PowerShell window on the machine that has the folder. If `atk` is not recognized
+after the install, open a new window, or call it by its full path
+(`& "$(npm prefix -g)\atk.cmd" ...`). `-i false` turns off the interactive prompts.
+
+| Task | Command |
+| --- | --- |
+| Sign in (opens a browser; the sign-in is cached, so this is needed only once or after it expires) | `atk auth login m365` |
+| Show the signed-in account | `atk auth list m365` |
+| Sign out | `atk auth logout m365` |
+| Upload or update the shared app | `atk provision --env dev -f $dir -i false` |
+| Share with users or groups | `atk share --env dev -f $dir --scope users --email 'a@contoso.com,b@contoso.com' -i false` |
+| Revoke a user's access | `atk share remove --env dev -f $dir --users 'a@contoso.com' -i false` |
+| Remove a co-owner | `atk share remove --env dev -f $dir --owners 'a@contoso.com' -i false` |
+| Help for any command | `atk <command> --help`, for example `atk share --help` |
+
+Do not use `atk share --scope tenant`: it shares the app with everyone in the tenant.
+
 ## Option B: Key Vault token (no client secret)
 
 No long-lived credential is stored anywhere. A scheduled Container Apps job signs in with a
