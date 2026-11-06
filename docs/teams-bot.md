@@ -59,6 +59,7 @@ flowchart LR
 | `/agent [number or name]` | List the agents you can use, or switch this conversation to one. The choice is per person and per conversation; switching back continues that agent's earlier chat |
 | `/session [number or words]` | List your sessions (agents-chat chats) with the current agent, switch this conversation to one by number or chat id, or search them by name and message text like the web UI's chat search |
 | `/model [number or name]` | List the agent's models, or switch to one (also changes your model for this agent in the web UI) |
+| `/extend`, `/approve`, `/deny` | Request or review more time on shared agents (1:1 chat; see [Sharing reminders](#sharing-reminders)) |
 | `/help` | Show help |
 
 Teams turns use the same model as the web UI: the model you last picked for this agent in agents-chat, otherwise the agent's default model.
@@ -77,11 +78,26 @@ see the replies.
 
 The bot sends Teams messages about [shared agents](../README.md#sharing-an-agent):
 
-- **Recipients:** 3 days before their access to a shared agent expires, with a link to agents-chat
-  where they can choose **Request 30 more days**. Sent once per expiry; an approved extension is
+- **Recipients:** 3 days before their access to a shared agent expires. They can reply `/extend` or
+  choose **Request 30 more days** in agents-chat. Sent once per expiry; an approved extension is
   reminded again when the new expiry comes close.
-- **Admins** (`ADMIN_EMAILS` and users with the admin role): when someone asks for more days, with a
-  link to approve or deny it. Sent once per request.
+- **Admins** (`ADMIN_EMAILS` and users with the admin role): when someone asks for more days. They
+  can reply `/approve` or `/deny`, or decide in agents-chat. Sent once per request.
+- **Recipients**, when their request is approved (with the new expiry date) or denied, from Teams or
+  the web UI. Sent once, best-effort.
+
+Commands (1:1 chat only):
+
+| Command | Who | What it does |
+|---------|-----|--------------|
+| `/extend` | Recipient | Lists shared agents that expire within 3 days (or recently expired) |
+| `/extend <number or name>` | Recipient | Asks admins for 30 more days, like **Request 30 more days** |
+| `/approve`, `/deny` | Admin | Lists pending requests, numbered |
+| `/approve <number>` | Admin | Grants the requested days and tells the recipient |
+| `/deny <number>` | Admin | Declines the request and tells the recipient |
+
+Numbers refer to the last list you were shown; if the request was handled or changed since, the bot
+asks you to list again.
 
 Messages go only to people in `TEAMS_ALLOWED_USERS` who have messaged the bot in a 1:1 chat at least
 once (the bot remembers their latest 1:1 chat). Everyone else still gets the in-app notices. The

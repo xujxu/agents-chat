@@ -8,6 +8,7 @@ import type { AgentModel } from '@/lib/configStore';
 import { createLogger } from '@/lib/logger';
 import type { TeamsConfig } from './config';
 import { getMember, sendText, type ConversationRef } from './connector';
+import { decideCommand, extendCommand } from './shareCommands';
 import { TeamsStreamer } from './stream';
 import {
   buildUserRequestAnswer,
@@ -99,6 +100,8 @@ const HELP_TEXT = [
   '- `/agent [number or name]` – list agents you can use, or switch to one (each agent keeps its own conversation)',
   '- `/session [number or words]` – list your sessions with the current agent, switch to one, or search them',
   '- `/model [number or name]` – list models, or switch to one',
+  '- `/extend [number]` – ask for more time on an agent shared with you that expires soon (1:1 chat only)',
+  '- `/approve [number]`, `/deny [number]` – admins: review requests for more time (1:1 chat only)',
   '- `/help` – show this help',
   '',
   'Anything else is sent to the agent. Conversations also appear in the agents-chat web UI.',
@@ -271,6 +274,18 @@ async function handleMessage(
       return;
     case 'stop':
       await sendText(config, ref, 'Nothing is running.');
+      return;
+    case 'extend':
+    case 'approve':
+    case 'deny':
+      if (isGroup) {
+        await sendText(config, ref, 'Send this command in a 1:1 chat with me.');
+      } else if (command.name === 'extend') {
+        await sendText(config, ref, extendCommand(config, user.email, command.args));
+      } else {
+        const admin = { email: user.email, isAdmin: userRole(user) === 'admin' };
+        await sendText(config, ref, decideCommand(config, admin, ref.conversationId, command.args, command.name === 'approve'));
+      }
       return;
     case 'new':
       configStore.setUserSetting(user.email, chatSettingKey(config, activeAgentId(config, user, ref.conversationId), ref.conversationId), '');

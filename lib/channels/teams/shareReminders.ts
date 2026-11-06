@@ -59,7 +59,7 @@ async function run(config: TeamsConfig): Promise<ReminderResult> {
   for (const grant of configStore.listGrantsDueForTeamsReminder()) {
     const text = [
       `⏰ Your access to the **${grant.agentName}** agent ${expiresIn(grant.expiresAt)} (${formatDate(grant.expiresAt)}).`,
-      `To keep using it, ${appUrl ? `open [agents-chat](${appUrl})` : 'open agents-chat'} and choose **Request 30 more days** on the notice, or ask an admin.`,
+      `To keep using it, send \`/extend\` here, or ${appUrl ? `open [agents-chat](${appUrl})` : 'open agents-chat'} and choose **Request 30 more days** on the notice.`,
     ].join('\n\n');
     if (await notify(config, grant.email, text, result)) {
       configStore.markTeamsExpiryReminded(grant.agentId, grant.email, grant.expiresAt);
@@ -72,7 +72,7 @@ async function run(config: TeamsConfig): Promise<ReminderResult> {
     for (const request of requests) {
       const text = [
         `📝 **${request.email}** asked for ${request.extensionDays} more days on the **${request.agentName}** agent (access ${request.status === 'expired' ? 'expired' : 'expires'} ${formatDate(request.expiresAt)}).`,
-        `${appUrl ? `Open [agents-chat](${appUrl})` : 'Open agents-chat'} to approve or deny it.`,
+        `Send \`/approve\` or \`/deny\` here, or ${appUrl ? `open [agents-chat](${appUrl})` : 'open agents-chat'}, to decide.`,
       ].join('\n\n');
       let delivered = false;
       for (const admin of admins) {
@@ -84,6 +84,25 @@ async function run(config: TeamsConfig): Promise<ReminderResult> {
 
   if (result.sent || result.failed) logger.info(result, 'Teams share reminders sent');
   return result;
+}
+
+/**
+ * Tells the recipient in Teams that an admin approved or denied their extension request. Best-effort:
+ * sent once, only if they are reachable; the web UI shows the new expiry either way.
+ */
+export async function notifyExtensionDecision(
+  grant: { agentId: string; email: string },
+  approved: boolean,
+  config: TeamsConfig | null = getTeamsConfig(),
+): Promise<boolean> {
+  if (!config) return false;
+  const agent = configStore.getAgentById(grant.agentId);
+  const agentName = agent?.name || grant.agentId;
+  const access = configStore.getAgentAccess(grant.agentId, grant.email);
+  const text = approved
+    ? `✅ Your request was approved: you can use the **${agentName}** agent until ${access ? formatDate(access.expiresAt) : 'the new expiry date'}.`
+    : `❌ Your request for more days on the **${agentName}** agent was denied. Ask an admin if you still need it.`;
+  return notify(config, grant.email, text, { sent: 0, failed: 0 });
 }
 
 /** True when the message was delivered. People the bot cannot reach are skipped quietly. */

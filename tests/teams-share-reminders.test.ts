@@ -36,7 +36,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
 const config = {
   appId: 'bot-app', appSecret: 'test-secret', tokenVault: '', tokenSecretName: 'teams-bot-token',
   tenantId: TENANT, authTenant: TENANT, agentId: 'teams',
-  allowedUsers: ['alice@contoso.com', 'bob@contoso.com', 'admin@contoso.com', 'boss@contoso.com'], internalBaseUrl: 'http://127.0.0.1:9',
+  allowedUsers: ['alice@contoso.com', 'bob@contoso.com', 'admin@contoso.com', 'boss@contoso.com', 'dave@contoso.com'], internalBaseUrl: 'http://127.0.0.1:9',
 };
 
 function personalChat(email: string) {
@@ -133,6 +133,59 @@ async function main() {
     configStore.saveTeamsConversation('admin@contoso.com', personalChat('admin@contoso.com'));
     r = await runOnce();
     assert.deepEqual(r.posts.map((p) => p.conversationId), ['dm-admin'], 'retried once an admin is reachable');
+
+    // Teams commands: /extend (recipients), /approve and /deny (admins), and the decision sent to the recipient.
+    const say = async (email: string, text: string, conversationType = 'personal') => {
+      const name = email.split('@')[0];
+      const conversationId = conversationType === 'personal' ? `dm-${name}` : 'group-1';
+      const activity = message(`29:${name}`, conversationType, conversationId);
+      const start = posts.length;
+      await handleActivity({ ...activity, id: `in-${posts.length}-${text}`, text: conversationType === 'personal' ? text : `<at>agent-xujx</at> ${text}`,
+        entities: conversationType === 'personal' ? [] : [{ type: 'mention', mentioned: { id: '28:bot-app', name: 'agent-xujx' }, text: '<at>agent-xujx</at>' }] }, config);
+      await new Promise((resolve) => setTimeout(resolve, 50)); // let background notices finish
+      return posts.slice(start);
+    };
+    const reply = async (email: string, text: string, conversationType?: string) =>
+      (await say(email, text, conversationType)).find((p) => p.conversationId === (conversationType ? 'group-1' : `dm-${email.split('@')[0]}`))?.text || '';
+    assert.ok(configStore.denyAgentAccessExtension('research', 'alice@contoso.com'));
+    configStore.saveTeamsConversation('boss@contoso.com', personalChat('boss@contoso.com'));
+    configStore.saveTeamsConversation('bob@contoso.com', personalChat('bob@contoso.com'));
+    configStore.saveTeamsConversation('dave@contoso.com', personalChat('dave@contoso.com'));
+
+    assert.match(await reply('bob@contoso.com', '/extend', 'groupChat'), /1:1 chat/);
+    assert.match(await reply('alice@contoso.com', '/extend'), /1\. \*\*Research\*\* – expires/);
+    let sent = await say('alice@contoso.com', '/extend 1');
+    assert.match(sent.find((p) => p.conversationId === 'dm-alice')!.text, /Asked for 30 more days on \*\*Research\*\*/);
+    assert.deepEqual(sent.filter((p) => /^dm-(admin|boss)$/.test(p.conversationId)).map((p) => p.conversationId).sort(), ['dm-admin', 'dm-boss'], 'admins notified');
+    assert.match(sent.find((p) => p.conversationId === 'dm-admin')!.text, /`\/approve`/);
+    assert.match(await reply('alice@contoso.com', '/extend research'), /already asked/);
+    assert.equal(configStore.listAgentAccessExtensionRequests().length, 1);
+
+    assert.match(await reply('bob@contoso.com', '/approve'), /Only admins/);
+    assert.match(await reply('admin@contoso.com', '/approve 1'), /Send `\/approve` first/);
+    assert.match(await reply('admin@contoso.com', '/approve'), /1\. \*\*alice@contoso\.com\*\* – 30 more days on \*\*Research\*\*/);
+    // Handled elsewhere (e.g. the web UI) after the list was shown: the stale number is refused.
+    assert.ok(configStore.denyAgentAccessExtension('research', 'alice@contoso.com'));
+    assert.match(await reply('admin@contoso.com', '/approve 1'), /already handled or changed/);
+
+    const before = configStore.getAgentAccess('research', 'alice@contoso.com')!.expiresAt;
+    await say('alice@contoso.com', '/extend 1');
+    await reply('admin@contoso.com', '/approve');
+    sent = await say('admin@contoso.com', '/approve 1');
+    assert.match(sent.find((p) => p.conversationId === 'dm-admin')!.text, /Approved: \*\*alice@contoso\.com\*\* can use \*\*Research\*\* until/);
+    assert.match(sent.find((p) => p.conversationId === 'dm-alice')!.text, /approved: you can use the \*\*Research\*\* agent until/);
+    assert.ok(configStore.getAgentAccess('research', 'alice@contoso.com')!.expiresAt > before);
+    assert.match(await reply('alice@contoso.com', '/extend 1'), /No matching agent|expires/);
+
+    await say('bob@contoso.com', '/extend 1');
+    await reply('boss@contoso.com', '/deny');
+    sent = await say('boss@contoso.com', '/deny 1');
+    assert.match(sent.find((p) => p.conversationId === 'dm-boss')!.text, /Denied the request from \*\*bob@contoso\.com\*\*/);
+    assert.match(sent.find((p) => p.conversationId === 'dm-bob')!.text, /was denied/);
+    assert.equal(configStore.listAgentAccessExtensionRequests().length, 0);
+
+    // Dave's access is not close to expiring yet.
+    assert.match(await reply('dave@contoso.com', '/extend research'), /from 3 days before/);
 
     db.close();
     console.log('teams share reminders: ok');

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as configStore from '@/lib/configStore';
 import { getAuthToken, getUserEmail } from '@/lib/auth';
 import { canUseAgent, getUserRole } from '@/lib/rbac';
-import { sendShareReminders } from '@/lib/channels/teams/shareReminders';
+import { notifyExtensionDecision, sendShareReminders } from '@/lib/channels/teams/shareReminders';
 
 export const dynamic = 'force-dynamic';
 
@@ -84,10 +84,13 @@ export async function POST(req: NextRequest) {
     const requested = configStore.getAgentAccess(agentId, target)?.extensionDays;
     const days = Number(body?.days ?? (action === 'approve-extension' && requested ? requested : configStore.SHARE_DAYS));
     if (!configStore.extendAgentAccess(agentId, target, days)) return json({ ok: false, error: 'invalid_request' }, 400);
+    // Only answer a pending request; a plain extension by an admin is not a reply to anything.
+    if (requested) void notifyExtensionDecision({ agentId, email: target }, true).catch(() => undefined);
     return json({ ok: true });
   }
   if (action === 'deny-extension') {
     if (!configStore.denyAgentAccessExtension(agentId, target)) return json({ ok: false, error: 'not_found' }, 404);
+    void notifyExtensionDecision({ agentId, email: target }, false).catch(() => undefined);
     return json({ ok: true });
   }
   return json({ ok: false, error: 'unknown_action' }, 400);
