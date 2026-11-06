@@ -73,6 +73,23 @@ search result, and the choice is per person, per conversation, and per agent. In
 `/session` only lists and opens sessions started in that group chat, because everyone there can
 see the replies.
 
+## Sharing reminders
+
+The bot sends Teams messages about [shared agents](../README.md#sharing-an-agent):
+
+- **Recipients:** 3 days before their access to a shared agent expires, with a link to agents-chat
+  where they can choose **Request 30 more days**. Sent once per expiry; an approved extension is
+  reminded again when the new expiry comes close.
+- **Admins** (`ADMIN_EMAILS` and users with the admin role): when someone asks for more days, with a
+  link to approve or deny it. Sent once per request.
+
+Messages go only to people in `TEAMS_ALLOWED_USERS` who have messaged the bot in a 1:1 chat at least
+once (the bot remembers their latest 1:1 chat). Everyone else still gets the in-app notices. The
+check runs a minute after startup, then hourly, and right after an extension request. Messages that
+cannot be delivered are retried on the next check; if Teams reports that the person removed the bot
+(403/404), the bot forgets that chat until they message it again. Links use `NEXTAUTH_URL` when it
+is an `https://` address.
+
 ## Group chats
 
 When the **Group chat** scope is enabled, anyone in the chat can add the bot (chat header → **+** /

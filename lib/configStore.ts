@@ -100,8 +100,20 @@ function getDb(): ReturnType<typeof Database> {
       accepted_at TEXT,
       extension_days INTEGER,
       extension_requested_at TEXT,
+      expiry_reminded_for TEXT,
+      extension_notified_for TEXT,
       PRIMARY KEY (agent_id, email),
       FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS teams_conversations (
+      email TEXT PRIMARY KEY,
+      service_url TEXT NOT NULL,
+      conversation_id TEXT NOT NULL,
+      bot_id TEXT NOT NULL,
+      bot_name TEXT,
+      user_id TEXT NOT NULL,
+      user_name TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE TABLE IF NOT EXISTS agent_share_links (
       agent_id TEXT PRIMARY KEY,
@@ -284,6 +296,19 @@ function runMigrations(): void {
     db.prepare(`UPDATE agent_access SET accepted_at = COALESCE(accepted_at, created_at),
       expires_at = COALESCE(expires_at, datetime('now', '+${SHARE_DAYS} days'))`).run();
     db.prepare('INSERT OR IGNORE INTO migrations (key) VALUES (?)').run('agent_access_sharing');
+  }
+
+  // Teams reminders: remember which expiry and which extension request were already announced in Teams.
+  const remindersMigrated = db.prepare('SELECT 1 FROM migrations WHERE key = ?').get('agent_access_teams_reminders');
+  if (!remindersMigrated) {
+    for (const column of ['expiry_reminded_for TEXT', 'extension_notified_for TEXT']) {
+      try {
+        db.exec(`ALTER TABLE agent_access ADD COLUMN ${column}`);
+      } catch {
+        // Column already exists if DB was created fresh with the new schema
+      }
+    }
+    db.prepare('INSERT OR IGNORE INTO migrations (key) VALUES (?)').run('agent_access_teams_reminders');
   }
 }
 
@@ -549,6 +574,8 @@ export function deleteNode(name: string): boolean {
 export const SHARE_DAYS = 30;
 export const EXPIRED_GRACE_DAYS = 30;
 export const MAX_EXTENSION_DAYS = 90;
+/** Days before expiry when recipients are reminded (in the app and in Teams) and may ask for more time. */
+export const SHARE_REMIND_DAYS = 3;
 
 export type AgentAccessStatus = 'pending' | 'active' | 'expired';
 export type AgentAccessEntry = {
@@ -692,6 +719,87 @@ export function denyAgentAccessExtension(agentId: string, email: string): boolea
   const result = db.prepare(`UPDATE agent_access SET extension_days = NULL, extension_requested_at = NULL
     WHERE agent_id = ? AND email = ? AND extension_requested_at IS NOT NULL`).run(agentId, email.toLowerCase());
   return result.changes > 0;
+}
+
+// ─── Teams reminders (sent only to people who have a 1:1 chat with the Teams bot) ───
+
+export type GrantNotice = AgentAccessEntry & { agentId: string; agentName: string };
+
+/** Active grants expiring within `remindDays` whose current expiry has not been announced in Teams yet. */
+export function listGrantsDueForTeamsReminder(remindDays = SHARE_REMIND_DAYS): GrantNotice[] {
+  const rows = getDb().prepare(`SELECT a.agent_id, COALESCE(ag.name, a.agent_id) AS agent_name, ${accessColumns('a.')}
+    FROM agent_access a LEFT JOIN agents ag ON ag.id = a.agent_id
+    WHERE a.accepted_at IS NOT NULL AND a.expires_at > datetime('now') AND a.expires_at <= datetime('now', ?)
+      AND a.extension_requested_at IS NULL AND (a.expiry_reminded_for IS NULL OR a.expiry_reminded_for <> a.expires_at)
+    ORDER BY a.expires_at`).all(`+${remindDays} days`) as any[];
+  return rows.map(r => ({ ...toAccessEntry(r), agentId: r.agent_id, agentName: r.agent_name }));
+}
+
+/** Records the reminder for this expiry only, so an extension (a new expiry) is reminded again later. */
+export function markTeamsExpiryReminded(agentId: string, email: string, expiresAt: string): boolean {
+  const result = getDb().prepare(`UPDATE agent_access SET expiry_reminded_for = expires_at
+    WHERE agent_id = ? AND email = ? AND expires_at = ?`).run(agentId, email.toLowerCase(), isoToSqliteTime(expiresAt));
+  return result.changes > 0;
+}
+
+/** Extension requests that admins have not been told about in Teams yet. */
+export function listExtensionRequestsDueForTeamsNotice(): GrantNotice[] {
+  const rows = getDb().prepare(`SELECT a.agent_id, COALESCE(ag.name, a.agent_id) AS agent_name, ${accessColumns('a.')}
+    FROM agent_access a LEFT JOIN agents ag ON ag.id = a.agent_id
+    WHERE a.extension_requested_at IS NOT NULL
+      AND (a.extension_notified_for IS NULL OR a.extension_notified_for <> a.extension_requested_at)
+    ORDER BY a.extension_requested_at`).all() as any[];
+  return rows.map(r => ({ ...toAccessEntry(r), agentId: r.agent_id, agentName: r.agent_name }));
+}
+
+export function markTeamsExtensionNotified(agentId: string, email: string, requestedAt: string): boolean {
+  const result = getDb().prepare(`UPDATE agent_access SET extension_notified_for = extension_requested_at
+    WHERE agent_id = ? AND email = ? AND extension_requested_at = ?`).run(agentId, email.toLowerCase(), isoToSqliteTime(requestedAt));
+  return result.changes > 0;
+}
+
+/** ISO-8601 from `sqliteTimeToIso` back to SQLite `datetime()` text. */
+function isoToSqliteTime(value: string): string {
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value) ? value.slice(0, 19).replace('T', ' ') : value;
+}
+
+/** Where to reach a person proactively: their latest 1:1 chat with the Teams bot. */
+export type TeamsConversation = {
+  serviceUrl: string;
+  conversationId: string;
+  botId: string;
+  botName?: string;
+  userId: string;
+  userName?: string;
+};
+
+export function saveTeamsConversation(email: string, ref: TeamsConversation): void {
+  getDb().prepare(`INSERT INTO teams_conversations (email, service_url, conversation_id, bot_id, bot_name, user_id, user_name)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(email) DO UPDATE SET service_url = excluded.service_url, conversation_id = excluded.conversation_id,
+      bot_id = excluded.bot_id, bot_name = excluded.bot_name, user_id = excluded.user_id, user_name = excluded.user_name,
+      updated_at = datetime('now')`).run(
+    email.toLowerCase(), ref.serviceUrl, ref.conversationId, ref.botId, ref.botName ?? null, ref.userId, ref.userName ?? null,
+  );
+}
+
+export function getTeamsConversation(email: string): TeamsConversation | null {
+  const row = getDb().prepare('SELECT * FROM teams_conversations WHERE email = ?').get(email.toLowerCase()) as any;
+  if (!row) return null;
+  return {
+    serviceUrl: row.service_url,
+    conversationId: row.conversation_id,
+    botId: row.bot_id,
+    botName: row.bot_name ?? undefined,
+    userId: row.user_id,
+    userName: row.user_name ?? undefined,
+  };
+}
+
+/** Forgets a chat the bot can no longer post to (e.g. the person removed the app). */
+export function removeTeamsConversation(email: string, conversationId: string): boolean {
+  return getDb().prepare('DELETE FROM teams_conversations WHERE email = ? AND conversation_id = ?')
+    .run(email.toLowerCase(), conversationId).changes > 0;
 }
 
 // ─── Agent share links (one per agent; the link alone grants nothing without a grant) ───

@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as configStore from '@/lib/configStore';
 import { getAuthToken, getUserEmail } from '@/lib/auth';
 import { canUseAgent, getUserRole } from '@/lib/rbac';
+import { sendShareReminders } from '@/lib/channels/teams/shareReminders';
 
 export const dynamic = 'force-dynamic';
 
-/** Days before expiry when recipients are reminded and may ask for more time. */
-const REMIND_DAYS = 3;
+const REMIND_DAYS = configStore.SHARE_REMIND_DAYS;
 
 function json(body: Record<string, unknown>, status = 200) {
   return NextResponse.json(body, { status });
@@ -62,6 +62,8 @@ export async function POST(req: NextRequest) {
     const days = Number(body?.days ?? configStore.SHARE_DAYS);
     if (!agentId || !email) return json({ ok: false, error: 'missing_agentId' }, 400);
     if (!configStore.requestAgentAccessExtension(agentId, email, days)) return json({ ok: false, error: 'not_allowed' }, 400);
+    // Tell admins in Teams now rather than at the next hourly check; best-effort.
+    void sendShareReminders().catch(() => undefined);
     return json({ ok: true });
   }
 

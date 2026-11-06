@@ -147,8 +147,10 @@ export async function handleActivity(activity: TeamsActivity, config: TeamsConfi
     const conversationType = activity.conversation?.conversationType;
     if (!botAdded || (conversationType !== 'personal' && conversationType !== 'groupChat')) return;
     // Welcome only allowed users, so the bot stays silent to anyone else who installs or adds it.
-    if (!(await authorize(config, ref, activity))) return;
+    const user = await authorize(config, ref, activity);
+    if (!user) return;
     if (conversationType === 'personal') {
+      rememberPersonalChat(ref, user);
       await sendText(config, { ...ref, replyToId: undefined }, `Hi! I connect you to the **${config.agentId}** agent in agents-chat.\n\n${HELP_TEXT}`);
     } else {
       await sendText(config, { ...ref, replyToId: undefined }, `Hi! I connect you to the **${config.agentId}** agent in agents-chat. @mention me with your question.\n\n${GROUP_HELP_TEXT}`);
@@ -220,6 +222,7 @@ async function handleMessage(
   const user = await authorize(config, ref, activity);
   if (!user) return;
   onAuthorized();
+  if (!isGroup) rememberPersonalChat(ref, user);
 
   const text = cleanIncomingText(activity.text, activity.entities, ref.botId);
   if (!text) {
@@ -279,6 +282,17 @@ async function handleMessage(
       return;
     default:
       await runTurn(config, ref, user, state, text);
+  }
+}
+
+/** Keeps the person's 1:1 chat so the bot can message them later (share expiry reminders). */
+function rememberPersonalChat(ref: ConversationRef, user: TeamsUser): void {
+  try {
+    configStore.saveTeamsConversation(user.email, {
+      serviceUrl: ref.serviceUrl, conversationId: ref.conversationId, botId: ref.botId, botName: ref.botName, userId: ref.userId, userName: ref.userName,
+    });
+  } catch (err) {
+    logger.warn({ err: err instanceof Error ? err.message : String(err) }, 'Could not save the Teams chat for reminders');
   }
 }
 
