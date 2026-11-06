@@ -9,6 +9,7 @@ type UserEntry = {
   role: Role;
   sources: Source[];
   uiRole: 'admin' | 'member' | null;
+  envMember?: string;
   grantedBy?: string;
   agents: { id: string; name: string }[];
 };
@@ -18,6 +19,7 @@ type UsersResponse = {
   me?: string;
   users?: UserEntry[];
   envPatterns?: { admins: string[]; members: string[] };
+  remaining?: { role: Role; envMember?: string } | null;
 };
 
 const ROLE_LABEL: Record<Role, string> = { admin: 'Admin', member: 'Member', guest: 'Guest' };
@@ -36,6 +38,7 @@ export type UsersRolesDialogProps = { onClose: () => void };
 export function UsersRolesDialog({ onClose }: UsersRolesDialogProps) {
   const [data, setData] = useState<UsersResponse | null>(null);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'admin' | 'member'>('member');
@@ -47,8 +50,9 @@ export function UsersRolesDialog({ onClose }: UsersRolesDialogProps) {
       return false;
     }
     setError('');
+    setNotice('');
     setData(body);
-    return true;
+    return body;
   }, []);
 
   useEffect(() => {
@@ -77,11 +81,18 @@ export function UsersRolesDialog({ onClose }: UsersRolesDialogProps) {
     }
   };
 
-  const removeUserRole = async (targetEmail: string) => {
-    if (!window.confirm(`Remove the UI role for ${targetEmail}?`)) return;
+  const removeUserRole = async (user: UserEntry) => {
+    const targetEmail = user.email;
+    const keeps = user.envMember ? `\n\n${targetEmail} will stay a Member via MEMBER_EMAILS (${user.envMember}); edit the server env to revoke that.` : '';
+    if (!window.confirm(`Remove the UI role for ${targetEmail}?${keeps}`)) return;
     setBusy(true);
     try {
-      await apply(await fetch(`/api/users?email=${encodeURIComponent(targetEmail)}`, { method: 'DELETE' }));
+      const body = await apply(await fetch(`/api/users?email=${encodeURIComponent(targetEmail)}`, { method: 'DELETE' }));
+      const remaining = body ? body.remaining : null;
+      if (remaining) {
+        const via = remaining.envMember ? `MEMBER_EMAILS (${remaining.envMember})` : 'an agent access grant';
+        setNotice(`Removed the UI role, but ${targetEmail} is still ${remaining.role === 'guest' ? 'a Guest' : `a ${ROLE_LABEL[remaining.role]}`} via ${via}.`);
+      }
     } catch {
       setError('Could not remove the role.');
     } finally {
@@ -123,6 +134,7 @@ export function UsersRolesDialog({ onClose }: UsersRolesDialogProps) {
         </form>
 
         {error ? <p className="usersRolesError" role="alert">{error}</p> : null}
+        {notice ? <p className="usersRolesNotice" role="status">{notice}</p> : null}
 
         {!data ? (
           !error ? <p className="muted">Loading…</p> : null
@@ -137,7 +149,11 @@ export function UsersRolesDialog({ onClose }: UsersRolesDialogProps) {
                     <span className="usersRolesEmail">{user.email}{isMe ? ' (you)' : ''}</span>
                     <span className="usersRolesMeta">
                       <span className={`usersRolesBadge role-${user.role}`}>{ROLE_LABEL[user.role]}</span>
-                      {user.sources.map((source) => <span key={source} className="usersRolesSource">{SOURCE_LABEL[source]}</span>)}
+                      {user.sources.map((source) => (
+                        <span key={source} className="usersRolesSource" title={source === 'env' && user.envMember ? `MEMBER_EMAILS: ${user.envMember}` : undefined}>
+                          {source === 'env' && user.envMember && user.envMember !== user.email ? `env (${user.envMember})` : SOURCE_LABEL[source]}
+                        </span>
+                      ))}
                       {user.agents.length ? <span className="usersRolesAgents" title={user.agents.map((a) => a.name).join(', ')}>{user.agents.length} agent{user.agents.length === 1 ? '' : 's'}</span> : null}
                     </span>
                   </div>
@@ -150,7 +166,7 @@ export function UsersRolesDialog({ onClose }: UsersRolesDialogProps) {
                         onChange={(e) => {
                           const next = e.target.value;
                           if (next === 'admin' || next === 'member') void setUserRole(user.email, next);
-                          else if (user.uiRole) void removeUserRole(user.email);
+                          else if (user.uiRole) void removeUserRole(user);
                         }}
                       >
                         <option value="">{user.uiRole ? 'Remove UI role' : '— no UI role —'}</option>

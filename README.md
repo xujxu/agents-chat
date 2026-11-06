@@ -382,7 +382,7 @@ Every request is checked against a server-side role:
 
 Users without a role are refused at sign-in. **Upgrade note:** Entra sign-in used to admit any tenant user; set `MEMBER_EMAILS=*` to keep that behaviour. The same rules apply to the Teams bot, so Teams users also need a role.
 
-Admins can also grant and revoke roles without a restart from the account menu → **Users & roles** (stored in the `user_roles` table, API `/api/users`). Env and UI roles combine; the higher role wins. Changes take effect on the user's next request, in both the web app and Teams. Admins listed in `ADMIN_EMAILS` are read-only in the UI, and admins cannot change or remove their own role.
+Admins can also grant and revoke roles without a restart from the account menu → **Users & roles** (stored in the `user_roles` table, API `/api/users`). Env and UI roles combine; the higher role wins. Changes take effect on the user's next request, in both the web app and Teams. Admins listed in `ADMIN_EMAILS` are read-only in the UI, and admins cannot change or remove their own role. Removing a UI role never revokes a role that env still gives (for example a `MEMBER_EMAILS` domain); the dialog tags such users `env (@domain)` and warns before and after the removal.
 `/api/file` limits non-admins to files inside the workspaces of agents they can use, and serves HTML and SVG with a sandboxing `Content-Security-Policy`.
 
 ### Agents

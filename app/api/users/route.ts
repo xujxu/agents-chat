@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import * as configStore from '@/lib/configStore';
-import { getUserEmail, isEnvAdminEmail, isMemberEmail, parseEmailList } from '@/lib/auth';
+import { getUserEmail, isEnvAdminEmail, parseEmailList } from '@/lib/auth';
 import { denyRole } from '@/lib/rbac';
 import { createLogger } from '@/lib/logger';
 
@@ -18,6 +18,8 @@ type UserEntry = {
   sources: Source[];
   /** Role stored in the UI table, if any; only this part can be changed here. */
   uiRole: 'admin' | 'member' | null;
+  /** The MEMBER_EMAILS/GITHUB_ALLOWED_EMAILS entry (email, @domain or *) that makes this user a member. */
+  envMember?: string;
   grantedBy?: string;
   updatedAt?: string;
   agents: { id: string; name: string }[];
@@ -34,12 +36,18 @@ async function requireAdmin(req: NextRequest): Promise<{ token: any } | { respon
 
 const RANK = { guest: 0, member: 1, admin: 2 } as const;
 
-function listUsers(): { users: UserEntry[]; envPatterns: { admins: string[]; members: string[] } } {
+/**
+ * @param include Emails to list even without a UI role or grant, as long as env still gives them a role
+ *   (e.g. a user whose UI role was just removed but who still matches a MEMBER_EMAILS domain).
+ */
+function listUsers(include: string[] = []): { users: UserEntry[]; envPatterns: { admins: string[]; members: string[] } } {
   const envAdmins = parseEmailList(process.env.ADMIN_EMAILS);
   const envMemberEntries = [...new Set([
     ...parseEmailList(process.env.MEMBER_EMAILS),
     ...parseEmailList(process.env.GITHUB_ALLOWED_EMAILS),
   ])];
+  const memberPatterns = parseEmailList(process.env.MEMBER_EMAILS).filter((e) => !EMAIL_RE.test(e));
+  const envMemberPattern = (email: string) => memberPatterns.find((p) => p === '*' || (p.startsWith('@') && email.endsWith(p)));
   const agentNames = new Map(configStore.getAllAgents().map((agent) => [agent.id, agent.name || agent.id]));
   const users = new Map<string, UserEntry>();
   const entry = (email: string): UserEntry => {
@@ -56,7 +64,11 @@ function listUsers(): { users: UserEntry[]; envPatterns: { admins: string[]; mem
   };
 
   for (const email of envAdmins) add(entry(email), 'env', 'admin');
-  for (const email of envMemberEntries.filter((e) => EMAIL_RE.test(e))) add(entry(email), 'env', 'member');
+  for (const email of envMemberEntries.filter((e) => EMAIL_RE.test(e))) {
+    const user = entry(email);
+    add(user, 'env', 'member');
+    user.envMember = email;
+  }
   for (const record of configStore.listUserRoles()) {
     const user = entry(record.email);
     add(user, 'ui', record.role);
@@ -66,9 +78,18 @@ function listUsers(): { users: UserEntry[]; envPatterns: { admins: string[]; mem
   }
   for (const grant of configStore.listAllAgentAccess()) {
     const user = entry(grant.email);
-    // A MEMBER_EMAILS domain pattern can make a grantee a member.
-    add(user, 'grant', isMemberEmail(grant.email) ? 'member' : 'guest');
+    add(user, 'grant', 'guest');
     user.agents.push({ id: grant.agentId, name: agentNames.get(grant.agentId) || grant.agentId });
+  }
+  for (const email of include) {
+    if (envMemberPattern(email)) entry(email);
+  }
+  // Domain and wildcard patterns also make listed users members, and removing a UI role can't revoke that.
+  for (const user of users.values()) {
+    const pattern = user.envMember ? undefined : envMemberPattern(user.email);
+    if (!pattern) continue;
+    add(user, 'env', 'member');
+    user.envMember = pattern;
   }
   const sorted = [...users.values()].sort((a, b) => RANK[b.role] - RANK[a.role] || a.email.localeCompare(b.email));
   // Domain and wildcard patterns can't be listed as users, so they are reported separately.
@@ -106,5 +127,13 @@ export async function DELETE(req: NextRequest) {
   if (email === me) return NextResponse.json({ ok: false, error: 'cannot_change_own_role' }, { status: 400 });
   if (!configStore.removeUserRole(email)) return NextResponse.json({ ok: false, error: 'not_found' }, { status: 404 });
   logger.info({ email, by: me }, 'user role removed');
-  return NextResponse.json({ ok: true, me, ...listUsers() });
+  const list = listUsers([email]);
+  const remaining = list.users.find((user) => user.email === email);
+  return NextResponse.json({
+    ok: true,
+    me,
+    ...list,
+    // Env or agent grants may still give the user a role the UI can't revoke.
+    remaining: remaining ? { role: remaining.role, envMember: remaining.envMember } : null,
+  });
 }

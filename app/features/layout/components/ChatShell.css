@@ -1482,6 +1482,7 @@
 .chatPageRoot .usersRolesModal { width: min(640px, 100%); }
 .chatPageRoot .usersRolesHint { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
 .chatPageRoot .usersRolesError { color: #ff7b7b; font-size: 13px; margin: 0 0 10px; }
+.chatPageRoot .usersRolesNotice { color: #f5c26b; font-size: 13px; margin: 0 0 10px; }
 .chatPageRoot .usersRolesAdd { display: flex; gap: 8px; margin-bottom: 12px; }
 .chatPageRoot .usersRolesAdd input { flex: 1; min-width: 0; }
 .chatPageRoot .modal .usersRolesAdd select,

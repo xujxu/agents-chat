@@ -171,8 +171,18 @@ test('role-based access control', async (t) => {
     }
 
     assert.equal((await route.DELETE(await request('admin@contoso.com', 'DELETE', '?email=admin%40contoso.com'))).status, 400);
-    assert.equal((await route.DELETE(await request('admin@contoso.com', 'DELETE', '?email=dave%40outside.com'))).status, 200);
+    const daveRemoved = await route.DELETE(await request('admin@contoso.com', 'DELETE', '?email=dave%40outside.com'));
+    assert.equal(daveRemoved.status, 200);
+    assert.equal((await daveRemoved.json()).remaining, null);
     assert.equal((await route.DELETE(await request('admin@contoso.com', 'DELETE', '?email=dave%40outside.com'))).status, 404);
     assert.equal(getUserRole({ email: 'dave@outside.com' }), null);
+
+    const erinPost = await (await post('erin@contoso.com', 'admin')).json();
+    const erin = erinPost.users.find((user: { email: string }) => user.email === 'erin@contoso.com');
+    assert.deepEqual([erin.role, erin.sources.sort(), erin.envMember], ['admin', ['env', 'ui'], '@contoso.com']);
+    const removed = await (await route.DELETE(await request('admin@contoso.com', 'DELETE', '?email=erin%40contoso.com'))).json();
+    assert.deepEqual(removed.remaining, { role: 'member', envMember: '@contoso.com' }, 'a domain pattern keeps the user a member');
+    assert.ok(removed.users.some((user: { email: string; sources: string[] }) => user.email === 'erin@contoso.com' && user.sources.join() === 'env'));
+    assert.equal(getUserRole({ email: 'erin@contoso.com' }), 'member');
   });
 });
