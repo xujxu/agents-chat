@@ -65,12 +65,24 @@ export function validateRequestedModel(config: AgentConfig, requested: unknown):
   return modelId;
 }
 
+function hasCustomEnv(config: AgentConfig): boolean {
+  try {
+    const env = config.env ? JSON.parse(config.env) : null;
+    return !!env && typeof env === 'object' && Object.keys(env).length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function applySessionModelIfRequested(proc: AgentProcess, sessionId: string | null, requestedModelId: string | undefined): Promise<void> {
   if (!requestedModelId) return;
-  // Skip if the requested model is already the agent's default — avoids sending
-  // session/set_model which can translate to an internal model name the proxy doesn't recognize.
   const defaultId = proc.config.defaultModelId || (proc.config.models?.[0]?.modelId);
-  if (requestedModelId === defaultId) return;
+  const isDefault = requestedModelId === defaultId;
+  // Agents with custom env (e.g. Claude Code behind a proxy) may translate session/set_model to a
+  // model name the proxy doesn't recognize, so leave them on their default. Other agents get an
+  // explicit set_model even for the default: the model reported by session/new is not always the
+  // one the session runs (Copilot CLI can switch to its own startup model right after session/new).
+  if (isDefault && hasCustomEnv(proc.config)) return;
   if (!sessionId) throw new Error('Cannot set model before session is created');
   if (!proc.rpc) throw new Error('Agent process not ready');
   log(`[ACP:${proc.config.id}] session/set_model modelId="${requestedModelId}" (default="${defaultId}") session=${sessionId}`);
@@ -82,7 +94,14 @@ export async function applySessionModelIfRequested(proc: AgentProcess, sessionId
       await proc.rpc.send('unstable_setSessionModel', { sessionId, modelId: requestedModelId });
     } catch (secondErr: any) {
       const secondMsg = secondErr instanceof Error ? secondErr.message : String(secondErr);
-      throw new Error(`Agent does not support switching to model "${requestedModelId}" for this session (${firstMsg}; ${secondMsg})`);
+      const message = `Agent does not support switching to model "${requestedModelId}" for this session (${firstMsg}; ${secondMsg})`;
+      // Keep the old behaviour (no switch, no error) for agents that can't set their default model,
+      // but still surface a missing session so the caller can recover it.
+      if (isDefault && !/session[\s\S]*not found|not found:\s*session/i.test(`${firstMsg} ${secondMsg}`)) {
+        log(`[ACP:${proc.config.id}] ${message}; continuing with the agent's default`);
+        return;
+      }
+      throw new Error(message);
     }
   }
 }
