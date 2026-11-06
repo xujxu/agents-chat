@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  if (activity?.channelId && activity.channelId !== 'msteams') {
+  if (activity?.channelId !== 'msteams') {
     return new NextResponse(null, { status: 200 });
   }
 

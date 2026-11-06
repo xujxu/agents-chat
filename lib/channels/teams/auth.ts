@@ -1,6 +1,6 @@
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import { createRemoteJWKSet, decodeJwt, jwtVerify, type JWTPayload } from 'jose';
+import { createRemoteJWKSet, decodeJwt, jwtVerify, type JWTPayload, type JWTVerifyGetKey } from 'jose';
 import type { TeamsConfig } from './config';
 
 const execAsync = promisify(exec);
@@ -42,12 +42,17 @@ function getJwks(url: string): RemoteJwks {
  * tenant can obtain an app-only Entra token whose audience is this bot, so they would not prove the
  * request came from the Bot Connector service.
  */
-export async function verifyInboundToken(authHeader: string | null, config: TeamsConfig, activityServiceUrl: string | undefined): Promise<JWTPayload> {
+export async function verifyInboundToken(
+  authHeader: string | null,
+  config: TeamsConfig,
+  activityServiceUrl: string | undefined,
+  signingKeys: JWTVerifyGetKey = getJwks(BOT_FRAMEWORK_JWKS),
+): Promise<JWTPayload> {
   const match = /^Bearer\s+(.+)$/i.exec(authHeader || '');
   if (!match) throw new Error('missing_bearer_token');
   const token = match[1].trim();
 
-  const { payload } = await jwtVerify(token, getJwks(BOT_FRAMEWORK_JWKS), {
+  const { payload } = await jwtVerify(token, signingKeys, {
     issuer: BOT_FRAMEWORK_ISSUER,
     audience: config.appId,
     algorithms: ['RS256'],

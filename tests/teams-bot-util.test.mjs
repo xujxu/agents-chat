@@ -103,5 +103,6 @@ const matcher = new RegExp(`^${matcherSource.replace(/\\\\/g, '\\')}$`);
 assert.ok(!matcher.test('/api/teams/messages'), 'Teams endpoint must bypass session middleware');
 assert.ok(matcher.test('/api/acp'), 'other APIs must stay protected');
 assert.ok(matcher.test('/api/teamsx'), 'exclusion must not cover unrelated prefixes');
+assert.ok(matcher.test('/api/teams/other'), 'only the Bot Framework endpoint may bypass the session middleware');
 
 console.log('teams bot util checks passed');

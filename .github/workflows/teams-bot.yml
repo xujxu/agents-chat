@@ -31,6 +31,8 @@ jobs:
         run: npx tsc --noEmit --incremental false
       - name: Teams helper tests
         run: node --test tests/teams-bot-util.test.mjs
+      - name: Teams inbound token validation tests (issuer, audience, signing key, service URL)
+        run: npx --yes --package=tsx@4.20.6 tsx --test tests/teams-bot-auth.test.ts
       - name: Teams bridge tests (group chat gating, per-user state, 1:1 behavior)
         run: npx --yes --package=tsx@4.20.6 tsx --test tests/teams-bot-bridge.test.ts
       - name: ACP session model tests (agent default and selected model are applied)
