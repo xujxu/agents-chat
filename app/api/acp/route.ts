@@ -1984,13 +1984,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // ─── Agent access management (admin or owner) ───
+    // ─── Agent access: owners and admins can view the list; only admins share (grant or revoke) ───
 
     if (action === 'add-agent-access') {
       if (!agentId) return NextResponse.json({ ok: false, error: 'missing_agentId' }, { status: 400 });
       const agent = configStore.getAgentById(agentId);
       if (!agent) return NextResponse.json({ ok: false, error: 'agent_not_found' }, { status: 404 });
-      if (!canManageAgent(agent.owner)) {
+      if (userRole !== 'admin') {
         return NextResponse.json({ ok: false, error: 'permission_denied' }, { status: 403 });
       }
       const email = (body?.email as string || '').trim().toLowerCase();
@@ -2003,7 +2003,7 @@ export async function POST(req: NextRequest) {
       if (!agentId) return NextResponse.json({ ok: false, error: 'missing_agentId' }, { status: 400 });
       const agent = configStore.getAgentById(agentId);
       if (!agent) return NextResponse.json({ ok: false, error: 'agent_not_found' }, { status: 404 });
-      if (!canManageAgent(agent.owner)) {
+      if (userRole !== 'admin') {
         return NextResponse.json({ ok: false, error: 'permission_denied' }, { status: 403 });
       }
       const email = (body?.email as string || '').trim().toLowerCase();

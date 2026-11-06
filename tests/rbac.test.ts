@@ -37,6 +37,8 @@ test('role-based access control', async (t) => {
   configStore.createAgent({ id: 'shared', name: 'shared', owner: 'admin@contoso.com' });
   configStore.addAgentAccess('shared', 'guest@outside.com', 'admin@contoso.com');
   configStore.addAgentAccess('shared', 'ghguest@outside.com', 'admin@contoso.com');
+  configStore.acceptAgentInvite('shared', 'guest@outside.com');
+  configStore.acceptAgentInvite('shared', 'ghguest@outside.com');
 
   await t.test('member patterns match exact emails, domains and the wildcard', () => {
     assert.equal(isMemberEmail('Bob@Contoso.com', '@contoso.com', ''), true);

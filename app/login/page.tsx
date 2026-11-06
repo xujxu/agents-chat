@@ -4,9 +4,21 @@ import { signIn } from 'next-auth/react';
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
+/** Where to go after sign-in: the requested page (e.g. an invite link) when it is on this site, else home. */
+function safeCallbackUrl(raw: string | null): string {
+  if (!raw || typeof window === 'undefined') return '/';
+  try {
+    const url = new URL(raw, window.location.origin);
+    return url.origin === window.location.origin ? `${url.pathname}${url.search}${url.hash}` : '/';
+  } catch {
+    return '/';
+  }
+}
+
 function LoginContent() {
   const searchParams = useSearchParams();
   const error = searchParams.get('error');
+  const callbackUrl = safeCallbackUrl(searchParams.get('callbackUrl'));
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,7 +29,7 @@ function LoginContent() {
     setLoading(true);
     const res = await signIn('admin-login', { username, password, redirect: false });
     if (res?.ok) {
-      window.location.href = '/';
+      window.location.href = callbackUrl;
     } else {
       setLoginError('Invalid username or password');
       setLoading(false);
@@ -38,6 +50,8 @@ function LoginContent() {
                 ? 'GitHub login is not configured. Set GITHUB_ALLOWED_EMAILS or ADMIN_EMAILS in the environment configuration, then restart the service.'
                 : error === 'CredentialsSignin'
                   ? 'Invalid username or password'
+                  : error === 'NotAuthorized' || error === 'AccessDenied'
+                    ? 'This account is not allowed to use Agents Chat. If an agent was shared with you, sign in with the invited account.'
                   : 'Sign in failed. Please try again.'
             )}
           </div>
@@ -45,7 +59,7 @@ function LoginContent() {
 
         {/* Microsoft login */}
         <button
-          onClick={() => void signIn('azure-ad', { callbackUrl: '/' })}
+          onClick={() => void signIn('azure-ad', { callbackUrl })}
           style={styles.msButton}
         >
           <svg width="20" height="20" viewBox="0 0 21 21" fill="none">
@@ -59,7 +73,7 @@ function LoginContent() {
 
         {/* GitHub login */}
         <button
-          onClick={() => void signIn('github', { callbackUrl: '/' })}
+          onClick={() => void signIn('github', { callbackUrl })}
           style={{ ...styles.msButton, marginTop: '10px' }}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="#e6edf3" aria-hidden="true">
