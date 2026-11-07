@@ -242,6 +242,7 @@ export function useAgentPanelState({
 
   async function removeAccess(email: string) {
     if (agentSettingsLoading || agentAccessLoading || !settingsAgentId) return;
+    if (!window.confirm(`Revoke access for ${email}? They will lose access to this agent immediately.`)) return;
     setFormError(null);
     setAgentAccessLoading(true);
     try {

@@ -358,7 +358,7 @@ export function AgentsPanel({
                         <div key={entry.email} className="agentAccessRow">
                           <span className="agentAccessEmail" title={entry.email}>{entry.email}</span><span className={`agentAccessStatus${entry.status === 'expired' ? ' expired' : ''}`} title={accessStatusText(entry).replace(/^· /, '')}>{accessStatusText(entry)}</span>
                           {isAdmin && entry.status && entry.status !== 'pending' && <button type="button" className="modalButton compact" onClick={() => void renewAccess(entry.email, entry.extensionDays ?? undefined)} disabled={agentSettingsLoading || agentAccessLoading} aria-label={`Renew access for ${entry.email}`}>{entry.extensionDays ? `Approve +${entry.extensionDays}d` : 'Renew'}</button>}
-                          {isAdmin && <button type="button" className="modalButton compact danger" onClick={() => void removeAccess(entry.email)} disabled={agentSettingsLoading || agentAccessLoading} aria-label={`Revoke access for ${entry.email}`}>✕</button>}
+                          {isAdmin && <button type="button" className="modalButton compact danger" onClick={() => void removeAccess(entry.email)} disabled={agentSettingsLoading || agentAccessLoading} aria-label={`Revoke access for ${entry.email}`}>Revoke</button>}
                         </div>
                       ))}
                     </div>

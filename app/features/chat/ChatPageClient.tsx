@@ -269,7 +269,7 @@ export function ChatPageClient() {
         worktrees={chatGitContext.view.worktrees}
         selectedBranch={chatGitContext.view.selectedBranch}
         selectedWorktree={chatGitContext.view.selectedWorktree}
-        locked={chatGitContext.view.locked}
+        locked={chatGitContext.view.locked} unavailable={chatGitContext.view.unavailable}
         statusText={chatGitContext.view.statusText}
         onSelectBranch={(branchName) => void chatGitContext.setBranch(branchName)}
         onSelectWorktree={(worktreePath) => void chatGitContext.setWorktree(worktreePath)}

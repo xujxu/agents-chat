@@ -34,6 +34,11 @@ const ERROR_TEXT: Record<string, string> = {
   forbidden: 'Only admins can manage roles.',
 };
 
+/** Without a UI role, the role comes from env (MEMBER_EMAILS) or from agent access grants (Guest). */
+function inheritedRoleLabel(user: UserEntry): string {
+  return user.role === 'guest' ? 'Guest (agent access)' : `${ROLE_LABEL[user.role]} (env)`;
+}
+
 export type UsersRolesDialogProps = { onClose: () => void };
 
 export function UsersRolesDialog({ onClose }: UsersRolesDialogProps) {
@@ -189,7 +194,7 @@ export function UsersRolesDialog({ onClose }: UsersRolesDialogProps) {
                           else if (user.uiRole) void removeUserRole(user);
                         }}
                       >
-                        <option value="">{user.uiRole ? 'Remove UI role' : '— no UI role —'}</option>
+                        <option value="">{user.uiRole ? 'Remove UI role' : inheritedRoleLabel(user)}</option>
                         <option value="member">Member</option>
                         <option value="admin">Admin</option>
                       </select>}

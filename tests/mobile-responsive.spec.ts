@@ -855,6 +855,7 @@ test('mobile Agent management keeps full CRUD and access controls reachable', as
   expect(touchLayout.revokeHeight).toBeGreaterThanOrEqual(44);
   expect(touchLayout.grantInputFontSize).toBe('16px');
   expect(touchLayout.nameFontSize).toBe('16px');
+  page.once('dialog', (dialog) => dialog.accept());
   await settings.getByRole('button', { name: 'Revoke access for mobile@example.com' }).click();
   await expect(settings.getByText('mobile@example.com', { exact: true })).toHaveCount(0);
 
