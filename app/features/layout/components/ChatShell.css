@@ -1123,15 +1123,16 @@
 }
 .chatPageRoot .modalActions .primary,
 .chatPageRoot .modal button.primary {
-  background: var(--accent);
-  color: #fff;
-  border: 1px solid var(--accent);
+  /* Per-theme AA-contrast fill; the raw accent is too light for white text. */
+  background: var(--primary-bg, var(--accent));
+  color: var(--primary-text, #fff);
+  border: 1px solid var(--primary-bg, var(--accent));
 }
-.chatPageRoot .modalActions .primary:hover,
-.chatPageRoot .modal button.primary:hover {
-  background: color-mix(in srgb, var(--accent) 85%, #000);
-  border-color: color-mix(in srgb, var(--accent) 85%, #000);
-  color: #fff;
+.chatPageRoot .modalActions .primary:hover:not(:disabled),
+.chatPageRoot .modal button.primary:hover:not(:disabled) {
+  background: var(--primary-bg-hover, color-mix(in srgb, var(--accent) 85%, #000));
+  border-color: var(--primary-bg-hover, color-mix(in srgb, var(--accent) 85%, #000));
+  color: var(--primary-text, #fff);
 }
 .chatPageRoot .modalActions .primary:disabled,
 .chatPageRoot .modal button.primary:disabled {
