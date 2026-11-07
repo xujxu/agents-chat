@@ -294,7 +294,8 @@
   border: 1px solid var(--border);
   background: var(--panel-soft);
   color: var(--accent);
-  border-radius: var(--control-radius, 8px);
+  /* Matches the message Copy action buttons. */
+  border-radius: 10px;
   padding: 0 12px;
   font-size: 12px;
   line-height: 1;
