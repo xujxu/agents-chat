@@ -11,15 +11,15 @@
 .chatSearchInput {
   width: 100%;
   height: var(--control-height, 30px);
-  box-sizing: border-box;
   padding: 0 30px 0 var(--control-padding-inline, 10px);
   border: 1px solid var(--border);
   border-radius: var(--control-radius, 8px);
   background: var(--bg);
   color: var(--text);
   font-size: 12px;
-  outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: 2px solid transparent;
+  outline-offset: -1px;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 .chatSearchInput::placeholder {
   color: var(--muted);
@@ -100,7 +100,6 @@
 .chatRenameInput {
   width: 100%;
   height: var(--control-height, 30px);
-  box-sizing: border-box;
   padding: 0 var(--control-padding-inline, 10px);
   border: 1px solid var(--accent);
   border-radius: var(--control-radius, 8px);

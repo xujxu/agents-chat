@@ -66,11 +66,10 @@
   font-weight: 600;
   background: var(--bg);
   border: 1px solid var(--accent);
-  border-radius: 6px;
+  border-radius: var(--control-radius-sm, 6px);
   color: var(--text);
   padding: 2px 8px;
   width: 100%;
-  box-sizing: border-box;
   outline: none;
 }
 
@@ -88,7 +87,6 @@
 .chatPageRoot .nodeAddInput {
   width: 100%;
   height: var(--control-height, 30px);
-  box-sizing: border-box;
   padding: 0 var(--control-padding-inline, 10px);
   margin-bottom: 6px;
   border-radius: var(--control-radius, 8px);
@@ -96,8 +94,9 @@
   background: var(--panel-bg);
   color: var(--text);
   font-size: 12px;
-  outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  outline: 2px solid transparent;
+  outline-offset: -1px;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 .chatPageRoot .nodeAddInput:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .chatPageRoot .nodeAddActions { display: flex; gap: 6px; margin-top: 4px; }

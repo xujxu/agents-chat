@@ -3379,6 +3379,18 @@ test.describe('Chat UI', () => {
                     questions: [
                       { header: 'First number', question: 'First number:' },
                       { header: 'Second number', question: 'Second number:' },
+                      {
+                        header: 'Operations',
+                        question: 'Operations:',
+                        multiSelect: true,
+                        allowFreeformInput: false,
+                        options: [
+                          { optionId: 'add', label: 'Add' },
+                          { optionId: 'subtract', label: 'Subtract' },
+                          { optionId: 'multiply', label: 'Multiply' },
+                          { optionId: 'divide', label: 'Divide' },
+                        ],
+                      },
                     ],
                     createdAt: Date.now(),
                   },
@@ -3410,14 +3422,25 @@ test.describe('Chat UI', () => {
 
     const requestCard = chatArea.locator('.agentUserRequestCard', { hasText: 'Please provide two numbers:' });
     await expect(requestCard).toBeVisible({ timeout: 10000 });
+    // Question fields stack in a flex column; they must keep their control height instead of collapsing.
+    for (const name of ['First number', 'Second number']) {
+      const box = await requestCard.getByRole('textbox', { name }).boundingBox();
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(29);
+    }
+    const operations = requestCard.getByRole('listbox', { name: 'Operations' });
+    const operationsBox = await operations.boundingBox();
+    // A multi-select must show several options at once (about 4 rows), not a single collapsed row.
+    expect(operationsBox?.height ?? 0).toBeGreaterThanOrEqual(60);
     await requestCard.getByRole('textbox', { name: 'First number' }).fill('12');
     await requestCard.getByRole('textbox', { name: 'Second number' }).fill('30');
+    await operations.selectOption(['Add', 'Multiply']);
     await requestCard.getByRole('button', { name: 'Send' }).click();
 
     await expect.poll(() => respondedBody?.requestId ?? null).toBe('request-two-numbers');
     expect(respondedBody?.answers).toEqual({
       'First number': { selected: [], freeText: '12', skipped: false },
       'Second number': { selected: [], freeText: '30', skipped: false },
+      Operations: { selected: ['Add', 'Multiply'], freeText: null, skipped: false },
     });
     const answerMessage = chatArea.locator('.message.agent', { hasText: '12 + 30 = 42' });
     await expect(answerMessage).toBeVisible({ timeout: 10000 });

@@ -181,8 +181,7 @@
   margin: 0 0 12px;
 }
 .chatPageRoot .agentShareLink input {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
+  --modal-field-font-family: var(--font-mono);
 }
 .chatPageRoot .agentSectionNote {
   margin: 0 0 10px;
@@ -210,7 +209,7 @@
   border: 1px solid var(--border);
   border-radius: var(--modal-field-radius, 8px);
   margin-bottom: 16px;
-  font-size: 12.5px;
+  font-size: 12px;
 }
 .chatPageRoot .agentAccessRow {
   display: flex;
@@ -262,8 +261,8 @@
   line-height: 1;
   cursor: pointer;
 }
-.chatPageRoot .modal textarea.agentEnvInput {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+.chatPageRoot .agentEnvInput {
+  --modal-field-font-family: var(--font-mono);
 }
 .chatPageRoot .agentFormError {
   padding: 10px 12px;
@@ -426,10 +425,8 @@
     padding-top: 10px;
     background: var(--panel-strong);
   }
-  .chatPageRoot .agentMobileSheet input:not([type="checkbox"]):not([type="radio"]),
-  .chatPageRoot .agentMobileSheet textarea,
-  .chatPageRoot .agentMobileSheet select {
-    font-size: 16px;
+  .chatPageRoot .modal.agentMobileSheet {
+    --modal-field-font-size: 16px;
   }
   .chatPageRoot .agentMobileSheet .danger {
     min-height: 44px;
@@ -441,13 +438,9 @@
     flex-direction: column;
     align-items: stretch;
   }
+  /* Stacked in a column, so stop flex: 1 (basis 0) from overriding the control height. */
   .chatPageRoot .modal .agentAccessGrantRow input {
     flex: 0 0 auto;
-    height: 44px;
-  }
-  .chatPageRoot .modal .agentAccessGrantRow button.inlinePrimary,
-  .chatPageRoot .modal .agentAccessGrantRow .modalButton {
-    min-height: 44px;
   }
   .chatPageRoot .agentSheetActions {
     flex-wrap: wrap;
