@@ -4877,6 +4877,30 @@ test.describe('Chat Rename', () => {
     await expect(page.locator('.chatHistoryRow').first().locator('.chatHistoryItem')).toContainText('My Renamed Chat');
   });
 
+  test('sidebar controls share one left edge and compact height', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    const controls = {
+      tab: page.locator('button.leftSidebarTab').first(),
+      collapse: page.locator('button.sidebarCollapseBtn'),
+      filter: page.locator('.chatAgentFilterPickerSlot .themedPickerTrigger'),
+      newChat: page.locator('button.newChatButton'),
+      search: page.locator('input.chatSearchInput'),
+    };
+    const boxes: Record<string, { x: number; height: number }> = {};
+    for (const [name, locator] of Object.entries(controls)) {
+      await expect(locator).toBeVisible();
+      const box = await locator.boundingBox();
+      expect(box, name).not.toBeNull();
+      boxes[name] = box!;
+    }
+    for (const name of Object.keys(boxes)) {
+      expect(boxes[name].height, `${name} height`).toBeCloseTo(boxes.search.height, 0);
+    }
+    for (const name of ['tab', 'filter', 'newChat']) {
+      expect(boxes[name].x, `${name} left edge`).toBeCloseTo(boxes.search.x, 0);
+    }
+  });
+
   test('should keep chat actions usable after sidebar resize', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
 

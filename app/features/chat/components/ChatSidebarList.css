@@ -6,7 +6,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  margin: 4px 0 2px;
+  margin: 0 0 4px;
 }
 .chatSearchInput {
   width: 100%;
@@ -66,7 +66,6 @@
 .chatAgentFilterRow {
   display: flex;
   gap: 4px;
-  padding: 0 0 6px;
   align-items: center;
   flex-shrink: 0;
 }
@@ -74,20 +73,32 @@
   flex: 1 1 auto;
   min-width: 0;
 }
+.chatPageRoot .chatAgentFilterPickerSlot .themedPickerTrigger {
+  min-height: var(--control-height, 30px);
+  padding: 0 var(--control-padding-inline, 10px);
+  border-radius: var(--control-radius, 8px);
+  font-size: 12px;
+}
 .newChatButton {
   flex: 1;
-  padding: 9px 10px;
-  border-radius: 10px;
-  border: 1px solid transparent;
+  min-width: 0;
+  height: var(--control-height, 30px);
+  padding: 0 var(--control-padding-inline, 10px);
+  border-radius: var(--control-radius, 8px);
+  border: 1px solid var(--border);
   background: var(--panel-soft);
   color: var(--text);
   font-size: 12px;
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 .newChatButton:hover {
   background: color-mix(in srgb, var(--panel-soft) 70%, var(--text) 8%);
+  border-color: var(--border-strong);
 }
 .newChatButton:disabled {
   opacity: 0.4;
@@ -121,7 +132,7 @@
   background: transparent;
   color: var(--text-soft);
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: color 0.12s ease;
 }
 .chatHistoryItem:hover,
 .chatHistoryItem.active {
@@ -156,7 +167,7 @@
   border: 1px solid transparent;
   position: relative;
   min-width: 0;
-  transition: all 0.12s ease;
+  transition: background-color 0.12s ease;
 }
 .chatHistoryRow .chatHistoryItem { flex: 1; min-width: 0; }
 .chatHistoryRow:hover,

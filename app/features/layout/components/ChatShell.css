@@ -82,27 +82,27 @@
 .chatPageRoot .participantsHeader {
   color: var(--text);
   font-weight: 700;
-  margin-bottom: 12px;
-  padding: 0 8px;
+  margin-bottom: 10px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 .chatPageRoot .sidebarExpandBtn,
 .chatPageRoot .sidebarCollapseBtn {
-  width: 32px;
-  height: 32px;
+  flex: 0 0 auto;
+  width: var(--control-height, 30px);
+  height: var(--control-height, 30px);
   border: 1px solid var(--border);
   background: var(--panel-soft);
   color: var(--text-soft);
   font-size: 0;
   line-height: 1;
   cursor: pointer;
-  border-radius: 9px;
+  border-radius: var(--control-radius, 8px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: all 160ms ease;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
 }
 .chatPageRoot .sidebarToggleIcon {
   width: 14px;
@@ -182,15 +182,23 @@
 }
 .chatPageRoot .leftSidebarTab {
   flex: 1;
-  padding: 7px 10px;
+  min-width: 0;
+  height: var(--control-height, 30px);
+  padding: 0 var(--control-padding-inline, 10px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   border: 1px solid var(--border);
   background: var(--panel-soft);
   color: var(--text);
   font-size: 12px;
   font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
-  border-radius: 8px;
-  transition: all 0.15s ease;
+  border-radius: var(--control-radius, 8px);
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 .chatPageRoot .leftSidebarTab:hover {
   background: color-mix(in srgb, var(--panel-soft) 70%, var(--text) 10%);
@@ -1569,8 +1577,8 @@
 .chatPageRoot .usersRolesList { list-style: none; margin: 0 0 12px; padding: 0; max-height: 50vh; overflow-y: auto; border-top: 1px solid var(--border); }
 .chatPageRoot .usersRolesItem { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--border); }
 .chatPageRoot .usersRolesIdentity { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.chatPageRoot .usersRolesEmail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chatPageRoot .usersRolesMeta { display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; color: var(--muted); }
+.chatPageRoot .usersRolesEmail { font-size: var(--modal-field-font-size); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chatPageRoot .usersRolesMeta { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; color: var(--muted); }
 .chatPageRoot .usersRolesBadge { padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-soft); }
 .chatPageRoot .usersRolesBadge.role-admin { color: var(--accent); border-color: var(--accent); }
 .chatPageRoot .usersRolesSource { padding: 1px 6px; border-radius: 6px; background: var(--panel); }
