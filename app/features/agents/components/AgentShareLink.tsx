@@ -60,7 +60,7 @@ export function AgentShareLink({ agentId }: { agentId: string }) {
       {link ? (
         <div className="agentAccessGrantRow">
           <input readOnly value={link} aria-label="Share link" onFocus={(e) => e.currentTarget.select()} />
-          <button type="button" className="primary inlinePrimary" onClick={() => void copy()} disabled={busy}>Copy link</button>
+          <button type="button" className="modalButton" onClick={() => void copy()} disabled={busy}>Copy link</button>
           <button type="button" className="modalButton" onClick={() => void run('create-link')} disabled={busy} title="Replace this link with a new one, e.g. if it leaked. The old link stops working.">Reset link</button>
           <button type="button" className="modalButton danger" onClick={() => void run('revoke-link')} disabled={busy}>Disable</button>
         </div>

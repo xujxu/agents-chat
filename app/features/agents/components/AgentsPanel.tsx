@@ -350,7 +350,7 @@ export function AgentsPanel({
                       placeholder="user@email.com"
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addAccess(); } }}
                     />
-                    <button className="primary inlinePrimary" onClick={() => void addAccess()} disabled={agentSettingsLoading || agentAccessLoading || !newAccessEmail.trim()}>Grant</button>
+                    <button className="modalButton" onClick={() => void addAccess()} disabled={agentSettingsLoading || agentAccessLoading || !newAccessEmail.trim()}>Grant</button>
                   </div>}
                   {agentAccessList.length > 0 ? (
                     <div className="agentAccessList">
