@@ -268,7 +268,7 @@ export function AgentsPanel({
             <div className="agentSheetBody">
               <label>
               <span>Agent ID</span>
-              <input value={settingsAgentConfig.id} disabled style={{ opacity: 0.6 }} />
+              <input value={settingsAgentConfig.id} disabled />
               <span className="fieldHint">Unique identifier (read-only)</span>
               </label>
               <label>
@@ -279,7 +279,7 @@ export function AgentsPanel({
               <>
                 <label>
                   <span>Node</span>
-                  <input value={settingsAgentConfig.relayConnectionName || ''} disabled style={{ opacity: 0.6 }} />
+                  <input value={settingsAgentConfig.relayConnectionName || ''} disabled />
                   <span className="fieldHint">Remote node this agent runs on</span>
                 </label>
                 <label>
@@ -309,62 +309,61 @@ export function AgentsPanel({
                 </label>
                 {!settingsAgentConfig.relay && (
                   <label>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span className="agentEnvLabel">
                       Environment Variables
                       <button
                         type="button"
+                        className="agentEnvToggle"
                         onClick={(e) => {
                           const textarea = (e.currentTarget.closest('label') as HTMLElement)?.querySelector('textarea');
                           if (textarea) textarea.style.filter = textarea.style.filter ? '' : 'blur(4px)';
                         }}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', padding: 0 }}
                         title="Toggle visibility"
                       >👁</button>
                     </span>
                     <textarea
+                      className="agentEnvInput"
                       value={settingsEnvText}
                       onChange={(e) => setSettingsEnvText(e.target.value)}
                       placeholder={"ANTHROPIC_API_KEY=sk-ant-...\nOTHER_VAR=value"}
                       rows={3}
-                      style={{ fontFamily: 'monospace' }}
                     />
                     <span className="fieldHint">One per line: KEY=VALUE. Used for API keys and agent config.</span>
                   </label>
                 )}
               </>
             )}
-            <div style={{ marginTop: '16px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '12px' }}>
-              <h3 style={{ margin: '0 0 8px', fontSize: '13px', color: '#8a90a2' }}>🔐 Access Control</h3>
-              <label className="checkboxLabel" style={{ marginBottom: '8px' }}>
+            <div className="agentAccessSection">
+              <h3>🔐 Access Control</h3>
+              <label className="checkboxLabel">
                 <input type="checkbox" checked={!!settingsAgentConfig.public} onChange={(e) => setSettingsAgentConfig((c) => c ? { ...c, public: e.target.checked } : c)} />
                 <span>Public (anyone can talk to this agent)</span>
               </label>
               {!settingsAgentConfig.public && (
                 <>
-                  <p style={{ fontSize: '12px', color: '#666', margin: '0 0 8px' }}>Only listed users (and admins) can talk to this agent.{isAdmin ? '' : ' Only admins can share it.'}</p>
+                  <p className="agentSectionNote">Only listed users (and admins) can talk to this agent.{isAdmin ? '' : ' Only admins can share it.'}</p>
                   {isAdmin && settingsAgentId && <AgentShareLink agentId={settingsAgentId} />}
                   {isAdmin && <div className="agentAccessGrantRow">
                     <input
                       value={newAccessEmail}
                       onChange={(e) => setNewAccessEmail(e.target.value)}
                       placeholder="user@email.com"
-                      style={{ flex: 1 }}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addAccess(); } }}
                     />
                     <button className="primary inlinePrimary" onClick={() => void addAccess()} disabled={agentSettingsLoading || agentAccessLoading || !newAccessEmail.trim()}>Grant</button>
                   </div>}
                   {agentAccessList.length > 0 ? (
-                    <div style={{ maxHeight: '120px', overflowY: 'auto', fontSize: '12px' }}>
+                    <div className="agentAccessList">
                       {(agentAccessList as AccessEntry[]).map((entry) => (
-                        <div key={entry.email} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                          <span>{entry.email} <span style={{ color: entry.status === 'expired' ? '#e55' : '#888' }}>{accessStatusText(entry)}</span></span>
-                          {isAdmin && entry.status && entry.status !== 'pending' && <button onClick={() => void renewAccess(entry.email, entry.extensionDays ?? undefined)} disabled={agentSettingsLoading || agentAccessLoading} aria-label={`Renew access for ${entry.email}`} style={{ fontSize: '11px', padding: '2px 6px', marginLeft: 'auto', marginRight: '4px' }}>{entry.extensionDays ? `Approve +${entry.extensionDays}d` : 'Renew'}</button>}
-                          {isAdmin && <button onClick={() => void removeAccess(entry.email)} disabled={agentSettingsLoading || agentAccessLoading} aria-label={`Revoke access for ${entry.email}`} style={{ fontSize: '11px', padding: '2px 6px', background: 'transparent', color: '#e55', border: '1px solid #e55', borderRadius: '3px', cursor: 'pointer' }}>✕</button>}
+                        <div key={entry.email} className="agentAccessRow">
+                          <span className="agentAccessEmail" title={entry.email}><span>{entry.email}</span><span className={`agentAccessStatus${entry.status === 'expired' ? ' expired' : ''}`}>{accessStatusText(entry)}</span></span>
+                          {isAdmin && entry.status && entry.status !== 'pending' && <button type="button" className="modalButton compact" onClick={() => void renewAccess(entry.email, entry.extensionDays ?? undefined)} disabled={agentSettingsLoading || agentAccessLoading} aria-label={`Renew access for ${entry.email}`}>{entry.extensionDays ? `Approve +${entry.extensionDays}d` : 'Renew'}</button>}
+                          {isAdmin && <button type="button" className="modalButton compact danger" onClick={() => void removeAccess(entry.email)} disabled={agentSettingsLoading || agentAccessLoading} aria-label={`Revoke access for ${entry.email}`}>✕</button>}
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div style={{ fontSize: '12px', color: '#666', fontStyle: 'italic' }}>No users granted access yet. Only the owner and admins can talk to this agent.</div>
+                    <div className="agentAccessEmpty">No users granted access yet. Only the owner and admins can talk to this agent.</div>
                   )}
                 </>
               )}
