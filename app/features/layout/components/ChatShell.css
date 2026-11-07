@@ -808,7 +808,7 @@
   flex: 0 0 auto;
 }
 .chatPageRoot .statusBar .composerGitContextLabel {
-  font-size: 10px;
+  font-size: inherit;
 }
 .chatPageRoot .statusBar .composerGitContextPicker {
   width: 124px;
@@ -825,7 +825,7 @@
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  font-size: 10px;
+  font-size: inherit;
   line-height: 1.2;
 }
 .chatPageRoot .statusBar .themedPickerTrigger:hover:not(:disabled),
@@ -841,15 +841,15 @@
   max-width: min(420px, calc(100vw - 24px));
 }
 .chatPageRoot .statusBar .themedPickerCaret {
-  font-size: 9px;
+  font-size: 10px;
   opacity: 0.55;
 }
 .chatPageRoot .statusBar .themedPickerOption,
 .chatPageRoot .statusBar .themedPickerEmpty {
-  font-size: 11px;
+  font-size: 12px;
 }
 .chatPageRoot .statusBar .composerGitContextStatus {
-  font-size: 10px;
+  font-size: inherit;
   white-space: nowrap;
 }
 .chatPageRoot .muted { color: var(--muted); }

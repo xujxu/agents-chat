@@ -11,7 +11,7 @@ async function pickOption(page: Page, label: string, value: string) {
   await page.locator(`[role="option"][data-value="${value}"]`).click();
 }
 
-test('shows branch/worktree controls in the status bar and keeps selection per chat', async ({ page }) => {
+async function openChatWithGitContext(page: Page, available = true) {
   const chats = new Map<string, any>();
   const gitContextLoadedChatIds = new Set<string>();
   let lastChatId = '';
@@ -20,6 +20,9 @@ test('shows branch/worktree controls in the status bar and keeps selection per c
   const gitContextUpdates: string[] = [];
 
   function buildGitContextOptions(chat: any) {
+    if (!available) {
+      return { available: false, repoRoot: null, branches: [], worktrees: [], effective: null, statusText: 'Git context unavailable' };
+    }
     const effective = chat?.gitContext || {
       repoRoot: 'C:/repo',
       worktreePath: 'C:/repo',
@@ -146,11 +149,25 @@ test('shows branch/worktree controls in the status bar and keeps selection per c
     await expect.poll(() => gitContextLoadedChatIds.has(createdChatId), { timeout: 15000 }).toBe(true);
   }
 
+  return { createChatAndWaitForGitContext, gitContextUpdates };
+}
+
+test('shows branch/worktree controls in the status bar and keeps selection per chat', async ({ page }) => {
+  const { createChatAndWaitForGitContext, gitContextUpdates } = await openChatWithGitContext(page);
   await createChatAndWaitForGitContext('button.emptyHomepageNewChat');
   await expect(page.locator('button.newChatButton')).toBeVisible({ timeout: 15000 });
   await expect(page.getByLabel('Branch', { exact: true })).toBeVisible({ timeout: 15000 });
   await expect(page.getByLabel('Worktree', { exact: true })).toBeVisible({ timeout: 15000 });
   await expect(page.getByLabel('Worktree', { exact: true })).toBeEnabled({ timeout: 15000 });
+  await expect(page.getByLabel('Branch', { exact: true })).toContainText('main');
+
+  // Git context text uses the same size as the rest of the status bar.
+  const sizes = await page.locator('.statusBar').evaluate((bar) => {
+    const size = (selector: string) => getComputedStyle(bar.querySelector(selector) as Element).fontSize;
+    return { bar: getComputedStyle(bar).fontSize, label: size('.composerGitContextLabel'), picker: size('.themedPickerTrigger') };
+  });
+  expect(sizes.label).toBe(sizes.bar);
+  expect(sizes.picker).toBe(sizes.bar);
 
   await pickOption(page, 'Worktree', 'C:/repo/.worktrees/feat-a');
   expect(gitContextUpdates).toContain('C:/repo/.worktrees/feat-a');
@@ -166,4 +183,12 @@ test('shows branch/worktree controls in the status bar and keeps selection per c
   await firstChat.click();
 
   await expect(page.getByLabel('Worktree', { exact: true })).toHaveAttribute('data-value', 'C:/repo/.worktrees/feat-a');
+});
+
+test('explains empty git pickers when the agent folder is not a git repo', async ({ page }) => {
+  const { createChatAndWaitForGitContext } = await openChatWithGitContext(page, false);
+  await createChatAndWaitForGitContext('button.emptyHomepageNewChat');
+  await expect(page.getByLabel('Branch', { exact: true })).toContainText('none');
+  await expect(page.getByLabel('Worktree', { exact: true })).toContainText('none');
+  await expect(page.locator('.statusBar .composerGitContextStatus')).toHaveText("no git repo in the agent's folder");
 });

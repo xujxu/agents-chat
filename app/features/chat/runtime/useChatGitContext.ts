@@ -100,8 +100,10 @@ export function useChatGitContext({ currentChatId, sessionLockSignature = '', on
     const selectedWorktree = state.selected?.worktreePath || '';
     const selectedBranch = state.selected?.branchName || '';
     const locked = state.locked || sessionLockSignature.length > 0;
+    const unavailable = Boolean(state.options && !state.options.available);
     return {
       disabled: state.loading || locked || !(state.options?.available),
+      unavailable,
       branches: state.options?.branches || [],
       worktrees: (state.options?.worktrees || []).map((worktree) => ({
         path: worktree.worktreePath,
@@ -111,7 +113,10 @@ export function useChatGitContext({ currentChatId, sessionLockSignature = '', on
       })),
       selectedWorktree,
       selectedBranch,
-      statusText: state.error || (locked ? 'session active - git context locked' : state.options?.statusText || ''),
+      // The lock only matters when there is a repo; otherwise say why the pickers are empty.
+      statusText: unavailable
+        ? "no git repo in the agent's folder"
+        : state.error || (locked ? 'session active - git context locked' : state.options?.statusText || ''),
       locked,
     };
   }, [sessionLockSignature, state]);
