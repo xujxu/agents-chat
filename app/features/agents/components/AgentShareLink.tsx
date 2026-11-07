@@ -62,7 +62,7 @@ export function AgentShareLink({ agentId }: { agentId: string }) {
           <input readOnly value={link} aria-label="Share link" onFocus={(e) => e.currentTarget.select()} />
           <button type="button" className="modalButton" onClick={() => void copy()} disabled={busy}>Copy link</button>
           <button type="button" className="modalButton" onClick={() => void run('create-link')} disabled={busy} title="Replace this link with a new one, e.g. if it leaked. The old link stops working.">Reset link</button>
-          <button type="button" className="modalButton danger" onClick={() => void run('revoke-link')} disabled={busy}>Disable</button>
+          <button type="button" className="modalButton danger" onClick={() => void run('revoke-link')} disabled={busy} title="Turn off this link so nobody new can join with it. People who already joined keep access; use Revoke below to remove someone.">Turn off link</button>
         </div>
       ) : (
         <button type="button" className="modalButton" onClick={() => void run('create-link')} disabled={busy}>Create share link</button>

@@ -375,7 +375,10 @@ test.describe('agent and node management', () => {
     page.once('dialog', (dialog) => dialog.accept());
     await resetLink.click();
     await expect(shareLink).toHaveValue(/\/invite\/tok-2$/);
-    await settings.getByRole('button', { name: 'Disable' }).click();
+    await expect(settings.getByRole('button', { name: 'Disable' })).toHaveCount(0);
+    const turnOff = settings.getByRole('button', { name: 'Turn off link' });
+    await expect(turnOff).toHaveAttribute('title', /already joined keep access/);
+    await turnOff.click();
     await expect(settings.getByRole('button', { name: 'Create share link' })).toBeVisible();
 
     await settings.getByPlaceholder('user@email.com').fill('reader@example.com');
