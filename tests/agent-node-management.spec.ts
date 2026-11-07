@@ -184,6 +184,14 @@ async function installIsolatedBackend(page: Page) {
     }
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true }) });
   });
+  const shareTokens = new Map<string, string>();
+  let shareTokenSeq = 0;
+  await page.route('**/api/agent-access', async (route) => {
+    const body = (route.request().postDataJSON() || {}) as Record<string, any>;
+    if (body.action === 'create-link') shareTokens.set(body.agentId, `tok-${++shareTokenSeq}`);
+    if (body.action === 'revoke-link') shareTokens.delete(body.agentId);
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, token: shareTokens.get(body.agentId) ?? null }) });
+  });
   await page.route('**/api/nodes', async (route) => {
     const body = route.request().postDataJSON() as Record<string, any>;
     nodeRequests.push(body);
@@ -331,6 +339,29 @@ test.describe('agent and node management', () => {
     await publicToggle.check();
     await expect(settings.getByPlaceholder('user@email.com')).toHaveCount(0);
     await publicToggle.uncheck();
+
+    // One share link per agent: Reset replaces it (after confirm), Disable removes it.
+    await settings.getByRole('button', { name: 'Create share link' }).click();
+    const shareLink = settings.getByLabel('Share link');
+    await expect(shareLink).toHaveValue(/\/invite\/tok-1$/);
+    await expect(settings.getByRole('button', { name: 'New link' })).toHaveCount(0);
+    const resetLink = settings.getByRole('button', { name: 'Reset link' });
+    await expect(resetLink).toHaveAttribute('title', /old link stops working/);
+    const shareRow = await settings.locator('.agentShareLink .agentAccessGrantRow').evaluate((row) => {
+      const heights = [...row.querySelectorAll('input, button')].map((el) => el.getBoundingClientRect().height);
+      return { min: Math.min(...heights), max: Math.max(...heights), overflow: row.scrollWidth - row.clientWidth };
+    });
+    expect(shareRow.max - shareRow.min).toBeLessThanOrEqual(1);
+    expect(shareRow.overflow).toBeLessThanOrEqual(0);
+    page.once('dialog', (dialog) => void dialog.dismiss());
+    await resetLink.click();
+    await expect(shareLink).toHaveValue(/\/invite\/tok-1$/);
+    page.once('dialog', (dialog) => dialog.accept());
+    await resetLink.click();
+    await expect(shareLink).toHaveValue(/\/invite\/tok-2$/);
+    await settings.getByRole('button', { name: 'Disable' }).click();
+    await expect(settings.getByRole('button', { name: 'Create share link' })).toBeVisible();
+
     await settings.getByPlaceholder('user@email.com').fill('reader@example.com');
     await settings.getByRole('button', { name: 'Grant' }).click();
     const accessEmail = settings.getByText('reader@example.com', { exact: true });
@@ -359,7 +390,15 @@ test.describe('agent and node management', () => {
     expect(accessLayout.revokeCenterDelta).toBeLessThanOrEqual(1.5);
     expect(accessLayout.rowOverflow).toBeLessThanOrEqual(0);
     expect(accessLayout.environmentFont).toMatch(/mono|consolas|menlo/i);
-    await settings.getByRole('button', { name: 'Revoke access for reader@example.com' }).click();
+    const revokeButton = settings.getByRole('button', { name: 'Revoke access for reader@example.com' });
+    await expect(revokeButton).toHaveText('Revoke');
+    let revokePrompt = '';
+    page.once('dialog', (dialog) => { revokePrompt = dialog.message(); void dialog.dismiss(); });
+    await revokeButton.click();
+    expect(revokePrompt).toContain('Revoke access for reader@example.com?');
+    await expect(accessEmail).toBeVisible();
+    page.once('dialog', (dialog) => dialog.accept());
+    await revokeButton.click();
     await expect(settings.getByText('reader@example.com', { exact: true })).toHaveCount(0);
 
     await settings.getByRole('button', { name: 'Save' }).click();

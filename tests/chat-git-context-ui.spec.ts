@@ -11,7 +11,7 @@ async function pickOption(page: Page, label: string, value: string) {
   await page.locator(`[role="option"][data-value="${value}"]`).click();
 }
 
-async function openChatWithGitContext(page: Page, available = true) {
+async function openChatWithGitContext(page: Page, { available = true, savedContext = null as any } = {}) {
   const chats = new Map<string, any>();
   const gitContextLoadedChatIds = new Set<string>();
   let lastChatId = '';
@@ -23,7 +23,7 @@ async function openChatWithGitContext(page: Page, available = true) {
     if (!available) {
       return { available: false, repoRoot: null, branches: [], worktrees: [], effective: null, statusText: 'Git context unavailable' };
     }
-    const effective = chat?.gitContext || {
+    const effective = chat?.gitContext || savedContext || {
       repoRoot: 'C:/repo',
       worktreePath: 'C:/repo',
       branchName: 'main',
@@ -186,9 +186,17 @@ test('shows branch/worktree controls in the status bar and keeps selection per c
 });
 
 test('explains empty git pickers when the agent folder is not a git repo', async ({ page }) => {
-  const { createChatAndWaitForGitContext } = await openChatWithGitContext(page, false);
+  const { createChatAndWaitForGitContext } = await openChatWithGitContext(page, { available: false });
   await createChatAndWaitForGitContext('button.emptyHomepageNewChat');
   await expect(page.getByLabel('Branch', { exact: true })).toContainText('none');
   await expect(page.getByLabel('Worktree', { exact: true })).toContainText('none');
   await expect(page.locator('.statusBar .composerGitContextStatus')).toHaveText("no git repo in the agent's folder");
+});
+
+test('keeps a saved worktree visible after it disappears from the worktree list', async ({ page }) => {
+  const gone = { repoRoot: 'C:/repo', worktreePath: 'C:/repo/.worktrees/removed', branchName: 'feat/removed' };
+  const { createChatAndWaitForGitContext } = await openChatWithGitContext(page, { savedContext: gone });
+  await createChatAndWaitForGitContext('button.emptyHomepageNewChat');
+  await expect(page.getByLabel('Worktree', { exact: true })).toContainText('C:/repo/.worktrees/removed');
+  await expect(page.getByLabel('Branch', { exact: true })).toContainText('feat/removed');
 });

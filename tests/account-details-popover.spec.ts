@@ -72,4 +72,32 @@ test.describe('Account details popover', () => {
     await page.locator('.header h1').click();
     await expect(popover).toHaveCount(0);
   });
+
+  test('Users & roles labels inherited roles and keeps text sizes consistent', async ({ page }) => {
+    const users = [
+      { email: 'admin@local', role: 'admin', sources: ['env'], uiRole: null, agents: [] },
+      { email: 'guest@outside.com', role: 'guest', sources: ['grant'], uiRole: null, agents: [{ id: 'a', name: 'Agent A' }] },
+      { email: 'env@contoso.com', role: 'member', sources: ['env'], uiRole: null, envMember: '*@contoso.com', agents: [] },
+      { email: 'ui@contoso.com', role: 'member', sources: ['ui'], uiRole: 'member', agents: [] },
+    ];
+    await page.route('**/api/users**', (route) => route.fulfill({ json: { ok: true, me: 'admin@local', users, envPatterns: { admins: [], members: ['*@contoso.com'] } } }));
+
+    await page.locator('.userChip .userNameButton').click();
+    await page.locator('.accountMenu').getByRole('button', { name: 'Users & roles' }).click();
+    const dialog = page.locator('.modal', { hasText: 'Users & roles' });
+    await expect(dialog.locator('.usersRolesItem')).toHaveCount(4);
+
+    const emptyOption = (email: string) => dialog.getByLabel(`UI role for ${email}`).locator('option[value=""]');
+    await expect(emptyOption('guest@outside.com')).toHaveText('Guest (agent access)');
+    await expect(emptyOption('env@contoso.com')).toHaveText('Member (env)');
+    await expect(emptyOption('ui@contoso.com')).toHaveText('Remove UI role');
+    await expect(dialog.getByText('— no UI role —')).toHaveCount(0);
+
+    const sizes = await dialog.evaluate((modal) => {
+      const size = (selector: string) => getComputedStyle(modal.querySelector(selector) as Element).fontSize;
+      return { email: size('.usersRolesEmail'), input: size('.usersRolesAdd input'), select: size('.usersRolesActions select') };
+    });
+    expect(sizes.email).toBe(sizes.input);
+    expect(sizes.select).toBe(sizes.input);
+  });
 });
