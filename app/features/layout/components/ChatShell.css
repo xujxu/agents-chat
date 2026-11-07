@@ -1546,7 +1546,7 @@
 .chatPageRoot .usersRolesAdd input { flex: 1; min-width: 0; }
 .chatPageRoot .modal .usersRolesAdd select,
 .chatPageRoot .modal .usersRolesActions select { width: auto; padding: 0 var(--modal-field-padding-inline); }
-.chatPageRoot .modal .usersRolesAdd input,
+.chatPageRoot .modal .usersRolesAdd input:not([type="checkbox"]):not([type="radio"]),
 .chatPageRoot .modal .usersRolesAdd select,
 .chatPageRoot .modal .usersRolesActions select { font-size: 13px; }
 .chatPageRoot .usersRolesAdd button { cursor: pointer; }
