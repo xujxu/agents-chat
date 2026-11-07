@@ -353,13 +353,32 @@ test.describe('agent and node management', () => {
     });
     expect(shareRow.max - shareRow.min).toBeLessThanOrEqual(1);
     expect(shareRow.overflow).toBeLessThanOrEqual(0);
+    // One primary per dialog (Save), and its label meets WCAG AA contrast.
+    await expect(settings.locator('button.primary')).toHaveCount(1);
+    await expect(settings.locator('button.primary')).toHaveText('Save');
+    const primaryContrast = await settings.locator('button.primary').evaluate((button) => {
+      const style = getComputedStyle(button);
+      const luminance = (color: string) => {
+        const [r, g, b] = (color.match(/\d+(\.\d+)?/g) || []).slice(0, 3).map(Number).map((v) => {
+          const c = v / 255;
+          return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+        });
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      };
+      const [hi, lo] = [luminance(style.color), luminance(style.backgroundColor)].sort((a, b) => b - a);
+      return (hi + 0.05) / (lo + 0.05);
+    });
+    expect(primaryContrast).toBeGreaterThanOrEqual(4.5);
     page.once('dialog', (dialog) => void dialog.dismiss());
     await resetLink.click();
     await expect(shareLink).toHaveValue(/\/invite\/tok-1$/);
     page.once('dialog', (dialog) => dialog.accept());
     await resetLink.click();
     await expect(shareLink).toHaveValue(/\/invite\/tok-2$/);
-    await settings.getByRole('button', { name: 'Disable' }).click();
+    await expect(settings.getByRole('button', { name: 'Disable' })).toHaveCount(0);
+    const turnOff = settings.getByRole('button', { name: 'Turn off link' });
+    await expect(turnOff).toHaveAttribute('title', /already joined keep access/);
+    await turnOff.click();
     await expect(settings.getByRole('button', { name: 'Create share link' })).toBeVisible();
 
     await settings.getByPlaceholder('user@email.com').fill('reader@example.com');

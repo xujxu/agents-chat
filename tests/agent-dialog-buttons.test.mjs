@@ -30,16 +30,16 @@ assert.doesNotMatch(
   'modalActions .danger:hover should not hardcode #c22d35',
 );
 
-// 2. Primary CTA rule exists and uses --accent.
+// 2. Primary CTA uses the per-theme AA-contrast tokens (falling back to accent).
 assert.match(
   cssSource,
-  /\.modal button\.primary\s*\{[^}]*background:\s*var\(--accent\)/,
-  '.modal button.primary should background with var(--accent)',
+  /\.modal button\.primary\s*\{[^}]*background:\s*var\(--primary-bg,\s*var\(--accent\)\)/,
+  '.modal button.primary should background with var(--primary-bg, var(--accent))',
 );
 assert.match(
   cssSource,
-  /\.modal button\.primary\s*\{[^}]*color:\s*#fff/i,
-  '.modal button.primary should use white text on accent fill',
+  /\.modal button\.primary\s*\{[^}]*color:\s*var\(--primary-text,\s*#fff\)/i,
+  '.modal button.primary should use var(--primary-text) on the primary fill',
 );
 
 // 3. Danger rule is outlined-by-default and uses --danger, with a fill-on-hover rule.
@@ -95,7 +95,7 @@ assert.match(
   'ChatGPT theme should set color-scheme: light so checkboxes render light',
 );
 
-// 4. AgentsPanel uses .primary for Save and Grant, drops inline padding/fontSize on Grant,
+// 4. AgentsPanel uses .primary only for Save (one primary per dialog); Grant is secondary,
 //    and drops the trash emoji on Delete (text-only).
 assert.match(
   panelSource,
@@ -104,8 +104,8 @@ assert.match(
 );
 assert.match(
   panelSource,
-  /className="primary[^"]*"[^>]*onClick=\{[^}]*addAccess[\s\S]{0,200}>Grant</,
-  'Grant button should use className containing "primary"',
+  /className="modalButton"[^>]*onClick=\{[^}]*addAccess[\s\S]{0,200}>Grant</,
+  'Grant button should be a secondary modalButton, not a second primary',
 );
 assert.doesNotMatch(
   panelSource,
