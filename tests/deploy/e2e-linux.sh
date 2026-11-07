@@ -75,6 +75,7 @@ old_status=$(git -C "$OLD" status --porcelain)
 
 step "1. migrate the existing checkout (the first attempt is killed and undone by the re-run)"
 kill_at_health d deploy --import-from "$OLD"
+touch "$T/migrated-at"
 d deploy --import-from "$OLD"
 [[ "$(state 's.pending')" == null ]] || fail "pending not cleared after the re-run"
 wait_version "$BASE"
@@ -85,6 +86,10 @@ grep -q "^User=root" /etc/systemd/system/agents-chat.service || fail "unit User 
 grep -q "^WorkingDirectory=$ROOT/current" /etc/systemd/system/agents-chat.service || fail "unit not re-pointed"
 ls "$ROOT"/backups/migration-*/agents-chat.service >/dev/null || fail "old unit not backed up"
 node tests/deploy/check-release-links.mjs "$ROOT/current" "$ROOT/shared" || fail "release links into the build folder"
+(cd "$ROOT/current" && node -e 'require("pino-roll")') || fail "pino-roll cannot be loaded from the release"
+if journalctl -u agents-chat --since "@$(stat -c %Y "$T/migrated-at")" --no-pager | grep -q "failed to initialize transports"; then
+  fail "logger fell back to stdout (a pino transport is missing from the release)"
+fi
 
 step "2. upgrade (reusing dependencies)"
 d update --revision "$V2" --no-install
