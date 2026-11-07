@@ -258,6 +258,9 @@ test('waits for a confirmed save before sending to the agent', async ({ page }) 
     await send(page, 'Wait until durable');
     await expect.poll(() => fixture.saveSizes.length).toBeGreaterThan(0);
     expect(fixture.sent).toEqual([]);
+    // An in-flight save is normal; the drafts notice only appears once it fails or stalls.
+    await page.waitForTimeout(1_000);
+    await expect(page.getByTestId('chat-outbox')).toHaveCount(0);
     release();
     await expect.poll(() => fixture.sent.length).toBe(1);
     await expect.poll(() => fixture.savedBeforeSend).toEqual([true]);
