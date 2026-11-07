@@ -10,20 +10,23 @@
 }
 .chatSearchInput {
   width: 100%;
-  padding: 7px 30px 7px 10px;
+  height: var(--control-height, 30px);
+  box-sizing: border-box;
+  padding: 0 30px 0 var(--control-padding-inline, 10px);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--control-radius, 8px);
   background: var(--bg);
   color: var(--text);
   font-size: 12px;
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 .chatSearchInput::placeholder {
   color: var(--muted);
 }
 .chatSearchInput:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
 }
 .chatSearchClear {
   position: absolute;
@@ -96,13 +99,16 @@
 }
 .chatRenameInput {
   width: 100%;
-  padding: 6px 8px;
+  height: var(--control-height, 30px);
+  box-sizing: border-box;
+  padding: 0 var(--control-padding-inline, 10px);
   border: 1px solid var(--accent);
-  border-radius: 8px;
+  border-radius: var(--control-radius, 8px);
   background: var(--bg);
   color: var(--text);
   font-size: 12px;
   outline: none;
+  box-shadow: 0 0 0 2px var(--accent-soft);
 }
 .chatHistoryItem {
   display: flex;

@@ -290,12 +290,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 30px;
+  min-height: var(--control-height, 30px);
   border: 1px solid var(--border);
   background: var(--panel-soft);
   color: var(--accent);
-  border-radius: 10px;
-  padding: 0 10px;
+  border-radius: var(--control-radius, 8px);
+  padding: 0 12px;
   font-size: 12px;
   line-height: 1;
   cursor: pointer;
@@ -315,14 +315,26 @@
 .agentUserRequestSelect {
   flex: 1;
   min-width: 180px;
-  padding: 6px 8px;
+  height: var(--control-height, 30px);
+  box-sizing: border-box;
+  padding: 0 var(--control-padding-inline, 10px);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--control-radius, 8px);
   background: var(--input-bg);
   color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
 }
-.agentUserRequestSelect {
-  min-height: 32px;
+.agentUserRequestInput:focus,
+.agentUserRequestSelect:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.agentUserRequestSelect[multiple] {
+  height: auto;
+  padding-block: 4px;
 }
 .agentUserRequestError {
   margin-top: 10px;

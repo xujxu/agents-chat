@@ -1,5 +1,8 @@
 .chatPageRoot .page {
+  /* Compact controls outside modals (sidebar, panels, inline cards). */
   --control-height: 30px;
+  --control-padding-inline: 10px;
+  --control-radius: 8px;
   position: relative;
   height: var(--app-viewport-height, 100dvh);
   min-height: var(--app-viewport-height, 100dvh);
@@ -262,14 +265,16 @@
   color: var(--text-soft); font-size: 12px;
 }
 .chatPageRoot .workflowFollowUpCardInput {
-  width: 100%; min-height: 56px; resize: vertical;
-  padding: 8px 10px;
+  width: 100%; min-height: 56px; resize: vertical; box-sizing: border-box;
+  padding: 7px var(--control-padding-inline, 10px);
   background: var(--input-bg); color: var(--text);
-  border: 1px solid var(--border); border-radius: 8px;
-  font: inherit;
+  border: 1px solid var(--border); border-radius: var(--control-radius, 8px);
+  font: inherit; line-height: 1.4;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 .chatPageRoot .workflowFollowUpCardInput:focus {
   outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
 }
 .chatPageRoot .workflowFollowUpCardError {
   color: #ff6b6b; font-size: 12px;
@@ -280,8 +285,10 @@
 .chatPageRoot .workflowFollowUpCardSkip,
 .chatPageRoot .workflowFollowUpCardSend {
   appearance: none; cursor: pointer;
-  padding: 6px 14px; border-radius: 8px;
-  font: inherit; font-size: 12px;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: var(--control-height, 30px);
+  padding: 0 14px; border-radius: var(--control-radius, 8px);
+  font: inherit; font-size: 12px; line-height: 1.2;
   border: 1px solid var(--border);
   background: var(--input-bg); color: var(--text);
 }
@@ -1538,8 +1545,8 @@
 .chatPageRoot .usersRolesAdd { display: flex; gap: 8px; margin-bottom: 12px; }
 .chatPageRoot .usersRolesAdd input { flex: 1; min-width: 0; }
 .chatPageRoot .modal .usersRolesAdd select,
-.chatPageRoot .modal .usersRolesActions select { width: auto; padding: 8px 10px; }
-.chatPageRoot .usersRolesAdd button { padding: 8px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--accent); color: var(--bg); cursor: pointer; }
+.chatPageRoot .modal .usersRolesActions select { width: auto; padding: 0 var(--modal-field-padding-inline); }
+.chatPageRoot .usersRolesAdd button { cursor: pointer; }
 .chatPageRoot .usersRolesAdd button:disabled { opacity: 0.5; cursor: default; }
 .chatPageRoot .usersRolesList { list-style: none; margin: 0 0 12px; padding: 0; max-height: 50vh; overflow-y: auto; border-top: 1px solid var(--border); }
 .chatPageRoot .usersRolesItem { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--border); }
