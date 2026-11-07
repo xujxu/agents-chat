@@ -222,15 +222,16 @@
   border-top: 1px solid var(--border);
 }
 .chatPageRoot .agentAccessEmail {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .chatPageRoot .agentAccessStatus {
-  margin-left: 6px;
+  flex: 1 0 auto;
   color: var(--muted);
+  white-space: nowrap;
 }
 .chatPageRoot .agentAccessStatus.expired {
   color: var(--danger);
