@@ -56,21 +56,21 @@ export function AgentShareLink({ agentId }: { agentId: string }) {
   }
 
   return (
-    <div className="agentShareLink" style={{ margin: '8px 0', fontSize: '12px' }}>
+    <div className="agentShareLink">
       {link ? (
         <div className="agentAccessGrantRow">
-          <input readOnly value={link} aria-label="Share link" onFocus={(e) => e.currentTarget.select()} style={{ flex: 1, fontFamily: 'monospace' }} />
-          <button type="button" className="inlinePrimary" onClick={() => void copy()} disabled={busy}>Copy link</button>
-          <button type="button" onClick={() => void run('create-link')} disabled={busy}>New link</button>
-          <button type="button" onClick={() => void run('revoke-link')} disabled={busy}>Disable</button>
+          <input readOnly value={link} aria-label="Share link" onFocus={(e) => e.currentTarget.select()} />
+          <button type="button" className="primary inlinePrimary" onClick={() => void copy()} disabled={busy}>Copy link</button>
+          <button type="button" className="modalButton" onClick={() => void run('create-link')} disabled={busy}>New link</button>
+          <button type="button" className="modalButton danger" onClick={() => void run('revoke-link')} disabled={busy}>Disable</button>
         </div>
       ) : (
-        <button type="button" onClick={() => void run('create-link')} disabled={busy}>Create share link</button>
+        <button type="button" className="modalButton" onClick={() => void run('create-link')} disabled={busy}>Create share link</button>
       )}
-      <p style={{ color: '#666', margin: '4px 0 0' }}>
+      <p className="agentSectionNote">
         People listed below must open this link while signed in with the listed account. Access lasts 30 days.
       </p>
-      {note ? <p role="status" style={{ margin: '4px 0 0' }}>{note}</p> : null}
+      {note ? <p role="status" className="agentSectionNote">{note}</p> : null}
     </div>
   );
 }

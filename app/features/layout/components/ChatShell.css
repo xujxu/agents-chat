@@ -1,5 +1,11 @@
 .chatPageRoot .page {
+  /* Compact controls outside modals (sidebar, panels, inline cards). */
   --control-height: 30px;
+  --control-padding-inline: 10px;
+  --control-radius: 8px;
+  /* Dense controls in tight panes (comments, diff toggles, inline node edit). */
+  --control-height-sm: 26px;
+  --control-radius-sm: 6px;
   position: relative;
   height: var(--app-viewport-height, 100dvh);
   min-height: var(--app-viewport-height, 100dvh);
@@ -263,13 +269,15 @@
 }
 .chatPageRoot .workflowFollowUpCardInput {
   width: 100%; min-height: 56px; resize: vertical;
-  padding: 8px 10px;
+  padding: 7px var(--control-padding-inline, 10px);
   background: var(--input-bg); color: var(--text);
-  border: 1px solid var(--border); border-radius: 8px;
-  font: inherit;
+  border: 1px solid var(--border); border-radius: var(--control-radius, 8px);
+  font: inherit; line-height: 1.4;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 .chatPageRoot .workflowFollowUpCardInput:focus {
   outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
 }
 .chatPageRoot .workflowFollowUpCardError {
   color: #ff6b6b; font-size: 12px;
@@ -280,8 +288,10 @@
 .chatPageRoot .workflowFollowUpCardSkip,
 .chatPageRoot .workflowFollowUpCardSend {
   appearance: none; cursor: pointer;
-  padding: 6px 14px; border-radius: 8px;
-  font: inherit; font-size: 12px;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: var(--control-height, 30px);
+  padding: 0 14px; border-radius: var(--control-radius, 8px);
+  font: inherit; font-size: 12px; line-height: 1.2;
   border: 1px solid var(--border);
   background: var(--input-bg); color: var(--text);
 }
@@ -846,6 +856,14 @@
   backdrop-filter: blur(10px);
 }
 .chatPageRoot .modal {
+  /* One control size for every input, select and button in a modal so mixed rows line up. */
+  --modal-control-height: 34px;
+  --modal-compact-control-height: 26px;
+  --modal-field-padding-inline: 10px;
+  --modal-field-radius: 8px;
+  --modal-compact-radius: 6px;
+  --modal-field-font-size: 13.5px;
+  --modal-field-font-family: var(--font-ui);
   width: min(520px, 100%);
   max-height: calc(100vh - 32px);
   overflow-y: auto;
@@ -856,40 +874,55 @@
   box-shadow: var(--shadow);
 }
 .chatPageRoot .modal h2 { margin-top: 0; color: var(--accent); }
-.chatPageRoot .modal label { display: block; margin-bottom: 14px; }
-.chatPageRoot .modal label span { display: block; margin-bottom: 6px; color: var(--text-soft); }
+.chatPageRoot .modal label { display: block; margin-bottom: 12px; }
+.chatPageRoot .modal label span { display: block; margin-bottom: 5px; color: var(--text-soft); }
 .chatPageRoot .modal input:not([type="checkbox"]):not([type="radio"]),
+.chatPageRoot .modal select,
 .chatPageRoot .modal textarea {
   width: 100%;
-  padding: 12px 14px;
+  padding: 0 var(--modal-field-padding-inline);
   background: var(--input-bg);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--modal-field-radius);
   color: var(--text);
   font: inherit;
-  resize: vertical;
+  /* Set via custom properties so containers (share link, mobile) can override without specificity fights. */
+  font-family: var(--modal-field-font-family);
+  font-size: var(--modal-field-font-size);
+  /* Transparent outline stays visible in forced-colors mode, where box-shadow is dropped. */
+  outline: 2px solid transparent;
+  outline-offset: -1px;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
 }
+.chatPageRoot .modal input:not([type="checkbox"]):not([type="radio"]),
 .chatPageRoot .modal select {
-  width: 100%;
-  padding: 12px 14px;
-  background: var(--input-bg);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  color: var(--text);
+  height: var(--modal-control-height);
 }
 .chatPageRoot .modal textarea {
-  width: 100%;
-  padding: 12px 14px;
-  background: var(--input-bg);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  color: var(--text);
-  font-family: inherit;
-  font-size: inherit;
+  padding-block: 7px;
   line-height: 1.4;
   resize: vertical;
   min-height: 80px;
-  box-sizing: border-box;
+}
+.chatPageRoot .modal input:not([type="checkbox"]):not([type="radio"]):focus,
+.chatPageRoot .modal select:focus,
+.chatPageRoot .modal textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.chatPageRoot .modal input:disabled,
+.chatPageRoot .modal select:disabled,
+.chatPageRoot .modal textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+/* Touch devices and phones: 44px touch targets, and 16px text so iOS Safari doesn't zoom on focus. */
+@media (hover: none) and (pointer: coarse), (max-width: 560px) {
+  .chatPageRoot .modal {
+    --modal-control-height: 44px;
+    --modal-compact-control-height: 44px;
+    --modal-field-font-size: 16px;
+  }
 }
 
 /* ── Scheduler agent picker: modal-styled trigger + themed popover ── */
@@ -926,6 +959,11 @@
   box-sizing: border-box;
   min-height: 40px;
   transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+.chatPageRoot .modal .themedPickerTrigger {
+  min-height: var(--modal-control-height);
+  padding: 0 var(--modal-field-padding-inline);
+  border-radius: var(--modal-field-radius);
 }
 .chatPageRoot .themedPickerTrigger:hover:not(:disabled),
 .chatPageRoot .themedPickerOpen {
@@ -1021,13 +1059,47 @@
 .chatPageRoot .modalActions button,
 .chatPageRoot .modal button.primary,
 .chatPageRoot .modal button.secondary,
-.chatPageRoot .modal button.danger {
-  padding: 8px 18px;
-  border-radius: 10px;
+.chatPageRoot .modal button.danger,
+.chatPageRoot .modal .modalButton {
+  padding: 0 16px;
+  border-radius: var(--modal-field-radius, 8px);
   font-weight: 600;
   font-size: 13px;
   line-height: 1.2;
-  min-height: 34px;
+  min-height: var(--modal-control-height, 34px);
+  white-space: nowrap;
+}
+.chatPageRoot .modal .modalButton {
+  cursor: pointer;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border-strong, var(--border));
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+.chatPageRoot .modal .modalButton:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.chatPageRoot .modal .modalButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.chatPageRoot .modal .modalButton.compact {
+  min-height: var(--modal-compact-control-height);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: var(--modal-compact-radius);
+}
+.chatPageRoot .modal .modalButton.danger {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 60%, transparent);
+}
+.chatPageRoot .modal .modalButton.danger:hover:not(:disabled) {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
 }
 .chatPageRoot .modalActions .secondary,
 .chatPageRoot .modal button.secondary {
@@ -1076,6 +1148,12 @@
   border-radius: 8px;
   min-height: 30px;
 }
+.chatPageRoot .modal button.inlinePrimary {
+  padding: 0 16px;
+  font-size: 13px;
+  border-radius: var(--modal-field-radius);
+  min-height: var(--modal-control-height);
+}
 .chatPageRoot .shareLinkModal {
   width: min(560px, 100%);
 }
@@ -1089,8 +1167,7 @@
 }
 .chatPageRoot .shareLinkInput {
   margin-bottom: 10px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 13px;
+  --modal-field-font-family: var(--font-mono);
 }
 .chatPageRoot .shareDialogStatus {
   margin: 0 0 14px;
@@ -1486,8 +1563,8 @@
 .chatPageRoot .usersRolesAdd { display: flex; gap: 8px; margin-bottom: 12px; }
 .chatPageRoot .usersRolesAdd input { flex: 1; min-width: 0; }
 .chatPageRoot .modal .usersRolesAdd select,
-.chatPageRoot .modal .usersRolesActions select { width: auto; padding: 8px 10px; }
-.chatPageRoot .usersRolesAdd button { padding: 8px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--accent); color: var(--bg); cursor: pointer; }
+.chatPageRoot .modal .usersRolesActions select { width: auto; padding: 0 var(--modal-field-padding-inline); }
+.chatPageRoot .usersRolesAdd button { cursor: pointer; }
 .chatPageRoot .usersRolesAdd button:disabled { opacity: 0.5; cursor: default; }
 .chatPageRoot .usersRolesList { list-style: none; margin: 0 0 12px; padding: 0; max-height: 50vh; overflow-y: auto; border-top: 1px solid var(--border); }
 .chatPageRoot .usersRolesItem { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--border); }

@@ -335,7 +335,31 @@ test.describe('agent and node management', () => {
     await settings.getByRole('button', { name: 'Grant' }).click();
     const accessEmail = settings.getByText('reader@example.com', { exact: true });
     await expect(accessEmail).toBeVisible();
-    await accessEmail.locator('..').getByRole('button').click();
+    const accessLayout = await settings.evaluate((modal) => {
+      const box = (selector: string) => modal.querySelector(selector)!.getBoundingClientRect();
+      const grantInput = box('.agentAccessSection > .agentAccessGrantRow input');
+      const grantButton = box('.agentAccessSection > .agentAccessGrantRow button');
+      const row = box('.agentAccessRow');
+      const email = box('.agentAccessRow .agentAccessEmail');
+      const revoke = box('.agentAccessRow > button');
+      const rowElement = modal.querySelector('.agentAccessRow') as HTMLElement;
+      const environment = modal.querySelector('textarea');
+      return {
+        grantHeightDelta: Math.abs(grantInput.height - grantButton.height),
+        grantTopDelta: Math.abs(grantInput.top - grantButton.top),
+        emailCenterDelta: Math.abs(email.top + email.height / 2 - (row.top + row.height / 2)),
+        revokeCenterDelta: Math.abs(revoke.top + revoke.height / 2 - (row.top + row.height / 2)),
+        rowOverflow: rowElement.scrollWidth - rowElement.clientWidth,
+        environmentFont: environment ? getComputedStyle(environment).fontFamily : '',
+      };
+    });
+    expect(accessLayout.grantHeightDelta).toBeLessThanOrEqual(1);
+    expect(accessLayout.grantTopDelta).toBeLessThanOrEqual(1);
+    expect(accessLayout.emailCenterDelta).toBeLessThanOrEqual(1.5);
+    expect(accessLayout.revokeCenterDelta).toBeLessThanOrEqual(1.5);
+    expect(accessLayout.rowOverflow).toBeLessThanOrEqual(0);
+    expect(accessLayout.environmentFont).toMatch(/mono|consolas|menlo/i);
+    await settings.getByRole('button', { name: 'Revoke access for reader@example.com' }).click();
     await expect(settings.getByText('reader@example.com', { exact: true })).toHaveCount(0);
 
     await settings.getByRole('button', { name: 'Save' }).click();
@@ -410,6 +434,9 @@ test.describe('agent and node management', () => {
     await expect(setup.locator('input[type="radio"][value="copilot"]')).toBeChecked();
     await setup.locator('input[type="radio"][value="agency"]').check();
     await expect(setup.locator('input[type="radio"][value="agency"]')).toBeChecked();
+    const launcherBox = await setup.locator('.setupScriptLauncher').boundingBox();
+    const actionsBox = await setup.locator('.setupScriptActions').boundingBox();
+    expect((actionsBox?.y ?? 0) - ((launcherBox?.y ?? 0) + (launcherBox?.height ?? 0))).toBeGreaterThanOrEqual(12);
     await setup.getByRole('button', { name: 'Close' }).click();
 
     let ownedRow = nodesPanel.locator('.agentListItem', { hasText: 'owned-node' });

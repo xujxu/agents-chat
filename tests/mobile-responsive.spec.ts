@@ -837,6 +837,24 @@ test('mobile Agent management keeps full CRUD and access controls reachable', as
   await settings.getByPlaceholder('user@email.com').fill('mobile@example.com');
   await settings.getByRole('button', { name: 'Grant' }).click();
   await expect(settings.getByText('mobile@example.com', { exact: true })).toBeVisible();
+  const touchLayout = await settings.evaluate((modal) => {
+    const grantInput = modal.querySelector('.agentAccessSection > .agentAccessGrantRow input') as HTMLElement;
+    const grantButton = modal.querySelector('.agentAccessSection > .agentAccessGrantRow button') as HTMLElement;
+    const revoke = modal.querySelector('.agentAccessRow > button') as HTMLElement;
+    return {
+      grantInputHeight: grantInput.getBoundingClientRect().height,
+      grantButtonHeight: grantButton.getBoundingClientRect().height,
+      revokeHeight: revoke.getBoundingClientRect().height,
+      grantInputFontSize: getComputedStyle(grantInput).fontSize,
+      nameFontSize: getComputedStyle(modal.querySelector('label > input') as HTMLElement).fontSize,
+    };
+  });
+  // Touch targets stay at 44px and fields at 16px so iOS Safari does not zoom on focus.
+  expect(touchLayout.grantInputHeight).toBeGreaterThanOrEqual(44);
+  expect(touchLayout.grantButtonHeight).toBeGreaterThanOrEqual(44);
+  expect(touchLayout.revokeHeight).toBeGreaterThanOrEqual(44);
+  expect(touchLayout.grantInputFontSize).toBe('16px');
+  expect(touchLayout.nameFontSize).toBe('16px');
   await settings.getByRole('button', { name: 'Revoke access for mobile@example.com' }).click();
   await expect(settings.getByText('mobile@example.com', { exact: true })).toHaveCount(0);
 

@@ -121,11 +121,12 @@
 }
 
 /* ── Agent form fields ── */
-.chatPageRoot .fieldHint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.chatPageRoot .fieldHint { display: block; font-size: 12px; color: var(--muted); margin-top: 4px; }
 .chatPageRoot .remoteAgentSelect {
   width: 100%;
-  padding: 10px 12px;
-  border-radius: 10px;
+  height: var(--modal-control-height, 34px);
+  padding: 0 var(--modal-field-padding-inline, 10px);
+  border-radius: var(--modal-field-radius, 8px);
   border: 1px solid var(--border);
   background: var(--panel-soft);
   color: var(--text);
@@ -140,13 +141,13 @@
   display: flex !important;
   flex-direction: row !important;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 18px;
+  gap: 8px;
+  margin-bottom: 12px;
   cursor: pointer;
 }
 .chatPageRoot .checkboxLabel input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   accent-color: var(--accent);
   cursor: pointer;
   flex-shrink: 0;
@@ -168,11 +169,100 @@
 }
 .chatPageRoot .agentAccessGrantRow {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 8px;
 }
 .chatPageRoot .agentAccessGrantRow input {
   flex: 1;
+  min-width: 0;
+}
+.chatPageRoot .agentShareLink {
+  margin: 0 0 12px;
+}
+.chatPageRoot .agentShareLink input {
+  --modal-field-font-family: var(--font-mono);
+}
+.chatPageRoot .agentSectionNote {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.chatPageRoot .agentShareLink .agentSectionNote {
+  margin: 6px 0 0;
+}
+.chatPageRoot .agentAccessSection {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.chatPageRoot .agentAccessSection h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+.chatPageRoot .agentAccessList {
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--modal-field-radius, 8px);
+  margin-bottom: 16px;
+  font-size: 12px;
+}
+.chatPageRoot .agentAccessRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--modal-control-height, 34px);
+  padding: 4px 6px 4px 10px;
+}
+.chatPageRoot .agentAccessRow + .agentAccessRow {
+  border-top: 1px solid var(--border);
+}
+.chatPageRoot .agentAccessEmail {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chatPageRoot .agentAccessStatus {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.chatPageRoot .agentAccessRow > button {
+  flex-shrink: 0;
+}
+.chatPageRoot .agentAccessStatus.expired {
+  color: var(--danger);
+}
+.chatPageRoot .agentAccessEmpty {
+  margin-bottom: 16px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--muted);
+}
+.chatPageRoot .agentEnvLabel {
+  display: flex !important;
+  align-items: center;
+  gap: 6px;
+}
+.chatPageRoot .agentEnvToggle {
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.chatPageRoot .agentEnvInput {
+  --modal-field-font-family: var(--font-mono);
 }
 .chatPageRoot .agentFormError {
   padding: 10px 12px;
@@ -335,10 +425,8 @@
     padding-top: 10px;
     background: var(--panel-strong);
   }
-  .chatPageRoot .agentMobileSheet input:not([type="checkbox"]):not([type="radio"]),
-  .chatPageRoot .agentMobileSheet textarea,
-  .chatPageRoot .agentMobileSheet select {
-    font-size: 16px;
+  .chatPageRoot .modal.agentMobileSheet {
+    --modal-field-font-size: 16px;
   }
   .chatPageRoot .agentMobileSheet .danger {
     min-height: 44px;
@@ -348,9 +436,11 @@
 @media (max-width: 560px) {
   .chatPageRoot .agentAccessGrantRow {
     flex-direction: column;
+    align-items: stretch;
   }
-  .chatPageRoot .agentAccessGrantRow .inlinePrimary {
-    min-height: 44px;
+  /* Stacked in a column, so stop flex: 1 (basis 0) from overriding the control height. */
+  .chatPageRoot .modal .agentAccessGrantRow input {
+    flex: 0 0 auto;
   }
   .chatPageRoot .agentSheetActions {
     flex-wrap: wrap;

@@ -66,9 +66,9 @@
   font-weight: 600;
   background: var(--bg);
   border: 1px solid var(--accent);
-  border-radius: 4px;
+  border-radius: var(--control-radius-sm, 6px);
   color: var(--text);
-  padding: 2px 6px;
+  padding: 2px 8px;
   width: 100%;
   outline: none;
 }
@@ -86,19 +86,26 @@
 }
 .chatPageRoot .nodeAddInput {
   width: 100%;
-  padding: 6px 8px;
+  height: var(--control-height, 30px);
+  padding: 0 var(--control-padding-inline, 10px);
   margin-bottom: 6px;
-  border-radius: 8px;
+  border-radius: var(--control-radius, 8px);
   border: 1px solid var(--border);
   background: var(--panel-bg);
   color: var(--text);
   font-size: 12px;
-  outline: none;
-  transition: border-color 0.15s ease;
+  outline: 2px solid transparent;
+  outline-offset: -1px;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
 }
-.chatPageRoot .nodeAddInput:focus { border-color: var(--accent); }
+.chatPageRoot .nodeAddInput:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .chatPageRoot .nodeAddActions { display: flex; gap: 6px; margin-top: 4px; }
-.chatPageRoot .nodeAddBtn { font-size: 12px !important; padding: 4px 10px !important; }
+.chatPageRoot .nodeAddBtn {
+  min-height: var(--control-height, 30px);
+  font-size: 12px !important;
+  padding: 0 12px !important;
+  border-radius: var(--control-radius, 8px) !important;
+}
 
 /* ── Setup script modal ── */
 .chatPageRoot .setupScriptModal {
@@ -146,6 +153,7 @@
 .chatPageRoot .setupScriptActions {
   display: flex;
   gap: 8px;
+  margin-top: 16px;
 }
 .chatPageRoot .setupScriptNote {
   font-size: 12px;
@@ -224,4 +232,11 @@
   background: linear-gradient(135deg, var(--accent-soft), var(--accent-strong)) !important;
   border-color: var(--accent) !important;
   color: var(--text) !important;
+}
+.chatPageRoot .modal .setupScriptActions .ghostButton {
+  min-height: var(--modal-control-height, 34px);
+  padding: 0 16px;
+  border-radius: var(--modal-field-radius, 8px);
+  font-size: 13px;
+  font-weight: 600;
 }
