@@ -7,6 +7,11 @@ import { createIncrementalChatSaver } from './incrementalChatSaver';
 import { newOperationId } from '@/lib/chatSyncProtocol';
 import { migrateFailedSendWarnings } from '../chatHelpers';
 
+/** In-flight saves normally confirm within a moment; only surface ones that failed or are stuck. */
+export const OUTBOX_NOTICE_DELAY_MS = 10_000;
+export const needsAttention = (entry: ChatOutboxEntry, now: number) =>
+  Boolean(entry.error) || entry.state !== 'pending' || now - entry.createdAt >= OUTBOX_NOTICE_DELAY_MS;
+
 export type OutboxRemoteChat = { id: string; name: string; ts: number; messages: ChatMessage[]; agentSessions: Record<string, string> };
 
 export function useChatOutbox(
@@ -17,6 +22,7 @@ export function useChatOutbox(
   const [error, setError] = useState<{ userId: string; message: string } | null>(null);
   const [revision, setRevision] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const recovered = useRef(onRecovered);
   recovered.current = onRecovered;
   const saver = useMemo(() => createIncrementalChatSaver(fetch, {
@@ -75,6 +81,15 @@ export function useChatOutbox(
   }, [saver, authStatus, revision, userId]);
 
   useEffect(() => {
+    const current = Date.now();
+    const waiting = entries.filter(entry => !needsAttention(entry, current));
+    if (!waiting.length) return;
+    const due = Math.min(...waiting.map(entry => entry.createdAt)) + OUTBOX_NOTICE_DELAY_MS - current;
+    const timer = setTimeout(() => setNow(Date.now()), Math.max(due, 0) + 50);
+    return () => clearTimeout(timer);
+  }, [entries, now]);
+
+  useEffect(() => {
     if (authStatus !== 'authenticated') return;
     void retry();
     const online = () => { void retry(); };
@@ -129,7 +144,7 @@ export function useChatOutbox(
   return {
     saver,
     notice: {
-      entries: entries.filter(entry => entry.userId === userId
+      entries: entries.filter(entry => entry.userId === userId && needsAttention(entry, now)
         && !(entry.recoveryOf && entries.some(source => source.operation.operationId === entry.recoveryOf))
         && !Object.values(entry.operation.dependencies || {}).some(id =>
           entries.some(parent => parent.operation.operationId === id))),
