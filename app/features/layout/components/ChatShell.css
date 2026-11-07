@@ -1546,6 +1546,9 @@
 .chatPageRoot .usersRolesAdd input { flex: 1; min-width: 0; }
 .chatPageRoot .modal .usersRolesAdd select,
 .chatPageRoot .modal .usersRolesActions select { width: auto; padding: 0 var(--modal-field-padding-inline); }
+.chatPageRoot .modal .usersRolesAdd input,
+.chatPageRoot .modal .usersRolesAdd select,
+.chatPageRoot .modal .usersRolesActions select { font-size: 13px; }
 .chatPageRoot .usersRolesAdd button { cursor: pointer; }
 .chatPageRoot .usersRolesAdd button:disabled { opacity: 0.5; cursor: default; }
 .chatPageRoot .usersRolesList { list-style: none; margin: 0 0 12px; padding: 0; max-height: 50vh; overflow-y: auto; border-top: 1px solid var(--border); }

@@ -154,6 +154,7 @@
 .chatPageRoot .setupScriptActions {
   display: flex;
   gap: 8px;
+  margin-top: 16px;
 }
 .chatPageRoot .setupScriptNote {
   font-size: 12px;

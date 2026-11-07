@@ -317,6 +317,8 @@
   flex: 1;
   min-width: 180px;
   height: var(--control-height, 30px);
+  /* Question fields sit in a flex column, where flex-basis 0 would override height. */
+  min-height: var(--control-height, 30px);
   box-sizing: border-box;
   padding: 0 var(--control-padding-inline, 10px);
   border: 1px solid var(--border);
