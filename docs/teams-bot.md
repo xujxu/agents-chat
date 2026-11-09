@@ -512,6 +512,7 @@ until the first words of the answer stream in.
 - 1:1 and group chats only. In team channels the bot only answers an @mention with a short notice.
 - In a group chat, Teams allows one streamed reply at a time. If two people ask at once, the second
   reply arrives as a single message instead of streaming.
-- Text only. Attachments and Adaptive Cards are not supported yet.
+- Text and images only. Images pasted into the chat (PNG, JPEG, GIF, WebP) are sent to the agent
+  and shown in the web UI. Other files and Adaptive Cards are not supported yet.
 - In-flight turn state is kept in memory. A service restart during a reply ends that reply in Teams,
   but the full answer is still saved and visible in the web UI.

@@ -10,6 +10,8 @@ type Call = { url: string; body: any }; // eslint-disable-line @typescript-eslin
 const TENANT = 'tenant-1';
 const BOT_ID = '28:bot-app';
 const SERVICE_URL = 'https://smba.trafficmanager.net/amer/';
+const IMAGE_HOST = 'https://smba.trafficmanager.net/emea/v3/attachments/';
+const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 const botMention = { type: 'mention', text: '<at>agent-xujx</at>', mentioned: { id: BOT_ID, name: 'agent-xujx' } };
 const bobMention = { type: 'mention', text: '<at>Bob</at>', mentioned: { id: '29:bob', name: 'Bob' } };
 
@@ -30,6 +32,11 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   try { body = init?.body ? JSON.parse(String(init.body)) : undefined; } catch { body = init?.body; }
   calls.push({ url, body });
   if (url.startsWith('https://login.microsoftonline.com/')) return json({ access_token: 'test-token', expires_in: 3600 });
+  if (url.startsWith(IMAGE_HOST)) {
+    if (url.includes('/broken/')) return new Response('nope', { status: 404 });
+    assert.equal((init?.headers as Record<string, string>)?.Authorization, 'Bearer test-token', 'Teams images need the bot token');
+    return new Response(url.includes('/html/') ? '<html></html>' : PNG, { headers: { 'content-type': 'image/*' } });
+  }
   if (url.includes('/members/')) {
     const id = decodeURIComponent(url.split('/members/')[1]);
     if (id === '29:external' || turnedExternal.has(id)) return json({ id, email: 'x@other.com', tenantId: 'other-tenant' });
@@ -177,6 +184,35 @@ async function main() {
       attachments: [{ contentType: 'text/html', content: `<p>see <a href="${workItem}">https://dev.azure.com/org/_workitems/edit/5614…</a></p>` }] });
     assert.equal(r.acp[0].text, `see ${workItem}`);
     assert.ok(r.posts.every((p) => !(p.entities || []).some((e: { type?: string }) => e.type === 'mention')));
+
+    // Pasted images are downloaded with the bot token and sent to the agent with the text.
+    const image = (id: string, contentUrl = `${IMAGE_HOST}${id}/views/original`) => ({ contentType: 'image/*', contentUrl, name: 'original' });
+    r = await run({ ...activity('29:alice', 'what is in this screenshot?', [], 'personal', 'personal-1'),
+      attachments: [image('img-1'), image('img-1'), image('evil', 'https://evil.example.com/steal.png'), { contentType: 'text/html', content: '<p>what is in this screenshot?</p><img src="x">' }] });
+    let imageSend = r.acp.find((a) => a.action === 'send');
+    assert.equal(imageSend.text, 'what is in this screenshot?');
+    assert.equal(imageSend.attachments.length, 1, 'duplicate and non-Teams image URLs are dropped');
+    assert.deepEqual([imageSend.attachments[0].name, imageSend.attachments[0].mimeType, imageSend.attachments[0].kind, imageSend.attachments[0].size], ['image-1.png', 'image/png', 'image', PNG.length]);
+    assert.equal(imageSend.attachments[0].dataUrl, `data:image/png;base64,${PNG.toString('base64')}`);
+    assert.ok(!calls.some((c) => c.url.includes('evil.example.com')), 'bot token is never sent to other hosts');
+    const { getChat } = await import('../lib/chatStore');
+    const saved = (await getChat('alice@contoso.com', imageSend.chatId))?.messages.filter((m) => m.type === 'user').at(-1);
+    assert.equal(saved?.attachments?.[0]?.dataUrl, imageSend.attachments[0].dataUrl, 'image shows in the web UI');
+    // An image on its own also starts a turn.
+    r = await run({ ...activity('29:alice', '', [], 'personal', 'personal-1'), attachments: [image('img-2')] });
+    imageSend = r.acp.find((a) => a.action === 'send');
+    assert.deepEqual([imageSend.text, imageSend.attachments.length], ['', 1]);
+    // Failed downloads and non-images are reported instead of silently dropped.
+    r = await run({ ...activity('29:alice', '', [], 'personal', 'personal-1'), attachments: [image('broken'), image('html')] });
+    assert.ok(!r.acp.some((a) => a.action === 'send'));
+    assert.match(r.posts.at(-1).text, /Could not download your image/);
+    r = await run({ ...activity('29:alice', 'and this?', [], 'personal', 'personal-1'), attachments: [image('img-3'), image('broken')] });
+    imageSend = r.acp.find((a) => a.action === 'send');
+    assert.equal(imageSend.attachments.length, 1);
+    assert.ok(r.posts.some((p) => /Could not download 1 of your image/.test(p.text || '')));
+    r = await run({ ...activity('29:alice', '', [], 'personal', 'personal-1'), attachments: [{ contentType: 'application/vnd.microsoft.card.adaptive', content: {} }] });
+    assert.ok(!r.acp.some((a) => a.action === 'send'));
+    assert.match(r.posts[0].text, /Only images are supported/);
     r = await run(activity('29:alice', '/help', [], 'personal', 'personal-1'));
     assert.doesNotMatch(r.posts[0].text, /group chat|<at>/);
 

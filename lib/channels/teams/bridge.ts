@@ -7,6 +7,7 @@ import { createLogger } from '@/lib/logger';
 import type { TeamsConfig } from './config';
 import { getMember, sendActivity, sendText, type ConversationRef } from './connector';
 import * as defaults from './defaultAgent';
+import { downloadTeamsImages, hasNonTextAttachments, teamsImageRefs, type TeamsAttachment, type TeamsImageRef } from './images';
 import { decideCommand, extendCommand } from './shareCommands';
 import { TeamsStreamer } from './stream';
 import {
@@ -56,7 +57,7 @@ export type TeamsActivity = {
   conversation?: { id?: string; conversationType?: string; tenantId?: string };
   channelData?: { tenant?: { id?: string } };
   membersAdded?: { id?: string }[];
-  attachments?: { contentType?: string; content?: unknown }[];
+  attachments?: TeamsAttachment[];
   entities?: TeamsEntity[];
 };
 
@@ -229,16 +230,16 @@ async function handleMessage(
 
   const html = (activity.attachments ?? []).flatMap((a) => (a.contentType === 'text/html' && typeof a.content === 'string' ? [a.content] : []));
   const text = cleanIncomingText(activity.text, activity.entities, ref.botId, html);
-  if (!text) {
-    const hasAttachments = activity.attachments?.some((a) => a.contentType && a.contentType !== 'text/html');
-    if (hasAttachments) await sendText(config, ref, 'Attachments are not supported yet. Please send text.');
+  const images = teamsImageRefs(activity.attachments);
+  if (!text && images.length === 0) {
+    if (hasNonTextAttachments(activity.attachments)) await sendText(config, ref, 'Only images are supported as attachments. Please send text or an image.');
     else if (isGroup) await sendText(config, ref, GROUP_HELP_TEXT);
     return;
   }
 
   // Group chats keep separate state per person so nobody can answer or stop someone else's turn.
   const state = getConversationState(isGroup ? `${ref.conversationId}|${ref.userId}` : ref.conversationId);
-  const command = parseCommand(text);
+  const command = text ? parseCommand(text) : null;
   // Ask about a newly shared agent once, in a 1:1 chat, if the share-time message could not reach them.
   if (!isGroup && command?.name !== 'default') await askToSwitch(config, ref, user);
 
@@ -247,7 +248,7 @@ async function handleMessage(
       await interrupt(config, user, state);
       return;
     }
-    if (state.pendingRequest && !command) {
+    if (state.pendingRequest && !command && text) {
       await answerPendingRequest(config, ref, user, state, text);
       return;
     }
@@ -295,14 +296,14 @@ async function handleMessage(
       return;
     case 'new':
       configStore.setUserSetting(user.email, chatSettingKey(config, activeAgentId(config, user, ref.conversationId), ref.conversationId), '');
-      if (!command.args) {
+      if (!command.args && images.length === 0) {
         await sendText(config, ref, '🆕 Started a new conversation. Send your first message.');
         return;
       }
-      await runTurn(config, ref, user, state, command.args);
+      await runTurn(config, ref, user, state, command.args, images);
       return;
     default:
-      await runTurn(config, ref, user, state, text);
+      await runTurn(config, ref, user, state, text, images);
   }
 }
 
@@ -592,7 +593,7 @@ async function ensureChat(config: TeamsConfig, user: TeamsUser, agentId: string,
   return chat;
 }
 
-async function runTurn(config: TeamsConfig, ref: ConversationRef, user: TeamsUser, state: ConversationState, prompt: string): Promise<void> {
+async function runTurn(config: TeamsConfig, ref: ConversationRef, user: TeamsUser, state: ConversationState, prompt: string, imageRefs: TeamsImageRef[] = []): Promise<void> {
   state.running = true;
   state.pendingRequest = undefined;
   // Show progress before anything else: saving the chat and `send` (which starts a cold agent
@@ -604,17 +605,29 @@ async function runTurn(config: TeamsConfig, ref: ConversationRef, user: TeamsUse
   const indicator = streamer.informative(thinkingLine(agentName));
   const slowTimers: ReturnType<typeof setTimeout>[] = [];
   try {
-    const chat = await ensureChat(config, user, agentId, ref.conversationId, prompt);
+    const images = imageRefs.length ? await downloadTeamsImages(config, imageRefs) : [];
+    if (images.length < imageRefs.length) {
+      if (!prompt && images.length === 0) {
+        await indicator;
+        await streamer.finish('⚠️ Could not download your image from Teams. Please try again, or describe it in text.');
+        return;
+      }
+      await sendText(config, ref, `⚠️ Could not download ${imageRefs.length - images.length} of your image(s) from Teams; the agent will not see ${imageRefs.length - images.length === 1 ? 'it' : 'them'}.`);
+    }
+    const chat = await ensureChat(config, user, agentId, ref.conversationId, prompt || 'Image');
     state.chatId = chat.id;
     const userTs = Date.now();
     const agentMessageId = `teams-${randomUUID()}`;
-    await appendMessageToChat(user.email, chat, { id: `teams-user-${randomUUID()}`, type: 'user', content: prompt, ts: userTs });
+    await appendMessageToChat(user.email, chat, { id: `teams-user-${randomUUID()}`, type: 'user', content: prompt, ts: userTs, ...(images.length ? { attachments: images } : {}) });
 
     for (const status of SLOW_START_STATUS) {
       slowTimers.push(setTimeout(() => { streamer.informative(status.text).catch(() => undefined); }, status.afterMs));
     }
     const modelId = selectedModelId(user, agentId);
-    const sent = await acp(config, user, agentId, { action: 'send', chatId: chat.id, text: prompt, messageId: agentMessageId, messageTs: userTs + 1, ...(modelId ? { modelId } : {}) });
+    const sent = await acp(config, user, agentId, {
+      action: 'send', chatId: chat.id, text: prompt, messageId: agentMessageId, messageTs: userTs + 1,
+      ...(images.length ? { attachments: images } : {}), ...(modelId ? { modelId } : {}),
+    });
     slowTimers.forEach(clearTimeout);
     await indicator;
     if (!sent.data?.ok) {
