@@ -63,6 +63,12 @@ export function hasNonTextAttachments(attachments: TeamsAttachment[] | undefined
   return !!attachments?.some((a) => a.contentType && a.contentType !== 'text/html');
 }
 
+/** Names of files sent in a 1:1 chat that are not images, so the user can be told they were ignored. */
+export function ignoredFileNames(attachments: TeamsAttachment[] | undefined): string[] {
+  return (attachments ?? []).flatMap((a) =>
+    a.contentType?.toLowerCase() === FILE_DOWNLOAD_INFO && !IMAGE_EXTENSIONS.test(a.name ?? '') ? [a.name || 'file'] : []);
+}
+
 function sniffImageType(bytes: Buffer): string | null {
   if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
@@ -93,12 +99,33 @@ async function readLimited(res: Response, limit: number): Promise<Buffer | null>
   return Buffer.concat(chunks);
 }
 
-async function downloadImage(config: TeamsConfig, ref: TeamsImageRef, index: number, limit: number): Promise<StoredAttachment | null> {
-  const headers: Record<string, string> = {};
-  if (ref.botAuth) headers.Authorization = `Bearer ${await getBotAccessToken(config)}`;
-  const res = await fetch(ref.url, { headers, signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+const MAX_REDIRECTS = 3;
+
+/**
+ * Fetches `ref`, following at most MAX_REDIRECTS HTTPS redirects. The bot token is sent only to the
+ * original origin, never to a redirect target.
+ */
+async function fetchImage(config: TeamsConfig, ref: TeamsImageRef, signal: AbortSignal): Promise<Response> {
+  let url = new URL(ref.url);
+  const origin = url.origin;
+  for (let hop = 0; ; hop++) {
+    const headers: Record<string, string> = {};
+    if (ref.botAuth && url.origin === origin) headers.Authorization = `Bearer ${await getBotAccessToken(config)}`;
+    const res = await fetch(url, { headers, signal, redirect: 'manual' });
+    if (res.status < 300 || res.status >= 400) return res;
+    const location = res.headers.get('location');
+    await res.body?.cancel().catch(() => undefined);
+    const next = location ? parseUrl(new URL(location, url).href) : null;
+    if (!next || next.protocol !== 'https:') throw new Error('bad_redirect');
+    if (hop >= MAX_REDIRECTS) throw new Error('too_many_redirects');
+    url = next;
+  }
+}
+
+async function downloadImage(config: TeamsConfig, ref: TeamsImageRef, index: number): Promise<StoredAttachment> {
+  const res = await fetchImage(config, ref, AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS));
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const bytes = await readLimited(res, limit);
+  const bytes = await readLimited(res, MAX_ATTACHMENT_BYTES);
   if (!bytes) throw new Error('too_large');
   const mimeType = sniffImageType(bytes);
   if (!mimeType) throw new Error('not_an_image');
@@ -106,19 +133,25 @@ async function downloadImage(config: TeamsConfig, ref: TeamsImageRef, index: num
   return { id: `teams-image-${randomUUID()}`, name, mimeType, size: bytes.length, dataUrl: `data:${mimeType};base64,${bytes.toString('base64')}`, kind: 'image' };
 }
 
-/** Download the images; failures are logged and skipped so the text still reaches the agent. */
+/**
+ * Downloads the images in parallel; failures, and images past the total size limit, are logged and
+ * skipped so the text still reaches the agent.
+ */
 export async function downloadTeamsImages(config: TeamsConfig, refs: TeamsImageRef[]): Promise<StoredAttachment[]> {
+  const results = await Promise.allSettled(refs.map((ref, index) => downloadImage(config, ref, index)));
   const images: StoredAttachment[] = [];
   let total = 0;
-  for (const [index, ref] of refs.entries()) {
-    try {
-      const image = await downloadImage(config, ref, index, Math.min(MAX_ATTACHMENT_BYTES, MAX_TOTAL_ATTACHMENT_BYTES - total));
-      if (!image) continue;
-      total += image.size;
-      images.push(image);
-    } catch (err) {
-      logger.warn({ err: err instanceof Error ? err.message : String(err), host: new URL(ref.url).hostname }, 'Could not download Teams image');
+  results.forEach((result, index) => {
+    const host = new URL(refs[index].url).hostname;
+    if (result.status === 'rejected') {
+      const err = result.reason;
+      logger.warn({ err: err instanceof Error ? err.message : String(err), host }, 'Could not download Teams image');
+    } else if (total + result.value.size > MAX_TOTAL_ATTACHMENT_BYTES) {
+      logger.warn({ err: 'total_too_large', host }, 'Could not download Teams image');
+    } else {
+      total += result.value.size;
+      images.push(result.value);
     }
-  }
+  });
   return images;
 }
