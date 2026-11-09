@@ -111,12 +111,14 @@ async function main() {
     // Replies say which agent answered (its id when the agent has no record).
     const finals = (posts: any[]) => posts.filter((p) => p.type === 'message').map((p) => p.text as string); // eslint-disable-line @typescript-eslint/no-explicit-any
     assert.deepEqual(finals(r.posts), ['*🤖 teams*\n\nanswer']);
+    assert.ok(r.posts.every((p) => p.textFormat === 'extendedmarkdown'), 'replies use extended Markdown so tables render');
 
     // Plain replies in a group @mention the asker.
     r = await run(activity('29:bob', '<at>agent-xujx</at> /help', [botMention]));
     assert.equal(r.acp.length, 0);
     assert.equal(r.posts.length, 1);
     assert.match(r.posts[0].text, /^<at>bob<\/at> In this group chat I only respond/);
+    assert.equal(r.posts[0].textFormat, 'extendedmarkdown');
     assert.deepEqual(r.posts[0].entities, [{ type: 'mention', text: '<at>bob</at>', mentioned: { id: '29:bob', name: 'bob' } }]);
 
     // A bare @mention shows the group help.
@@ -368,19 +370,19 @@ async function main() {
     await chatStore.saveChat('alice@contoso.com', { ...webChat, id: 'web-mc', name: 'MC web chat', agentId: 'mcagent' });
     await chatStore.saveChat('bob@contoso.com', { ...webChat, id: 'web-bob', name: 'Bob connector notes', agentId: 'mcagent' });
     reply = await command('/session');
-    assert.match(reply, /^\*\*Your sessions with teams\*\* \(✅ = current\)\n1\. /);
-    assert.match(reply, new RegExp(`\\. Teams: hello – (just now|\\dm ago) – \`${teamsChatId}\` ✅$`, 'm'));
-    assert.match(reply, /\. Connector failure triage – 3h ago – `web-chat-1`$/m);
+    assert.match(reply, /^\*\*Your sessions with teams\*\*\n\n\| # \| Session \| Status \| Last updated \| Created \| Location \| ID \|\n\|---\|/);
+    assert.match(reply, new RegExp(`^\\| \\d \\| ❯ \\*\\*Teams: hello\\*\\* \\| ● Current \\| (just now|\\dm ago) \\| (just now|\\dm ago) \\| This chat \\| \`${teamsChatId}\` \\|$`, 'm'));
+    assert.match(reply, /^\| \d \| Connector failure triage \|  \| 3h ago \| — \| Web \| `web-chat-1` \|$/m);
     assert.match(reply, /Send `\/session <number or id>` to switch/);
-    assert.match(reply, /\. Teams: what is up with Bob\?/m, '1:1 chats list sessions from everywhere');
+    assert.match(reply, /\| Teams: what is up with Bob\? \|  \| .+ \| Teams \| `teams-/, '1:1 chats list sessions from everywhere');
     assert.doesNotMatch(reply, /MC web chat|analyze the connector|Bob connector/, 'only this agent and this person');
     reply = await command('/session connector');
-    assert.match(reply, /^\*\*Sessions with teams matching "connector"\*\*\n1\. Connector failure triage – 3h ago – `web-chat-1`\n\n/);
+    assert.match(reply, /^\*\*Sessions with teams matching "connector"\*\*\n\n\| # .+\n\|---.+\n\| 1 \| Connector failure triage \|  \| 3h ago \| — \| Web \| `web-chat-1` \|\n\n/);
     assert.match(await command('/session 1'), /Switched to session \*\*Connector failure triage\*\* with \*\*teams\*\* \(last active 3h ago\)/);
     assert.equal(sendOf(await say('continue the web chat')).chatId, 'web-chat-1');
     assert.match(await command('/session 1'), /already in session \*\*Connector failure triage\*\*/);
     assert.match(await command('/session 2'), /There is no session 2/);
-    assert.match(await command('/session search before switching'), /1\. Teams: hello/);
+    assert.match(await command('/session search before switching'), /\| 1 \| Teams: hello \|/);
     assert.match(await command('/session 1'), /Switched to session \*\*Teams: hello\*\*/);
     assert.equal(sendOf(await say('back again')).chatId, teamsChatId);
     assert.match(await command('/session web-chat-1'), /Switched to session \*\*Connector failure triage\*\*/);
@@ -389,21 +391,21 @@ async function main() {
     await command('/agent mcagent');
     reply = await command('/session');
     assert.match(reply, /Your sessions with MC Agent/);
-    assert.match(reply, /\. MC web chat – 3h ago – `web-mc`$/m);
+    assert.match(reply, /\| MC web chat \|  \| 3h ago \| — \| Web \| `web-mc` \|$/m);
     assert.doesNotMatch(reply, /Connector failure triage/);
     await command('/agent teams');
     assert.equal(sendOf(await say('still on the web chat')).chatId, 'web-chat-1', 'each agent remembers its session');
     // Everyone in a group chat sees replies, so there only sessions started in that chat are listed or opened.
     r = await run(activity('29:alice', '<at>agent-xujx</at> /session', [botMention]));
     assert.match(r.posts[0].text, /Your sessions with teams\*\* in this group chat/);
-    assert.match(r.posts[0].text, /1\. Teams: what is up with Bob\? – /);
+    assert.match(r.posts[0].text, /\| 1 \| ❯ \*\*Teams: what is up with Bob\?\*\* \| ● Current \| .+ \| This chat \|/);
     assert.doesNotMatch(r.posts[0].text, /Connector failure|Teams: hello|elsewhere/);
     r = await run(activity('29:alice', '<at>agent-xujx</at> /session web-chat-1', [botMention]));
     assert.match(r.posts[0].text, /No sessions with \*\*teams\*\* in this group chat match "web-chat-1"/);
     r = await run(activity('29:alice', '<at>agent-xujx</at> /session', [botMention], 'groupChat', 'group-2'));
     assert.match(r.posts[0].text, /no sessions with \*\*teams\*\* in this group chat yet/);
     r = await run(activity('29:bob', '/session connector', [], 'personal', 'personal-bob'));
-    assert.match(r.posts[0].text, /1\. Bob connector notes/);
+    assert.match(r.posts[0].text, /\| 1 \| Bob connector notes \|/);
     assert.doesNotMatch(r.posts[0].text, /Connector failure triage/, 'never another person\'s sessions');
 
     // Welcome messages go only to allowed users who install the bot or add it to a group chat.

@@ -4,6 +4,7 @@ import * as configStore from '@/lib/configStore';
 import { createLogger } from '@/lib/logger';
 import { getTeamsConfig, type TeamsConfig } from './config';
 import { ConnectorError, sendActivity } from './connector';
+import { TEAMS_TEXT_FORMAT } from './util';
 
 const logger = createLogger('teams-bot');
 
@@ -66,7 +67,7 @@ export function switchPromptActivity(config: TeamsConfig, email: string, agent: 
   const currentName = agentName(current);
   return {
     type: 'message',
-    textFormat: 'markdown',
+    textFormat: TEAMS_TEXT_FORMAT,
     text: [
       `🔗 The **${name}** agent was shared with you. Switch your Teams chats to it?`,
       `You are using **${currentName}** now. You can change this any time with \`/default\`, or use \`/agent\` to switch one chat.`,

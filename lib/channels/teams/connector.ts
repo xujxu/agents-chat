@@ -1,6 +1,6 @@
 import { getBotAccessToken } from './auth';
 import type { TeamsConfig } from './config';
-import { isAllowedServiceUrl, normalizeServiceUrl, splitForTeams } from './util';
+import { isAllowedServiceUrl, normalizeMarkdownForTeams, normalizeServiceUrl, splitForTeams, TEAMS_TEXT_FORMAT } from './util';
 
 export type ConversationRef = {
   serviceUrl: string;
@@ -61,11 +61,11 @@ export async function sendActivity(config: TeamsConfig, ref: ConversationRef, ac
 
 export async function sendText(config: TeamsConfig, ref: ConversationRef, text: string): Promise<void> {
   const mention = userMention(ref);
-  for (const [index, chunk] of splitForTeams(text).entries()) {
+  for (const [index, chunk] of splitForTeams(normalizeMarkdownForTeams(text)).entries()) {
     if (index === 0 && mention) {
-      await sendActivity(config, ref, { type: 'message', textFormat: 'markdown', text: `${mention.text} ${chunk}`, entities: [mention] });
+      await sendActivity(config, ref, { type: 'message', textFormat: TEAMS_TEXT_FORMAT, text: `${mention.text} ${chunk}`, entities: [mention] });
     } else {
-      await sendActivity(config, ref, { type: 'message', textFormat: 'markdown', text: chunk });
+      await sendActivity(config, ref, { type: 'message', textFormat: TEAMS_TEXT_FORMAT, text: chunk });
     }
   }
 }

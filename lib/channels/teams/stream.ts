@@ -1,7 +1,7 @@
 import { createLogger } from '@/lib/logger';
 import type { TeamsConfig } from './config';
 import { sendActivity, sendText, sendTyping, type ConversationRef } from './connector';
-import { splitForTeams, TEAMS_MAX_TEXT } from './util';
+import { normalizeMarkdownForTeams, splitForTeams, TEAMS_MAX_TEXT, TEAMS_TEXT_FORMAT } from './util';
 
 const logger = createLogger('teams-stream');
 
@@ -106,8 +106,8 @@ export class TeamsStreamer {
       if (this.streamId && !this.fallback) {
         await sendActivity(this.config, this.ref, {
           type: 'message',
-          textFormat: 'markdown',
-          text,
+          textFormat: TEAMS_TEXT_FORMAT,
+          text: normalizeMarkdownForTeams(text),
           channelData: { streamId: this.streamId, streamType: 'final' },
           entities: [{ type: 'streaminfo', streamId: this.streamId, streamType: 'final' }],
         });
@@ -148,6 +148,7 @@ export class TeamsStreamer {
     try {
       const id = await sendActivity(this.config, this.ref, {
         type: 'typing',
+        textFormat: TEAMS_TEXT_FORMAT,
         text,
         channelData: { streamType, streamSequence: sequence, ...(this.streamId ? { streamId: this.streamId } : {}) },
         entities: [streamInfo],

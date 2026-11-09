@@ -10,10 +10,13 @@ import {
   isBotMentioned,
   newTeamsChatId,
   formatAge,
+  chatCreatedAt,
+  formatSessionTable,
   teamsChatPrefix,
   normalizeServiceUrl,
   parseCommand,
   parseEmailList,
+  normalizeMarkdownForTeams,
   splitForTeams,
 } from '../lib/channels/teams/util.ts';
 
@@ -73,6 +76,17 @@ assert.equal(formatAge(NOW - 5 * 60_000, NOW), '5m ago');
 assert.equal(formatAge(NOW - 3 * 3600_000, NOW), '3h ago');
 assert.equal(formatAge(NOW - 2 * 86400_000, NOW), '2d ago');
 assert.equal(formatAge(Date.UTC(2026, 0, 2), NOW), '2026-01-02');
+assert.equal(chatCreatedAt(newTeamsChatId('a:1-conv', 1700000000000)), 1700000000000);
+assert.equal(chatCreatedAt('chat-1700000000000-4242'), 1700000000000);
+assert.equal(chatCreatedAt('chat-0b6f1c2e-uuid'), undefined);
+assert.equal(chatCreatedAt('web-chat-1'), undefined);
+const table = formatSessionTable([
+  { id: 'chat-1700000000000-1', name: 'a | b `x`\nnext line', ts: NOW - 3 * 3600_000, current: true, location: 'Web' },
+  { id: 'odd', name: 'x'.repeat(80), ts: NOW, current: false, location: 'Teams' },
+], NOW).split('\n');
+assert.equal(table[0], '| # | Session | Status | Last updated | Created | Location | ID |');
+assert.equal(table[2], "| 1 | ❯ **a \\| b 'x' next line** | ● Current | 3h ago | 2023-11-14 | Web | `chat-1700000000000-1` |");
+assert.equal(table[3], `| 2 | ${'x'.repeat(49)}… |  | just now | — | Teams | \`odd\` |`);
 assert.ok(chatNameFromPrompt('x'.repeat(200)).length <= 'Teams: '.length + 60);
 assert.ok(chatNameFromPrompt('fix build').startsWith('Teams: '));
 
@@ -92,6 +106,15 @@ assert.ok(parts.every((p) => p.length <= 2000));
 assert.equal(parts.join('').replace(/\s+/g, ''), long.replace(/\s+/g, ''));
 assert.deepEqual(splitForTeams('short', 2000), ['short']);
 assert.ok(splitForTeams('z'.repeat(4500), 2000).every((p) => p.length <= 2000));
+
+// Extended Markdown: tables get their own block, single line breaks stay visible, code fences are untouched
+assert.equal(
+  normalizeMarkdownForTeams('**PBIs:**\n| ID | Title |\n|---|---|\n| 1 | A |\n| 2 | B |\nAll done.'),
+  '**PBIs:**\n\n| ID | Title |\n|---|---|\n| 1 | A |\n| 2 | B |\n\nAll done.',
+);
+assert.equal(normalizeMarkdownForTeams('Account: a\nAgent: b\n\nNext'), 'Account: a  \nAgent: b\n\nNext');
+assert.equal(normalizeMarkdownForTeams('Run:\n```sh\na | b\n---\nc\n```\nok'), 'Run:\n```sh\na | b\n---\nc\n```\nok');
+assert.equal(normalizeMarkdownForTeams('| a |\n|---|\n| 1 |'), '| a |\n|---|\n| 1 |');
 
 assert.deepEqual(parseEmailList(' A@x.com, b@Y.com ;; '), ['a@x.com', 'b@y.com']);
 assert.deepEqual(parseEmailList(undefined), []);
