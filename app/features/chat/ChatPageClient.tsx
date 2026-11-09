@@ -191,12 +191,11 @@ export function ChatPageClient() {
   }, [slashMatch, singleComposerAgentId, currentChatId, slashCommandsState]);
   const isCurrentChatSending = useMemo(() => runtime.isChatRunning(currentChatId), [currentChatId, runVersion]);
   const agentSidebarItems = useMemo(() => agents.filter((a) => a.id !== SCHEDULER_AGENT_ID).map((agent) => ({ ...agent, running: messages.some((m) => m.agentId === agent.id && m.pending) })), [agents, messages]);
-  const visibleMessages = useMemo(() => registry.selectedAgentFilter ? messages.filter((m) => m.type !== 'agent' || m.agentId === registry.selectedAgentFilter) : messages, [messages, registry.selectedAgentFilter]);
   const failedSendByMessageId = useMemo(() => {
     const result: Record<string, FailedSendState | undefined> = {};
-    for (const message of visibleMessages) if (message.type === 'user' && message.sendStatus === 'failed') result[message.id] = { error: message.sendError || 'Failed to send prompt to agent', resendDisabled: runtime.isChatRunning(currentChatId) || (!message.resendAgentIds?.length && (agentsLoading || agents.length === 0)), waitingForAgents: !message.resendAgentIds?.length && (agentsLoading || agents.length === 0) };
+    for (const message of messages) if (message.type === 'user' && message.sendStatus === 'failed') result[message.id] = { error: message.sendError || 'Failed to send prompt to agent', resendDisabled: runtime.isChatRunning(currentChatId) || (!message.resendAgentIds?.length && (agentsLoading || agents.length === 0)), waitingForAgents: !message.resendAgentIds?.length && (agentsLoading || agents.length === 0) };
     return result;
-  }, [visibleMessages, agents, agentsLoading, currentChatId, runVersion]);
+  }, [messages, agents, agentsLoading, currentChatId, runVersion]);
 
   useEffect(() => { setMentionSelectedIndex(0); }, [input, agents, setMentionSelectedIndex]);
   useEffect(() => { const handleEsc = (e: globalThis.KeyboardEvent) => { if (e.key !== 'Escape') return; if (lightboxImage) setLightboxImage(null); else if (shareDialog) setShareDialog(null); }; window.addEventListener('keydown', handleEsc); return () => window.removeEventListener('keydown', handleEsc); }, [lightboxImage, shareDialog, setLightboxImage, setShareDialog]);
@@ -240,7 +239,6 @@ export function ChatPageClient() {
   async function copyShareDialogLink() { if (!shareDialog?.url) return; try { await navigator.clipboard.writeText(shareDialog.url); setShareDialog((prev) => prev ? { ...prev, copied: true, detail: 'Copied to clipboard.' } : prev); } catch { setShareDialog((prev) => prev ? { ...prev, copied: false, detail: 'Could not copy automatically. Select the link and copy it manually.' } : prev); } }
   function toggleMessageExpanded(messageId: string) { setExpandedMessages((prev) => ({ ...prev, [messageId]: prev[messageId] === false ? true : false })); }
   function handleComposerKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'ArrowUp') document.title = `[DBG1] filtered=${filteredAgents.length} val="${e.currentTarget.value.slice(0,20)}" sel=${e.currentTarget.selectionStart}`;
     if (filteredAgents.length > 0) { if (e.key === 'ArrowDown') { e.preventDefault(); setMentionSelectedIndex((p) => (p + 1) % filteredAgents.length); return; } if (e.key === 'ArrowUp') { e.preventDefault(); setMentionSelectedIndex((p) => (p - 1 + filteredAgents.length) % filteredAgents.length); return; } if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); selectMention((filteredAgents[mentionSelectedIndex] || filteredAgents[0]).id); return; } if (e.key === 'Escape') { e.preventDefault(); setInputProgrammatic(inputRef.current.replace(/@(\S*)$/, '')); return; } }
     if (filteredSlashCommands.length > 0) { if (e.key === 'ArrowDown') { e.preventDefault(); setSlashSelectedIndex((p) => (p + 1) % filteredSlashCommands.length); return; } if (e.key === 'ArrowUp') { e.preventDefault(); setSlashSelectedIndex((p) => (p - 1 + filteredSlashCommands.length) % filteredSlashCommands.length); return; } if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) { e.preventDefault(); insertSlashCommand(filteredSlashCommands[slashSelectedIndex] || filteredSlashCommands[0]); return; } if (e.key === 'Escape') { e.preventDefault(); setInputProgrammatic(''); return; } }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (isCurrentChatSending) void handleStop(); else void handleSend(); }
@@ -288,7 +286,7 @@ export function ChatPageClient() {
       <div className="chatMessagesArea">
         <section className="chatContainer" ref={attachChatContainer} tabIndex={-1}>
           <div className="chatScrollContent">
-            <MessageList messages={visibleMessages} isEmptyChat={messages.every(message => message.type === 'system')} agents={agents} expandedMessages={expandedMessages} failedSendByMessageId={failedSendByMessageId} onToggleExpanded={toggleMessageExpanded} onRetryFailedSend={retryFailedSend} onOpenImage={setLightboxImage} onAnswerAgentUserRequest={answerAgentUserRequest} onDismissAgentUserRequest={dismissAgentUserRequest} />
+            <MessageList messages={messages} isEmptyChat={messages.every(message => message.type === 'system')} agents={agents} expandedMessages={expandedMessages} failedSendByMessageId={failedSendByMessageId} onToggleExpanded={toggleMessageExpanded} onRetryFailedSend={retryFailedSend} onOpenImage={setLightboxImage} onAnswerAgentUserRequest={answerAgentUserRequest} onDismissAgentUserRequest={dismissAgentUserRequest} />
             {showFollowUpHint && workflowFollowUp ? <WorkflowFollowUpCard agentIds={workflowFollowUp.awaitingAgentIds} agents={agents} onReply={(text) => sendWorkflowFollowUpReply(text, workflowFollowUp.awaitingAgentIds, workflowFollowUp.orchestrationId)} onDismiss={() => setDismissedFollowUpOrchId(workflowFollowUp.orchestrationId)} /> : null}
           </div>
         </section>
