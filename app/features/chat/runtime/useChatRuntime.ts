@@ -124,10 +124,14 @@ export function useChatRuntime({
     const merged = new Map(existing.filter(message => !replace.has(message.id)).map(message => [message.id, message]));
     for (const message of chat.messages) if (!merged.has(message.id)) merged.set(message.id, message);
     setMessagesForChat(chat.id, [...merged.values()].sort((a, b) => a.ts - b.ts));
-    setChatHistory(previous => normalizeChatHistory([
-      ...previous.filter(entry => entry.id !== chat.id),
-      { id: chat.id, name: chat.name, ts: chat.ts, agentSessions: chat.agentSessions },
-    ]));
+    setChatHistory(previous => {
+      // Keep the chat's agent; without it the next send routes to the default agent.
+      const agentId = chat.agentId || previous.find(entry => entry.id === chat.id)?.agentId;
+      return normalizeChatHistory([
+        ...previous.filter(entry => entry.id !== chat.id),
+        { id: chat.id, name: chat.name, ts: chat.ts, agentSessions: chat.agentSessions, ...(agentId ? { agentId } : {}) },
+      ]);
+    });
   });
   const stagingSendRef = useRef(false);
 

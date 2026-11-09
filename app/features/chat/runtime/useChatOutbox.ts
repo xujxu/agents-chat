@@ -12,7 +12,7 @@ export const OUTBOX_NOTICE_DELAY_MS = 10_000;
 export const needsAttention = (entry: ChatOutboxEntry, now: number) =>
   Boolean(entry.error) || entry.state !== 'pending' || now - entry.createdAt >= OUTBOX_NOTICE_DELAY_MS;
 
-export type OutboxRemoteChat = { id: string; name: string; ts: number; messages: ChatMessage[]; agentSessions: Record<string, string> };
+export type OutboxRemoteChat = { id: string; name: string; ts: number; messages: ChatMessage[]; agentSessions: Record<string, string>; agentId?: string };
 
 export function useChatOutbox(
   userId: string, authStatus: string,
