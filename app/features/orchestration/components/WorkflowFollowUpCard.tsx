@@ -3,20 +3,30 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Agent } from '../../agents/agentTypes';
 
+// Drafts outlive the card so a remount (chat reload, loading view, follow-up refresh) keeps typed text.
+const followUpDrafts = new Map<string, string>();
+
 export function WorkflowFollowUpCard({
+  draftKey,
   agentIds,
   agents,
   disabled,
   onReply,
   onDismiss,
 }: {
+  draftKey: string;
   agentIds: string[];
   agents: Agent[];
   disabled?: boolean;
   onReply: (text: string) => Promise<void> | void;
   onDismiss: () => void;
 }) {
-  const [value, setValue] = useState('');
+  const [value, setDraft] = useState(() => followUpDrafts.get(draftKey) ?? '');
+  const setValue = (next: string) => {
+    if (next) followUpDrafts.set(draftKey, next);
+    else followUpDrafts.delete(draftKey);
+    setDraft(next);
+  };
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
@@ -46,6 +56,11 @@ export function WorkflowFollowUpCard({
     }
   }
 
+  function dismiss() {
+    followUpDrafts.delete(draftKey);
+    onDismiss();
+  }
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
@@ -65,7 +80,7 @@ export function WorkflowFollowUpCard({
           className="workflowFollowUpCardDismiss"
           aria-label="Dismiss follow-up"
           title="Dismiss"
-          onClick={onDismiss}
+          onClick={dismiss}
           disabled={submitting}
         >✕</button>
       </div>
@@ -87,7 +102,7 @@ export function WorkflowFollowUpCard({
         <button
           type="button"
           className="workflowFollowUpCardSkip"
-          onClick={onDismiss}
+          onClick={dismiss}
           disabled={submitting}
         >Skip</button>
         <button

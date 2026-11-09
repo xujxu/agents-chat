@@ -1,6 +1,8 @@
 import { captureReadingAnchor, chatViewport, resolveReadingAnchor, type ReadingAnchor } from '../chatReadingAnchor';
 import { clampScrollTop, correctedScrollTop, geometryChanged, isIndependentScroll, isNearBottom, type ScrollGeometry } from '../chatScrollGeometry';
 
+const HIDDEN_SETTLE_MS = 1500;
+
 export type ChatScrollSnapshot = {
   following: boolean;
   anchor: ReadingAnchor | null;
@@ -32,6 +34,10 @@ export function createChatScrollController(
   let touchY: number | null = null;
   let scrollbarDrag = false;
   let jumping = false;
+  // Reading state from before the page was hidden (e.g. a locked or disconnected remote
+  // desktop). Display changes while hidden can move scrollTop without any user input.
+  let hiddenState: { following: boolean; anchor: ReadingAnchor | null } | null = null;
+  let hiddenSettleTimeout: ReturnType<typeof setTimeout> | undefined;
 
   const measure = (): ScrollGeometry => ({
     width: container.clientWidth, height: container.clientHeight, contentHeight: container.scrollHeight,
@@ -51,6 +57,7 @@ export function createChatScrollController(
   }
 
   function captureUserPosition() {
+    endHiddenSettle();
     if (correctionFrame) cancelAnimationFrame(correctionFrame);
     correctionFrame = 0;
     following = atBottom();
@@ -67,8 +74,11 @@ export function createChatScrollController(
     correctionFrame = 0;
     if (disposed || suspended || multiTouch || userIntent || container.clientHeight === 0) return;
     const maximum = Math.max(0, container.scrollHeight - container.clientHeight);
-    // WebKit may deliver the scroll event after the resize callback.
-    if (!jumping && isIndependentScroll(geometry, measure(), lastTop, container.scrollTop)) {
+    if (hiddenState) {
+      following = hiddenState.following;
+      anchor = hiddenState.anchor;
+    } else if (!jumping && isIndependentScroll(geometry, measure(), lastTop, container.scrollTop)) {
+      // WebKit may deliver the scroll event after the resize callback.
       captureUserPosition();
       return;
     }
@@ -94,7 +104,26 @@ export function createChatScrollController(
     }
   }
 
+  function endHiddenSettle() {
+    clearTimeout(hiddenSettleTimeout);
+    hiddenSettleTimeout = undefined;
+    hiddenState = null;
+  }
+
+  function onVisibilityChange() {
+    clearTimeout(hiddenSettleTimeout);
+    if (document.visibilityState === 'hidden') {
+      hiddenState ??= { following, anchor };
+      return;
+    }
+    if (!hiddenState) return;
+    scheduleCorrection();
+    // The display may keep resizing briefly after the page is shown again.
+    hiddenSettleTimeout = setTimeout(endHiddenSettle, HIDDEN_SETTLE_MS);
+  }
+
   function markUserIntent() {
+    endHiddenSettle();
     if (disposed || suspended || multiTouch) return;
     if (jumping) {
       jumping = false;
@@ -130,10 +159,20 @@ export function createChatScrollController(
       if (activeIntent) deferIntentEnd();
       return;
     }
+    if (hiddenState) {
+      lastTop = container.scrollTop;
+      expectedTop = null;
+      scheduleCorrection();
+      return;
+    }
     const current = measure();
     if (geometryChanged(geometry, current)) {
       if (isIndependentScroll(geometry, current, lastTop, container.scrollTop)) captureUserPosition();
-      else scheduleCorrection();
+      else {
+        // Accept the layout clamp so a later correction measures against this intermediate extent.
+        lastTop = container.scrollTop;
+        scheduleCorrection();
+      }
       return;
     }
     if (jumping) {
@@ -215,12 +254,15 @@ export function createChatScrollController(
   window.addEventListener('pointerup', onPointerUp, { passive: true });
   window.addEventListener('pointercancel', onPointerUp, { passive: true });
   window.addEventListener('blur', onPointerUp);
+  document.addEventListener('visibilitychange', onVisibilityChange);
   if (initial && !following && !anchor) container.scrollTop = initial.scrollTop;
+  if (document.visibilityState === 'hidden') hiddenState = { following, anchor };
   correctLayout();
 
   return {
     snapshot: () => ({ following, anchor, scrollTop: container.scrollTop }),
     jumpToLatest() {
+      endHiddenSettle();
       following = true;
       anchor = null;
       suspended = false;
@@ -244,6 +286,7 @@ export function createChatScrollController(
       mutationObserver.disconnect();
       cancelAnimationFrame(correctionFrame);
       clearTimeout(intentTimeout);
+      clearTimeout(hiddenSettleTimeout);
       container.removeEventListener('scroll', onScroll);
       container.removeEventListener('scrollend', endUserIntent);
       container.removeEventListener('wheel', onWheel);
@@ -256,6 +299,7 @@ export function createChatScrollController(
       window.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('pointercancel', onPointerUp);
       window.removeEventListener('blur', onPointerUp);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     },
   };
 }

@@ -4001,7 +4001,13 @@ test.describe('Chat UI', () => {
     await expect(chatArea.locator(`.thinkingPartText:has-text("${thinkingText}")`)).toBeVisible({ timeout: 15000 });
 
     const chatSaves = () => chatPosts.map(body => body.operation?.chat || body.chat).filter(Boolean);
-    await expect.poll(() => chatSaves().some(chat => chat.messages?.some((message: any) => message.type === 'user' && message.content === userText)), { timeout: 10000 }).toBe(true);
+    // Sending persists the user message and the pending agent placeholder (possibly as separate
+    // saves ~100ms apart); baseline only after both, so later saves can only come from streaming.
+    await expect.poll(() => chatSaves().some(chat => {
+      const messages: any[] = chat.messages || [];
+      const userIndex = messages.findIndex(message => message.type === 'user' && message.content === userText);
+      return userIndex >= 0 && messages.slice(userIndex + 1).some(message => message.type === 'agent');
+    }), { timeout: 10000 }).toBe(true);
     const chatSaveCountAfterUserMessage = chatSaves().length;
     await page.waitForTimeout(2500);
     expect(chatSaves().length).toBe(chatSaveCountAfterUserMessage);

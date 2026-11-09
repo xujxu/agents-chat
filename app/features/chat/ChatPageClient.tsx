@@ -287,7 +287,7 @@ export function ChatPageClient() {
         <section className="chatContainer" ref={attachChatContainer} tabIndex={-1}>
           <div className="chatScrollContent">
             <MessageList messages={messages} isEmptyChat={messages.every(message => message.type === 'system')} agents={agents} expandedMessages={expandedMessages} failedSendByMessageId={failedSendByMessageId} onToggleExpanded={toggleMessageExpanded} onRetryFailedSend={retryFailedSend} onOpenImage={setLightboxImage} onAnswerAgentUserRequest={answerAgentUserRequest} onDismissAgentUserRequest={dismissAgentUserRequest} />
-            {showFollowUpHint && workflowFollowUp ? <WorkflowFollowUpCard agentIds={workflowFollowUp.awaitingAgentIds} agents={agents} onReply={(text) => sendWorkflowFollowUpReply(text, workflowFollowUp.awaitingAgentIds, workflowFollowUp.orchestrationId)} onDismiss={() => setDismissedFollowUpOrchId(workflowFollowUp.orchestrationId)} /> : null}
+            {showFollowUpHint && workflowFollowUp ? <WorkflowFollowUpCard draftKey={`${currentChatId}:${workflowFollowUp.orchestrationId}`} agentIds={workflowFollowUp.awaitingAgentIds} agents={agents} onReply={(text) => sendWorkflowFollowUpReply(text, workflowFollowUp.awaitingAgentIds, workflowFollowUp.orchestrationId)} onDismiss={() => setDismissedFollowUpOrchId(workflowFollowUp.orchestrationId)} /> : null}
           </div>
         </section>
         {showScrollToBottom ? <button type="button" className="jumpToLatestButton" onClick={scrollToLatest} aria-label="Jump to latest messages" title="Jump to latest messages">↓</button> : null}

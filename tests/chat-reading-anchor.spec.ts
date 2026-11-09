@@ -177,6 +177,32 @@ test('keeps latest messages at the bottom through orientation round trips', asyn
   }
 });
 
+test('keeps latest messages at the bottom after the page is hidden and shown again', async ({ page }) => {
+  const chat = page.locator('.chatContainer');
+  await chat.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  await settleLayout(page);
+  const setVisibility = (state: 'hidden' | 'visible') => page.evaluate((value) => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => value });
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => value === 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, state);
+  await setVisibility('hidden');
+  // A remote desktop reconnect can clamp scrollTop through intermediate display sizes without user input.
+  await chat.evaluate((element) => new Promise<void>((resolve) => {
+    element.addEventListener('scroll', () => resolve(), { once: true });
+    element.scrollTop -= 600;
+  }));
+  await page.setViewportSize(landscape);
+  await settleLayout(page);
+  await page.setViewportSize(portrait);
+  await setVisibility('visible');
+  await settleLayout(page);
+  await expect.poll(() => chat.evaluate((element) =>
+    element.scrollHeight - element.clientHeight - element.scrollTop,
+  )).toBeLessThanOrEqual(4);
+  await expect(page.getByRole('button', { name: 'Jump to latest messages' })).toBeHidden();
+});
+
 test('keeps latest messages at the bottom while the composer is remeasured', async ({ page }) => {
   const chat = page.locator('.chatContainer');
   const composer = page.locator('textarea.composerTextarea');
