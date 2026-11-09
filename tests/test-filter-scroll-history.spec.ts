@@ -192,6 +192,23 @@ test.describe('Agent Filter Persistence', () => {
       }
     }
   });
+
+  test('restored chat still shows agent replies when the persisted filter is a different agent', async ({ page }) => {
+    await page.click('button.emptyHomepageNewChat');
+    await page.waitForSelector('.chatContainer', { timeout: 10000 });
+    await sendMessage(page, '@alpha hello');
+    await expect(page.locator('.chatContainer')).toContainText('reply from alpha');
+
+    // Simulate another tab (or an earlier session) leaving the filter on beta,
+    // then the tab reloading, e.g. after the machine resumes from hibernate.
+    await page.evaluate(() => window.localStorage.setItem('acp_agent_filter_v1', 'beta'));
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('.chatContainer', { timeout: 30000 });
+
+    await expect(chatAgentFilterTrigger(page)).toHaveAttribute('data-value', 'beta');
+    await expect(page.locator('.chatContainer')).toContainText('@alpha hello');
+    await expect(page.locator('.chatContainer')).toContainText('reply from alpha');
+  });
 });
 
 test.describe('Chat List Sort Order', () => {

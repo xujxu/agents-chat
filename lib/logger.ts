@@ -84,7 +84,31 @@ function buildLogger(): Logger {
 
   try {
     const transport = pino.transport({ targets });
-    return pino(options, transport);
+    // If the worker thread dies (e.g. a transport dependency is missing from the
+    // release), thread-stream emits 'error' on every subsequent write. Without a
+    // listener each becomes an uncaughtException, so degrade to stdout instead.
+    let workerFailed = false;
+    let fallback: ReturnType<typeof pino.destination> | undefined;
+    transport.on("error", (err: unknown) => {
+      if (workerFailed) return;
+      workerFailed = true;
+      // eslint-disable-next-line no-console
+      console.error("[logger] log transport failed, falling back to stdout:", err);
+    });
+    const destination = {
+      write(msg: string) {
+        if (workerFailed) {
+          (fallback ??= pino.destination({ dest: 1, sync: true })).write(msg);
+          return;
+        }
+        transport.write(msg);
+      },
+      flush(cb?: (err?: Error | null) => void) {
+        if (workerFailed) { cb?.(null); return; }
+        transport.flush(cb);
+      },
+    };
+    return pino(options, destination);
   } catch (err) {
     // If transport setup fails (e.g., bundler can't resolve workers), fall back to stdout.
     // eslint-disable-next-line no-console
