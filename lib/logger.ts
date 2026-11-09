@@ -88,6 +88,7 @@ function buildLogger(): Logger {
     // release), thread-stream emits 'error' on every subsequent write. Without a
     // listener each becomes an uncaughtException, so degrade to stdout instead.
     let workerFailed = false;
+    let fallback: ReturnType<typeof pino.destination> | undefined;
     transport.on("error", (err: unknown) => {
       if (workerFailed) return;
       workerFailed = true;
@@ -97,7 +98,7 @@ function buildLogger(): Logger {
     const destination = {
       write(msg: string) {
         if (workerFailed) {
-          process.stdout.write(msg);
+          (fallback ??= pino.destination({ dest: 1, sync: true })).write(msg);
           return;
         }
         transport.write(msg);

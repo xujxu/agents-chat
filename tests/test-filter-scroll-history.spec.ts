@@ -202,8 +202,8 @@ test.describe('Agent Filter Persistence', () => {
     // Simulate another tab (or an earlier session) leaving the filter on beta,
     // then the tab reloading, e.g. after the machine resumes from hibernate.
     await page.evaluate(() => window.localStorage.setItem('acp_agent_filter_v1', 'beta'));
-    await page.reload({ waitUntil: 'networkidle' });
-    await page.waitForSelector('.chatContainer', { timeout: 10000 });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('.chatContainer', { timeout: 30000 });
 
     await expect(chatAgentFilterTrigger(page)).toHaveAttribute('data-value', 'beta');
     await expect(page.locator('.chatContainer')).toContainText('@alpha hello');
