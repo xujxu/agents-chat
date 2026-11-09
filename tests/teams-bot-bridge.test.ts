@@ -364,12 +364,13 @@ async function main() {
     await chatStore.saveChat('bob@contoso.com', { ...webChat, id: 'web-bob', name: 'Bob connector notes', agentId: 'mcagent' });
     reply = await command('/session');
     assert.match(reply, /^\*\*Your sessions with teams\*\* \(✅ = current\)\n1\. /);
-    assert.match(reply, /\. Teams: hello – (just now|\dm ago) ✅$/m);
-    assert.match(reply, /\. Connector failure triage – 3h ago$/m);
+    assert.match(reply, new RegExp(`\\. Teams: hello – (just now|\\dm ago) – \`${teamsChatId}\` ✅$`, 'm'));
+    assert.match(reply, /\. Connector failure triage – 3h ago – `web-chat-1`$/m);
+    assert.match(reply, /Send `\/session <number or id>` to switch/);
     assert.match(reply, /\. Teams: what is up with Bob\?/m, '1:1 chats list sessions from everywhere');
     assert.doesNotMatch(reply, /MC web chat|analyze the connector|Bob connector/, 'only this agent and this person');
     reply = await command('/session connector');
-    assert.match(reply, /^\*\*Sessions with teams matching "connector"\*\*\n1\. Connector failure triage – 3h ago\n\n/);
+    assert.match(reply, /^\*\*Sessions with teams matching "connector"\*\*\n1\. Connector failure triage – 3h ago – `web-chat-1`\n\n/);
     assert.match(await command('/session 1'), /Switched to session \*\*Connector failure triage\*\* with \*\*teams\*\* \(last active 3h ago\)/);
     assert.equal(sendOf(await say('continue the web chat')).chatId, 'web-chat-1');
     assert.match(await command('/session 1'), /already in session \*\*Connector failure triage\*\*/);
@@ -383,7 +384,7 @@ async function main() {
     await command('/agent mcagent');
     reply = await command('/session');
     assert.match(reply, /Your sessions with MC Agent/);
-    assert.match(reply, /\. MC web chat – 3h ago$/m);
+    assert.match(reply, /\. MC web chat – 3h ago – `web-mc`$/m);
     assert.doesNotMatch(reply, /Connector failure triage/);
     await command('/agent teams');
     assert.equal(sendOf(await say('still on the web chat')).chatId, 'web-chat-1', 'each agent remembers its session');
