@@ -16,6 +16,7 @@ import {
   conversationAgentKey,
   conversationSettingKey,
   formatAge,
+  formatSessionTable,
   formatUserRequest,
   isAllowedServiceUrl,
   isBotMentioned,
@@ -439,9 +440,10 @@ async function changeSession(config: TeamsConfig, ref: ConversationRef, user: Te
     sessionLists.delete(listKey);
     sessionLists.set(listKey, shown.map((chat) => chat.id));
     if (sessionLists.size > 1000) sessionLists.delete(sessionLists.keys().next().value!);
-    const lines = shown.map((chat, i) => `${i + 1}. ${chat.name || chat.id} – ${formatAge(chat.ts)} – \`${chat.id}\`${chat.id === current ? ' ✅' : ''}`);
-    const more = chats.length > shown.length ? `\n_…and ${chats.length - shown.length} more. Send \`/session <words>\` to search._` : '';
-    return `${title}\n${lines.join('\n')}${more}\n\nSend \`/session <number or id>\` to switch, \`/session <words>\` to search, or \`/new\` to start a new session.`;
+    const location = (id: string) => (id.startsWith(groupPrefix) ? 'This chat' : id.startsWith('teams-') ? 'Teams' : 'Web');
+    const table = formatSessionTable(shown.map((chat) => ({ ...chat, current: chat.id === current, location: location(chat.id) })));
+    const more = chats.length > shown.length ? `\n\n_…and ${chats.length - shown.length} more. Send \`/session <words>\` to search._` : '';
+    return `${title}\n\n${table}${more}\n\nSend \`/session <number or id>\` to switch, \`/session <words>\` to search, or \`/new\` to start a new session.`;
   };
   const open = (chat: ChatSummary) => {
     if (chat.id === current) return `You are already in session **${chat.name || chat.id}** with **${agentName}**.`;
@@ -453,7 +455,7 @@ async function changeSession(config: TeamsConfig, ref: ConversationRef, user: Te
   if (!query) {
     const chats = (await listChats(user.email)).filter(visible);
     if (chats.length === 0) return `You have no sessions with **${agentName}**${where} yet. Your next message starts one.`;
-    return show(`**Your sessions with ${agentName}**${where} (✅ = current)`, chats);
+    return show(`**Your sessions with ${agentName}**${where}`, chats);
   }
 
   if (/^\d+$/.test(query)) {

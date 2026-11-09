@@ -118,6 +118,42 @@ export function formatAge(ts: number, now = Date.now()): string {
   return days < 30 ? `${days}d ago` : new Date(ts).toISOString().slice(0, 10);
 }
 
+/** When a chat was created, read from its id (`chat-<ms>-…` from the web, `teams-<hash>-<base36 ms>` from Teams). */
+export function chatCreatedAt(chatId: string): number | undefined {
+  const web = /^chat-(\d{12,14})-/.exec(chatId);
+  const teams = /^teams-[0-9a-f]{12}-([0-9a-z]{6,10})$/.exec(chatId);
+  const ts = web ? Number(web[1]) : teams ? parseInt(teams[1], 36) : NaN;
+  // Only trust values that look like real timestamps (2020 – 2100).
+  return ts > 1_577_836_800_000 && ts < 4_102_444_800_000 ? ts : undefined;
+}
+
+export type SessionTableRow = { id: string; name: string; ts: number; current: boolean; location: string };
+
+/** Escape a value for one Teams markdown table cell. */
+function tableCell(value: string, max = 50): string {
+  const flat = value.replace(/\s+/g, ' ').trim();
+  const short = flat.length > max ? `${flat.slice(0, max - 1).trimEnd()}…` : flat;
+  return short.replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/`/g, "'");
+}
+
+/** The `/session` list as a markdown table, styled after the agency CLI session picker. */
+export function formatSessionTable(rows: SessionTableRow[], now = Date.now()): string {
+  const lines = rows.map((row, i) => {
+    const name = tableCell(row.name || row.id);
+    const created = chatCreatedAt(row.id);
+    return [
+      `${i + 1}`,
+      row.current ? `❯ **${name}**` : name,
+      row.current ? '● Current' : '',
+      formatAge(row.ts, now),
+      created === undefined ? '—' : formatAge(created, now),
+      row.location,
+      `\`${row.id}\``,
+    ].join(' | ');
+  });
+  return ['| # | Session | Status | Last updated | Created | Location | ID |', '|---|---|---|---|---|---|---|', ...lines.map((line) => `| ${line} |`)].join('\n');
+}
+
 /**
  * User setting holding the agents-chat chat for a Teams conversation. Each agent gets its own chat;
  * the bot's default agent keeps the original key so existing conversations continue.
