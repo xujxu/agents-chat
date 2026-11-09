@@ -16,6 +16,7 @@ import {
   normalizeServiceUrl,
   parseCommand,
   parseEmailList,
+  normalizeMarkdownForTeams,
   splitForTeams,
 } from '../lib/channels/teams/util.ts';
 
@@ -105,6 +106,15 @@ assert.ok(parts.every((p) => p.length <= 2000));
 assert.equal(parts.join('').replace(/\s+/g, ''), long.replace(/\s+/g, ''));
 assert.deepEqual(splitForTeams('short', 2000), ['short']);
 assert.ok(splitForTeams('z'.repeat(4500), 2000).every((p) => p.length <= 2000));
+
+// Extended Markdown: tables get their own block, single line breaks stay visible, code fences are untouched
+assert.equal(
+  normalizeMarkdownForTeams('**PBIs:**\n| ID | Title |\n|---|---|\n| 1 | A |\n| 2 | B |\nAll done.'),
+  '**PBIs:**\n\n| ID | Title |\n|---|---|\n| 1 | A |\n| 2 | B |\n\nAll done.',
+);
+assert.equal(normalizeMarkdownForTeams('Account: a\nAgent: b\n\nNext'), 'Account: a  \nAgent: b\n\nNext');
+assert.equal(normalizeMarkdownForTeams('Run:\n```sh\na | b\n---\nc\n```\nok'), 'Run:\n```sh\na | b\n---\nc\n```\nok');
+assert.equal(normalizeMarkdownForTeams('| a |\n|---|\n| 1 |'), '| a |\n|---|\n| 1 |');
 
 assert.deepEqual(parseEmailList(' A@x.com, b@Y.com ;; '), ['a@x.com', 'b@y.com']);
 assert.deepEqual(parseEmailList(undefined), []);

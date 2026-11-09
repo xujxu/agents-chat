@@ -111,12 +111,14 @@ async function main() {
     // Replies say which agent answered (its id when the agent has no record).
     const finals = (posts: any[]) => posts.filter((p) => p.type === 'message').map((p) => p.text as string); // eslint-disable-line @typescript-eslint/no-explicit-any
     assert.deepEqual(finals(r.posts), ['*🤖 teams*\n\nanswer']);
+    assert.ok(r.posts.every((p) => p.textFormat === 'extendedmarkdown'), 'replies use extended Markdown so tables render');
 
     // Plain replies in a group @mention the asker.
     r = await run(activity('29:bob', '<at>agent-xujx</at> /help', [botMention]));
     assert.equal(r.acp.length, 0);
     assert.equal(r.posts.length, 1);
     assert.match(r.posts[0].text, /^<at>bob<\/at> In this group chat I only respond/);
+    assert.equal(r.posts[0].textFormat, 'extendedmarkdown');
     assert.deepEqual(r.posts[0].entities, [{ type: 'mention', text: '<at>bob</at>', mentioned: { id: '29:bob', name: 'bob' } }]);
 
     // A bare @mention shows the group help.

@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto';
 
 /** Max characters per Teams text message (Teams caps activities at ~100 KB; stay well below it). */
 export const TEAMS_MAX_TEXT = 20000;
+/** Extended Markdown is needed for tables, code fences and task lists; the default `markdown` mode drops them. */
+export const TEAMS_TEXT_FORMAT = 'extendedmarkdown';
 
 export type TeamsCommandName = 'new' | 'stop' | 'help' | 'whoami' | 'model' | 'agent' | 'session' | 'extend' | 'approve' | 'deny' | 'default';
 export type TeamsCommand = { name: TeamsCommandName; args: string } | null;
@@ -189,6 +191,55 @@ export function isAllowedServiceUrl(serviceUrl: unknown): serviceUrl is string {
 
 export function normalizeServiceUrl(serviceUrl: string): string {
   return serviceUrl.endsWith('/') ? serviceUrl : `${serviceUrl}/`;
+}
+
+const TABLE_DELIMITER_ROW = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+const FENCE = /^\s{0,3}(`{3,}|~{3,})/;
+/** Lines that start their own block, so the line before them needs no hard break. */
+const BLOCK_START = /^\s{0,3}([-*+]\s|\d{1,9}[.)]\s|#{1,6}\s|>|`{3}|~{3}|\|)/;
+
+/**
+ * Adapt Markdown for Teams extended Markdown (CommonMark + GFM):
+ * - put a blank line before tables that directly follow other text, so they render as tables;
+ * - keep single line breaks (the legacy `markdown` mode showed them) by turning soft breaks into hard breaks.
+ * Code fences and table rows are left as they are.
+ */
+export function normalizeMarkdownForTeams(text: string): string {
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  const out: string[] = [];
+  let fence: string | null = null;
+  let inTable = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const next = lines[i + 1];
+    const marker = FENCE.exec(line)?.[1];
+    if (fence || marker) {
+      if (marker && !fence) fence = marker[0];
+      else if (marker && marker[0] === fence && !line.trim().slice(marker.length)) fence = null;
+      out.push(line);
+      continue;
+    }
+    if (!line.trim()) {
+      inTable = false;
+      out.push(line);
+      continue;
+    }
+    if (!inTable && line.includes('|') && next !== undefined && next.includes('-') && TABLE_DELIMITER_ROW.test(next)) {
+      inTable = true;
+      const prev = out.length ? out[out.length - 1] : '';
+      if (prev.trim()) {
+        out[out.length - 1] = prev.replace(/ {2}$/, '');
+        out.push('');
+      }
+    } else if (inTable && !line.includes('|')) {
+      // Without a blank line, GFM would pull this line into the table as another row.
+      inTable = false;
+      out.push('');
+    }
+    const softBreak = !inTable && next !== undefined && next.trim() !== '' && !BLOCK_START.test(next) && !/( {2}|\\)$/.test(line);
+    out.push(softBreak ? `${line}  ` : line);
+  }
+  return out.join('\n');
 }
 
 /** Split long text into Teams-sized chunks, preferring paragraph/line boundaries. */
