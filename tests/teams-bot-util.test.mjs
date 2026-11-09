@@ -29,6 +29,17 @@ assert.equal(parseCommand('hello /new'), null);
 assert.equal(cleanIncomingText('<at>agent-xujx</at> hi &amp; <b>bye</b>'), 'hi & bye');
 assert.equal(cleanIncomingText(undefined), '');
 
+// Teams shortens long links in the visible text; the full address comes back from the href
+const url = 'https://msdata.visualstudio.com/Messaging%20Connectors/_workitems/edit/5614876?a=1&b=2';
+const short = 'https://msdata.visualstudio.com/Messaging%20Connectors/_workitems/edit/5614…';
+const anchor = (label) => `<a href="${url.replace(/&/g, '&amp;')}" title="${url}">${label}</a>`;
+assert.equal(cleanIncomingText(`<p>list PBIs under ${anchor(short)}, please</p>`), `list PBIs under ${url}, please`);
+assert.equal(cleanIncomingText(`see ${anchor('the <b>PBI</b>')}`), `see the PBI (${url})`);
+assert.equal(cleanIncomingText(`list PBIs under ${short}, please`, [], undefined, [`<div><div>list PBIs under ${anchor(short)}, please</div></div>`]), `list PBIs under ${url}, please`);
+assert.equal(cleanIncomingText('where is the PBI', [], undefined, [`where is ${anchor('the PBI')}`]), `where is the PBI (${url})`);
+assert.equal(cleanIncomingText(`open ${url}`, [], undefined, [`open ${anchor(url)}`]), `open ${url}`);
+assert.equal(cleanIncomingText('mail me', [], undefined, ['<a href="mailto:a@b.com">me</a>']), 'mail me');
+
 // Group chats: only explicit @mentions of the bot count, and other people's names are kept
 const botId = '28:bot-app';
 const mentions = [

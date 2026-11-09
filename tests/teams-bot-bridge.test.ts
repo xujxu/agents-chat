@@ -169,6 +169,11 @@ async function main() {
     r = await run(activity('29:alice', 'hello', [], 'personal', 'personal-1'));
     assert.deepEqual(r.acp.map((a) => a.action), ['send', 'poll', 'turn-clear']);
     assert.equal(r.acp[0].text, 'hello');
+    // Teams shortens long links in the text and keeps the full address only in the text/html attachment.
+    const workItem = 'https://dev.azure.com/org/_workitems/edit/5614876';
+    r = await run({ ...activity('29:alice', 'see https://dev.azure.com/org/_workitems/edit/5614…', [], 'personal', 'personal-1'),
+      attachments: [{ contentType: 'text/html', content: `<p>see <a href="${workItem}">https://dev.azure.com/org/_workitems/edit/5614…</a></p>` }] });
+    assert.equal(r.acp[0].text, `see ${workItem}`);
     assert.ok(r.posts.every((p) => !(p.entities || []).some((e: { type?: string }) => e.type === 'mention')));
     r = await run(activity('29:alice', '/help', [], 'personal', 'personal-1'));
     assert.doesNotMatch(r.posts[0].text, /group chat|<at>/);

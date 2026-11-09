@@ -27,12 +27,57 @@ export function isBotMentioned(entities: unknown, botId: string): boolean {
   return botMentions(entities, botId).length > 0;
 }
 
+function decodeEntities(text: string): string {
+  return text.replace(/&(amp|lt|gt|quot|#39|nbsp);/g, (entity) => HTML_ENTITIES[entity] ?? entity);
+}
+
+const ANCHOR = /<a\b[^>]*?\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')[^>]*>([\s\S]*?)<\/a>/gi;
+
+type Link = { href: string; label: string };
+
+function anchorLinks(html: string): Link[] {
+  const links: Link[] = [];
+  for (const match of html.matchAll(ANCHOR)) {
+    const href = decodeEntities(match[1] ?? match[2] ?? '').trim();
+    const label = decodeEntities(match[3].replace(/<[^>]+>/g, '')).trim();
+    if (/^https?:\/\//i.test(href) && label && label !== href) links.push({ href, label });
+  }
+  return links;
+}
+
+/** Teams shortens long URLs in the visible text ("…/edit/5614…"); the full address is only in the href. */
+function linkText({ href, label }: Link): string {
+  const shortened = label.replace(/(…|\.\.\.)$/, '');
+  if (/^(https?:\/\/|www\.)/i.test(label) || href.startsWith(shortened)) return href;
+  return `${label} (${href})`;
+}
+
 /**
  * Normalize inbound Teams message text and strip stray HTML. With `botId`, only @mentions of the bot are
- * removed and other mentions keep the person's name; without it, every mention is removed.
+ * removed and other mentions keep the person's name; without it, every mention is removed. Links get
+ * their full address back from the `<a href>` in the text or in the message's text/html attachments.
  */
-export function cleanIncomingText(text: unknown, entities?: unknown, botId?: string): string {
+export function cleanIncomingText(text: unknown, entities?: unknown, botId?: string, html: string[] = []): string {
   if (typeof text !== 'string') return '';
+  const withLinks = text.replace(ANCHOR, (anchor) => {
+    const [link] = anchorLinks(anchor);
+    return link ? linkText(link) : anchor;
+  });
+  return restoreLinks(cleanText(withLinks, entities, botId), html.flatMap(anchorLinks));
+}
+
+/** Put full addresses back into plain text whose links Teams only kept in its HTML version. */
+function restoreLinks(text: string, links: Link[]): string {
+  for (const link of links) {
+    if (text.includes(link.href)) continue;
+    const full = linkText(link);
+    // A shortened URL is replaced everywhere; a friendly label only where it first appears.
+    text = full === link.href ? text.split(link.label).join(full) : text.replace(link.label, () => full);
+  }
+  return text;
+}
+
+function cleanText(text: string, entities?: unknown, botId?: string): string {
   const botNames = new Set<string>();
   if (botId) {
     for (const mention of botMentions(entities, botId)) {
