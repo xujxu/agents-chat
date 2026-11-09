@@ -89,11 +89,13 @@ export function createPersistenceHandlers(ctx: PersistenceContext) {
           void persistLoadedChatMigration(chatId, data.chat.name || chatId, data.chat.ts || Date.now(), migration.messages, agentSessions);
         }
         ctx.setChatHistory(prev => {
+          const agentId = data.chat.agentId || prev.find(c => c.id === chatId)?.agentId;
           const entry = {
             id: data.chat.id,
             name: data.chat.name || chatId,
             ts: data.chat.ts || Date.now(),
             agentSessions,
+            ...(agentId ? { agentId } : {}),
           };
           if (prev.some(c => c.id === chatId)) return prev.map(c => c.id === chatId ? entry : c);
           return normalizeChatHistory([entry, ...prev]);
@@ -138,8 +140,9 @@ export function createPersistenceHandlers(ctx: PersistenceContext) {
     }
     showSaveError(chatId, null);
     ctx.setChatHistory(prev => {
-      const entry = { id: chatId, name, ts: savedAt, agentSessions, agentId };
-      if (prev.some(c => c.id === chatId)) return prev.map(c => c.id === chatId ? entry : c);
+      const previous = prev.find(c => c.id === chatId);
+      const entry = { id: chatId, name, ts: savedAt, agentSessions, agentId: agentId || previous?.agentId || undefined };
+      if (previous) return prev.map(c => c.id === chatId ? entry : c);
       return normalizeChatHistory([entry, ...prev]);
     });
     return { ok: true, savedAt };
@@ -186,6 +189,7 @@ export function createPersistenceHandlers(ctx: PersistenceContext) {
     let agentSessions: Record<string, string> = {};
     let migratedFailedSendState = false;
     let targetTs = Date.now();
+    let targetAgentId: string | undefined;
     try {
       const res = await fetch(`/api/chats?id=${encodeURIComponent(chatId)}`);
       const data = await res.json();
@@ -211,6 +215,7 @@ export function createPersistenceHandlers(ctx: PersistenceContext) {
         }
         targetName = data.chat.name || targetName;
         targetTs = data.chat.ts || targetTs;
+        targetAgentId = data.chat.agentId || undefined;
         ctx.currentAgentSessionsRef.current = agentSessions;
       }
     } catch {
@@ -251,8 +256,8 @@ export function createPersistenceHandlers(ctx: PersistenceContext) {
       void persistLoadedChatMigration(chatId, targetName, targetTs, targetMessages, agentSessions);
     }
     ctx.setChatHistory(prev => {
-      if (prev.some(c => c.id === chatId)) return prev.map(c => c.id === chatId ? { ...c, name: targetName, agentSessions } : c);
-      return [...prev, { id: chatId, name: targetName, ts: Date.now(), agentSessions }];
+      if (prev.some(c => c.id === chatId)) return prev.map(c => c.id === chatId ? { ...c, name: targetName, agentSessions, agentId: targetAgentId || c.agentId } : c);
+      return [...prev, { id: chatId, name: targetName, ts: Date.now(), agentSessions, ...(targetAgentId ? { agentId: targetAgentId } : {}) }];
     });
 
     // Persist last active chat AFTER all state updates to fix lastChatId race
