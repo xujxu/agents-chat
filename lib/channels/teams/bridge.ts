@@ -55,7 +55,7 @@ export type TeamsActivity = {
   conversation?: { id?: string; conversationType?: string; tenantId?: string };
   channelData?: { tenant?: { id?: string } };
   membersAdded?: { id?: string }[];
-  attachments?: { contentType?: string }[];
+  attachments?: { contentType?: string; content?: unknown }[];
   entities?: TeamsEntity[];
 };
 
@@ -226,7 +226,8 @@ async function handleMessage(
   onAuthorized();
   if (!isGroup) rememberPersonalChat(ref, user);
 
-  const text = cleanIncomingText(activity.text, activity.entities, ref.botId);
+  const html = (activity.attachments ?? []).flatMap((a) => (a.contentType === 'text/html' && typeof a.content === 'string' ? [a.content] : []));
+  const text = cleanIncomingText(activity.text, activity.entities, ref.botId, html);
   if (!text) {
     const hasAttachments = activity.attachments?.some((a) => a.contentType && a.contentType !== 'text/html');
     if (hasAttachments) await sendText(config, ref, 'Attachments are not supported yet. Please send text.');
