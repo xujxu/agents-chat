@@ -51,6 +51,12 @@ export function normalizeChatHistory(chats: ChatHistoryEntry[]): ChatHistoryEntr
   return Array.from(byId.values());
 }
 
+/** Moves `entry` to the end of the history, keeping the existing chat agent when `entry` has none (a lost agent routes sends to the default agent). */
+export function replaceChatHistoryEntry(history: ChatHistoryEntry[], entry: ChatHistoryEntry): ChatHistoryEntry[] {
+  const agentId = entry.agentId || history.find(chat => chat.id === entry.id)?.agentId;
+  return normalizeChatHistory([...history.filter(chat => chat.id !== entry.id), { ...entry, ...(agentId ? { agentId } : {}) }]);
+}
+
 export function formatMessageTime(ts: number) {
   if (!ts) return '';
   return new Intl.DateTimeFormat('en-US', {

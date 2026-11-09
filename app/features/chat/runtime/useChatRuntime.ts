@@ -9,7 +9,7 @@ import { type FileCommentCallbacks, createAcpHandlers } from './chatAcpService';
 import { createOrchestrationHandlers } from './chatOrchestrationService';
 import { createPersistenceHandlers, type ChatSaveResult } from './chatPersistenceService';
 import { useChatOutbox } from './useChatOutbox';
-import { getMentionedAgentIds, getDefaultAgentId, getExistingAgentId, parseAgents, normalizeChatHistory, migrateFailedSendWarnings, lastSessionId, getMessageCopyText } from '../chatHelpers';
+import { getMentionedAgentIds, getDefaultAgentId, getExistingAgentId, parseAgents, normalizeChatHistory, replaceChatHistoryEntry, migrateFailedSendWarnings, lastSessionId, getMessageCopyText } from '../chatHelpers';
 import { detectWorkflowFollowUp } from '../../orchestration/workflowFollowUp';
 import { persistOrchestrationDiff, loadPersistedOrchestrations } from '../../orchestration/orchestrationPersistence';
 import { recoverInterruptedOrchestration } from '@/lib/workflow/recoverInterrupted.mjs';
@@ -124,14 +124,7 @@ export function useChatRuntime({
     const merged = new Map(existing.filter(message => !replace.has(message.id)).map(message => [message.id, message]));
     for (const message of chat.messages) if (!merged.has(message.id)) merged.set(message.id, message);
     setMessagesForChat(chat.id, [...merged.values()].sort((a, b) => a.ts - b.ts));
-    setChatHistory(previous => {
-      // Keep the chat's agent; without it the next send routes to the default agent.
-      const agentId = chat.agentId || previous.find(entry => entry.id === chat.id)?.agentId;
-      return normalizeChatHistory([
-        ...previous.filter(entry => entry.id !== chat.id),
-        { id: chat.id, name: chat.name, ts: chat.ts, agentSessions: chat.agentSessions, ...(agentId ? { agentId } : {}) },
-      ]);
-    });
+    setChatHistory(previous => replaceChatHistoryEntry(previous, { id: chat.id, name: chat.name, ts: chat.ts, agentSessions: chat.agentSessions, agentId: chat.agentId }));
   });
   const stagingSendRef = useRef(false);
 
