@@ -7,7 +7,7 @@ import { createLogger } from '@/lib/logger';
 import type { TeamsConfig } from './config';
 import { getMember, sendActivity, sendText, type ConversationRef } from './connector';
 import * as defaults from './defaultAgent';
-import { downloadTeamsImages, hasNonTextAttachments, teamsImageRefs, type TeamsAttachment, type TeamsImageRef } from './images';
+import { downloadTeamsImages, hasNonTextAttachments, ignoredFileNames, teamsImageRefs, type TeamsAttachment, type TeamsImageRef } from './images';
 import { decideCommand, extendCommand } from './shareCommands';
 import { TeamsStreamer } from './stream';
 import {
@@ -235,6 +235,10 @@ async function handleMessage(
     if (hasNonTextAttachments(activity.attachments)) await sendText(config, ref, 'Only images are supported as attachments. Please send text or an image.');
     else if (isGroup) await sendText(config, ref, GROUP_HELP_TEXT);
     return;
+  }
+  const ignoredFiles = ignoredFileNames(activity.attachments);
+  if (ignoredFiles.length) {
+    await sendText(config, ref, `⚠️ Only images are supported as attachments; the agent will not see ${ignoredFiles.map((name) => `"${name}"`).join(', ')}.`);
   }
 
   // Group chats keep separate state per person so nobody can answer or stop someone else's turn.

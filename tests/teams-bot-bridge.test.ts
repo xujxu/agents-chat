@@ -11,6 +11,7 @@ const TENANT = 'tenant-1';
 const BOT_ID = '28:bot-app';
 const SERVICE_URL = 'https://smba.trafficmanager.net/amer/';
 const IMAGE_HOST = 'https://smba.trafficmanager.net/emea/v3/attachments/';
+const FILE_HOST = 'https://contoso-my.sharepoint.com/personal/alice/';
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 const botMention = { type: 'mention', text: '<at>agent-xujx</at>', mentioned: { id: BOT_ID, name: 'agent-xujx' } };
 const bobMention = { type: 'mention', text: '<at>Bob</at>', mentioned: { id: '29:bob', name: 'Bob' } };
@@ -32,10 +33,17 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   try { body = init?.body ? JSON.parse(String(init.body)) : undefined; } catch { body = init?.body; }
   calls.push({ url, body });
   if (url.startsWith('https://login.microsoftonline.com/')) return json({ access_token: 'test-token', expires_in: 3600 });
+  const authorization = (init?.headers as Record<string, string> | undefined)?.Authorization;
   if (url.startsWith(IMAGE_HOST)) {
     if (url.includes('/broken/')) return new Response('nope', { status: 404 });
-    assert.equal((init?.headers as Record<string, string>)?.Authorization, 'Bearer test-token', 'Teams images need the bot token');
+    assert.equal(authorization, 'Bearer test-token', 'Teams images need the bot token');
+    if (url.includes('/redirect/')) return new Response(null, { status: 302, headers: { location: `${FILE_HOST}redirected.png` } });
+    if (url.includes('/loop/')) return new Response(null, { status: 302, headers: { location: url } });
     return new Response(url.includes('/html/') ? '<html></html>' : PNG, { headers: { 'content-type': 'image/*' } });
+  }
+  if (url.startsWith(FILE_HOST)) {
+    assert.equal(authorization, undefined, 'the bot token is not sent to SharePoint or redirect targets');
+    return new Response(PNG, { headers: { 'content-type': 'image/png' } });
   }
   if (url.includes('/members/')) {
     const id = decodeURIComponent(url.split('/members/')[1]);
@@ -207,6 +215,20 @@ async function main() {
     assert.ok(!r.acp.some((a) => a.action === 'send'));
     assert.match(r.posts.at(-1).text, /Could not download your image/);
     r = await run({ ...activity('29:alice', 'and this?', [], 'personal', 'personal-1'), attachments: [image('img-3'), image('broken')] });
+    imageSend = r.acp.find((a) => a.action === 'send');
+    assert.equal(imageSend.attachments.length, 1);
+    assert.ok(r.posts.some((p) => /Could not download 1 of your image/.test(p.text || '')));
+    // Image files sent in a 1:1 chat come as SharePoint links, fetched without the bot token; links on
+    // other hosts are ignored, and other files are named as skipped.
+    const file = (name: string, downloadUrl: string) => ({ contentType: 'application/vnd.microsoft.teams.file.download.info', name, content: { downloadUrl, fileType: name.split('.').pop() } });
+    r = await run({ ...activity('29:alice', 'files', [], 'personal', 'personal-1'),
+      attachments: [file('shot.png', `${FILE_HOST}shot.png?tempauth=x`), file('evil.png', 'https://evil.example.com/evil.png'), file('spec.pdf', `${FILE_HOST}spec.pdf`)] });
+    imageSend = r.acp.find((a) => a.action === 'send');
+    assert.deepEqual(imageSend.attachments.map((a: { name: string }) => a.name), ['shot.png']);
+    assert.ok(!calls.some((c) => c.url.includes('evil.example.com') || c.url.includes('spec.pdf')));
+    assert.match(r.posts[0].text, /Only images are supported as attachments; the agent will not see "spec\.pdf"/);
+    // Redirects are followed without the bot token; redirect loops give up.
+    r = await run({ ...activity('29:alice', 'moved', [], 'personal', 'personal-1'), attachments: [image('redirect'), image('loop')] });
     imageSend = r.acp.find((a) => a.action === 'send');
     assert.equal(imageSend.attachments.length, 1);
     assert.ok(r.posts.some((p) => /Could not download 1 of your image/.test(p.text || '')));
