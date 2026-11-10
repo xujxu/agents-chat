@@ -14,7 +14,7 @@ import {
   isAgentSessionOwnedByOtherUser,
   appendMessageToChat,
 } from '@/lib/chatStore';
-import { addFollowup, combineFollowups, countFollowupsByChat, listFollowups, removeFollowup, restoreFollowups, takeFollowups, updateFollowup, type Followup } from '@/lib/followupQueue';
+import { addFollowup, combineFollowups, countFollowupsByChat, hasFollowups, listFollowups, removeFollowup, restoreFollowups, takeFollowups, updateFollowup, type Followup } from '@/lib/followupQueue';
 import { isAdminToken, getUserEmail, canModify, canTalkTo, getAuthToken } from '@/lib/auth';
 import { canUseAgent, getUserRole } from '@/lib/rbac';
 import * as configStore from '@/lib/configStore';
@@ -941,7 +941,7 @@ function sendPrompt(proc: AgentProcess, sess: UserSession, agentId: string, prom
   sess.phase = 'busy';
   sess.turnCount++;
 
-  proc.rpc!
+  turn.settled = proc.rpc!
     .send('session/prompt', {
       sessionId: sess.sessionId,
       prompt: promptParts,
@@ -1705,12 +1705,24 @@ async function startChatTurnUnmarked(proc: AgentProcess, sess: UserSession, agen
 }
 
 const FOLLOWUP_DISPATCH_DELAY_MS = 3000;
+const INTERRUPT_SETTLE_TIMEOUT_MS = 10_000;
 const dispatchingFollowups = new Set<string>();
+const scheduledFollowups = new Set<string>();
+
+/** True while queued follow-ups of this agent will be sent without user action. */
+function isFollowupDispatchPending(agentId: string, userId: string, chatId: string): boolean {
+  const key = chatTurnKey(agentId, userId, chatId);
+  return scheduledFollowups.has(key) || dispatchingFollowups.has(key) || startingChatTurns.has(key);
+}
 
 /** After a turn ends cleanly, sends the chat's queued follow-ups; errors and interrupts leave the queue paused. */
 function scheduleFollowupDispatch(proc: AgentProcess, sess: UserSession, agentId: string, userId: string, isAdmin: boolean, chatId: string | undefined, turn: TurnState): void {
   if (!chatId || turn.error || turn.statusText === 'Interrupted') return;
+  if (!hasFollowups(userId, chatId, agentId)) return;
+  const key = chatTurnKey(agentId, userId, chatId);
+  scheduledFollowups.add(key);
   setTimeout(() => {
+    scheduledFollowups.delete(key);
     void dispatchQueuedFollowups(proc, sess, agentId, userId, isAdmin, chatId).then((result) => {
       if ('error' in result) log(`[ACP:${agentId}] queued follow-ups not sent for chat ${chatId}: ${result.error}`);
     }).catch(err => logger.warn({ agentId, chatId, err: err instanceof Error ? err.message : String(err) }, `[ACP:${agentId}] Failed to dispatch queued follow-ups`));
@@ -1725,6 +1737,7 @@ async function dispatchQueuedFollowups(proc: AgentProcess, sess: UserSession, ag
   let items: Followup[] = [];
   let started = false;
   try {
+    if (!hasFollowups(userId, chatId, agentId)) return {};
     const chat = await getChat(userId, chatId);
     const config = getAgentById(agentId);
     if (!chat || !config) return { error: 'chat_deleted_or_missing', status: 410 };
@@ -2191,7 +2204,12 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(result, { status: result.ok ? 200 : ({ missing: 404, conflict: 409 } as Record<string, number>)[result.error] || 400 });
       }
       const chatId = typeof body?.chatId === 'string' ? body.chatId : '';
-      return NextResponse.json({ ok: true, items: chatId ? listFollowups(followupUserId, chatId) : [], counts: countFollowupsByChat(followupUserId), activeTurns: chatId ? listUserChatTurns(followupUserId, chatId) : [] });
+      const items = chatId ? listFollowups(followupUserId, chatId) : [];
+      const activeTurns = chatId ? listUserChatTurns(followupUserId, chatId) : [];
+      // Paused: some agent's items will only be sent when the user acts (after an error, interrupt or restart).
+      const paused = [...new Set(items.map(item => item.agentId))].some(itemAgentId =>
+        !activeTurns.some(turn => turn.agentId === itemAgentId && !turn.done) && !isFollowupDispatchPending(itemAgentId, followupUserId, chatId));
+      return NextResponse.json({ ok: true, items, paused, counts: countFollowupsByChat(followupUserId), activeTurns });
     }
 
     // ─── Agent runtime actions (require agentId + userId) ───
@@ -2374,6 +2392,8 @@ export async function POST(req: NextRequest) {
         turn.done = true;
         turn.phase = 'done';
         turn.statusText = 'Interrupted';
+        // Agents reject a new prompt on a session that is still unwinding the cancelled one.
+        if (turn.settled) await Promise.race([turn.settled.catch(() => undefined), new Promise(resolve => setTimeout(resolve, INTERRUPT_SETTLE_TIMEOUT_MS))]);
       }
       const result = await dispatchQueuedFollowups(proc, sess, agentId, userId, isAdmin, chatId);
       if ('error' in result) return NextResponse.json({ ok: false, error: result.error }, { status: result.status });

@@ -191,7 +191,7 @@ export function ChatPageClient() {
     slashTriggerActiveRef.current = active;
   }, [slashMatch, singleComposerAgentId, currentChatId, slashCommandsState]);
   const isCurrentChatSending = useMemo(() => runtime.isChatRunning(currentChatId), [currentChatId, runVersion]);
-  const followups = useFollowupQueue({ chatId: currentChatId, runtime, acp, prepareSubmission, getModelId: getSelectedModelIdForAgent, fallbackAgentId: effectiveComposerAgentId });
+  const followups = useFollowupQueue({ chatId: currentChatId, runtime, acp, prepareSubmission, getModelId: getSelectedModelIdForAgent, fallbackAgentId: effectiveComposerAgentId, agents });
   const agentSidebarItems = useMemo(() => agents.filter((a) => a.id !== SCHEDULER_AGENT_ID).map((agent) => ({ ...agent, running: messages.some((m) => m.agentId === agent.id && m.pending) })), [agents, messages]);
   const failedSendByMessageId = useMemo(() => {
     const result: Record<string, FailedSendState | undefined> = {};

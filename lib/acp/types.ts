@@ -74,6 +74,8 @@ export type TurnState = {
   syntheticQuestionParseOffset?: number;
   lastPersistedAt: number;
   persistTimer?: ReturnType<typeof setTimeout>;
+  /** Resolves once the agent has answered this turn's `session/prompt` (including after a cancel). */
+  settled?: Promise<void>;
 };
 
 export type StoredContentPart =

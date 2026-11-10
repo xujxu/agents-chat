@@ -40,6 +40,12 @@ export function countFollowupsByChat(userId: string): Record<string, number> {
   return Object.fromEntries(rows.map(row => [row.chat_id, row.n]));
 }
 
+export function hasFollowups(userId: string, chatId: string, agentId: string): boolean {
+  return !!getDb()
+    .prepare('SELECT 1 FROM chat_followups WHERE user_id = ? AND chat_id = ? AND agent_id = ? LIMIT 1')
+    .get(userId, chatId, agentId);
+}
+
 export type AddFollowupResult = { ok: true; item: Followup } | { ok: false; error: 'queue_full' | 'empty' | 'too_long' };
 
 export function addFollowup(userId: string, input: { chatId: string; agentId: string; text: string; modelId?: string }): AddFollowupResult {

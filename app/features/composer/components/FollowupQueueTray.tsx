@@ -35,7 +35,7 @@ export function FollowupQueueTray({ controller }: { controller: FollowupQueueCon
       {controller.items.length > 0 && (
         <>
           <div className="followupTrayHeader">
-            <span>Queued follow-ups ({controller.items.length}) · sent together when the agent finishes{controller.running ? '' : ' — paused'}</span>
+            <span>Queued follow-ups ({controller.items.length}) · sent together when the agent finishes{controller.paused ? ' — paused' : ''}</span>
             <button type="button" className="followupSendNow" disabled={controller.busy} onClick={() => void controller.sendNow()}>{controller.running ? 'Interrupt & send now' : 'Send now'}</button>
           </div>
           <ol className="followupList">

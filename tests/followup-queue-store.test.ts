@@ -20,6 +20,9 @@ test('follow-up queue store keeps per-user order, versions and atomic take/resto
     assert.ok(first.ok && second.ok);
     assert.deepEqual(q.listFollowups('u', 'c').map(item => item.text), ['first', 'second']);
     assert.deepEqual(q.countFollowupsByChat('u'), { c: 2 });
+    assert.equal(q.hasFollowups('u', 'c', 'a'), true);
+    assert.equal(q.hasFollowups('u', 'c', 'b'), false);
+    assert.equal(q.hasFollowups('nobody', 'c', 'a'), false);
 
     const edited = q.updateFollowup('u', first.item.id, 'first edited', first.item.version);
     assert.ok(edited.ok && edited.item.version === 2);

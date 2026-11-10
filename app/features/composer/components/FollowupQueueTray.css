@@ -20,3 +20,11 @@
 .followupTray .followupSendNow { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
 .followupError { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; color: var(--danger); }
 .queueButton { width: auto !important; padding: 0 12px !important; margin-right: 6px; font-size: 12px; }
+
+@media (hover: none) and (pointer: coarse), (max-width: 560px) {
+  .followupTrayHeader { flex-wrap: wrap; row-gap: 4px; }
+  .followupList { max-height: min(160px, 28dvh); }
+  /* Touch-sized targets; 16px keeps iOS from zooming the page when the edit field is focused. */
+  .followupTray button { min-height: 32px; padding: 4px 12px; font-size: 13px; }
+  .followupEditInput { font-size: 16px; }
+}

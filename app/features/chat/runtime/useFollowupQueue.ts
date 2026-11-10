@@ -4,10 +4,12 @@ import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 
 import type { ChatMessage } from '../chatTypes';
 import type { ChatAttachment } from '../../composer/attachmentTypes';
 import type { ChatSidebarStatus } from '../components/ChatSidebarList';
+import type { Agent } from '../../agents/agentTypes';
+import { getMentionedAgentIds } from '../chatHelpers';
 
 export type FollowupItem = { id: string; chatId: string; agentId: string; text: string; modelId?: string; version: number; createdAt: number };
 type ActiveTurn = { agentId: string; messageId?: string; done: boolean; phase?: string; statusText?: string; fullText?: string };
-type AcpResult = { ok?: boolean; error?: string; items?: FollowupItem[]; counts?: Record<string, number>; activeTurns?: ActiveTurn[] };
+type AcpResult = { ok?: boolean; error?: string; items?: FollowupItem[]; paused?: boolean; counts?: Record<string, number>; activeTurns?: ActiveTurn[] };
 
 type FollowupRuntime = {
   chatMessagesRef: MutableRefObject<Record<string, ChatMessage[]>>;
@@ -28,6 +30,7 @@ type FollowupQueueOptions = {
   prepareSubmission: () => { text: string; attachments: ChatAttachment[]; onStaged: () => void };
   getModelId: (agentId: string) => string | null | undefined;
   fallbackAgentId: string | null;
+  agents: Agent[];
 };
 
 const ERROR_TEXT: Record<string, string> = {
@@ -36,10 +39,12 @@ const ERROR_TEXT: Record<string, string> = {
   conflict: 'This follow-up changed elsewhere. Reloaded the latest version.',
   missing: 'This follow-up was already sent or removed.',
   turn_in_progress: 'The agent is still working; the queue will be sent when it finishes.',
+  multiple_mentions: 'A queued follow-up can address one agent. Send multi-agent requests after the current turn.',
 };
 
-export function useFollowupQueue({ chatId, runtime, acp, prepareSubmission, getModelId, fallbackAgentId }: FollowupQueueOptions) {
+export function useFollowupQueue({ chatId, runtime, acp, prepareSubmission, getModelId, fallbackAgentId, agents }: FollowupQueueOptions) {
   const [items, setItems] = useState<FollowupItem[]>([]);
+  const [paused, setPaused] = useState(false);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -88,6 +93,7 @@ export function useFollowupQueue({ chatId, runtime, acp, prepareSubmission, getM
     const result = await optsRef.current.acp({ action: 'followup-list', chatId: targetChatId }).catch(() => null) as AcpResult | null;
     if (!result?.ok || chatIdRef.current !== targetChatId) return;
     setItems(result.items || []);
+    setPaused(Boolean(result.paused));
     setCounts(result.counts || {});
     if (targetChatId && result.activeTurns?.length) await adoptTurns(targetChatId, result.activeTurns);
   }, [adoptTurns]);
@@ -95,6 +101,7 @@ export function useFollowupQueue({ chatId, runtime, acp, prepareSubmission, getM
   const running = chatId ? runtime.isChatRunning(chatId) : false;
   useEffect(() => {
     setItems([]);
+    setPaused(false);
     setError(null);
   }, [chatId]);
   useEffect(() => {
@@ -130,17 +137,23 @@ export function useFollowupQueue({ chatId, runtime, acp, prepareSubmission, getM
     const draft = prepareSubmission();
     if (!draft.text || !chatIdRef.current) return;
     if (draft.attachments.length) { setError('Attachments can’t be queued. Send them after the agent finishes.'); return; }
-    const agentId = runningAgentId();
+    // An @mention routes the follow-up to that agent, like a normal send; the server starts it right away if that agent is idle.
+    const mentioned = getMentionedAgentIds(draft.text, agents);
+    if (mentioned.length > 1) { setError(ERROR_TEXT.multiple_mentions); return; }
+    const agentId = mentioned[0] || runningAgentId();
     if (!agentId) return;
     if (await call({ action: 'followup-add', agentId, chatId: chatIdRef.current, text: draft.text, modelId: getModelId(agentId) || undefined })) draft.onStaged();
-  }, [prepareSubmission, runningAgentId, getModelId, call]);
+  }, [prepareSubmission, agents, runningAgentId, getModelId, call]);
 
   const update = useCallback((item: FollowupItem, text: string) => call({ action: 'followup-update', id: item.id, text, version: item.version }), [call]);
   const remove = useCallback((item: FollowupItem) => call({ action: 'followup-remove', id: item.id }), [call]);
   const sendNow = useCallback(async () => {
-    const agentId = items[0]?.agentId || runningAgentId();
-    if (!agentId || !chatIdRef.current) return;
-    await call({ action: 'followup-send-now', agentId, chatId: chatIdRef.current });
+    const targetChatId = chatIdRef.current;
+    const agentIds = [...new Set(items.map(item => item.agentId))];
+    if (!agentIds.length) { const agentId = runningAgentId(); if (agentId) agentIds.push(agentId); }
+    if (!agentIds.length || !targetChatId) return;
+    // Each agent's items become one turn for that agent.
+    for (const agentId of agentIds) await call({ action: 'followup-send-now', agentId, chatId: targetChatId });
     setTimeout(() => void refresh(), 1500);
   }, [items, runningAgentId, call, refresh]);
 
@@ -151,7 +164,7 @@ export function useFollowupQueue({ chatId, runtime, acp, prepareSubmission, getM
     return { label: `Queued (${count})`, kind: 'queued' };
   }, [runtime.getChatSidebarStatus, counts]);
 
-  return { items, error, busy, running, queue, update, remove, sendNow, getSidebarStatus, dismissError: () => setError(null) };
+  return { items, error, busy, running, paused: paused && !running, queue, update, remove, sendNow, getSidebarStatus, dismissError: () => setError(null) };
 }
 
 export type FollowupQueueController = ReturnType<typeof useFollowupQueue>;
