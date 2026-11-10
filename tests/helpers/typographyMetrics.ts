@@ -109,7 +109,9 @@ export function expectSameTypography(before: TypographySample, after: Typography
     expect(actual.fontSize, key).toBe(expected.fontSize);
     expect(actual.fontFamily, key).toBe(expected.fontFamily);
     expect(actual.lineHeight, key).toBe(expected.lineHeight);
-    expect(Math.abs(actual.width - expected.width), `${key} width`).toBeLessThanOrEqual(0.5);
-    expect(Math.abs(actual.height - expected.height), `${key} height`).toBeLessThanOrEqual(0.5);
+    // Hinted fallback fonts (e.g. monospace in the Playwright CI image) snap glyph advances to whole
+    // pixels, so position-dependent rounding can shift a sample by 1px; size changes are caught above.
+    expect(Math.abs(actual.width - expected.width), `${key} width`).toBeLessThanOrEqual(1);
+    expect(Math.abs(actual.height - expected.height), `${key} height`).toBeLessThanOrEqual(1);
   }
 }
