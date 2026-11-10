@@ -12,7 +12,9 @@ import {
   StoredMessage,
   updateChatAgentSession,
   isAgentSessionOwnedByOtherUser,
+  appendMessageToChat,
 } from '@/lib/chatStore';
+import { addFollowup, combineFollowups, countFollowupsByChat, listFollowups, removeFollowup, restoreFollowups, takeFollowups, updateFollowup, type Followup } from '@/lib/followupQueue';
 import { isAdminToken, getUserEmail, canModify, canTalkTo, getAuthToken } from '@/lib/auth';
 import { canUseAgent, getUserRole } from '@/lib/rbac';
 import * as configStore from '@/lib/configStore';
@@ -959,6 +961,7 @@ function sendPrompt(proc: AgentProcess, sess: UserSession, agentId: string, prom
         turn.prompt = '';
         // Auto-release turn reference after 30s so GC can reclaim memory.
         scheduleTurnRelease(sess, turnChatKey, turn);
+        scheduleFollowupDispatch(proc, sess, agentId, userId, isAdmin, chatId, turn);
       }
     })
     .catch(async (err: Error) => {
@@ -1015,6 +1018,7 @@ function sendPrompt(proc: AgentProcess, sess: UserSession, agentId: string, prom
         if (turn.done) {
           turn.prompt = '';
           scheduleTurnRelease(sess, turnChatKey, turn);
+          scheduleFollowupDispatch(proc, sess, agentId, userId, isAdmin, chatId, turn);
         }
       } catch (retryErr) {
         // Recovery also failed — report original error
@@ -1601,6 +1605,142 @@ async function compareAndRecover(
   return {};
 }
 
+type StartChatTurnInput = { text: string; chatId?: string; messageId?: string; messageTs?: number; attachments: PromptAttachment[]; requestedModelId?: string; chatHistory?: { type: string; content: string; agentId?: string }[] };
+
+/** Boots the agent, binds the chat's session and starts a prompt turn (shared by `send` and queued follow-ups). */
+async function startChatTurn(proc: AgentProcess, sess: UserSession, agentId: string, userId: string, isAdmin: boolean, input: StartChatTurnInput): Promise<{ turn: TurnState } | { error: string; status: number }> {
+  const { text, chatId, messageId, messageTs, attachments, requestedModelId } = input;
+  let { chatHistory } = input;
+  if (!proc.ready) {
+    if (!proc.booting) {
+      await bootAgent(agentId);
+    } else {
+      const promises = getBootPromises();
+      const p = promises.get(agentId);
+      if (p) await p;
+    }
+    if (!proc.ready) {
+      return { error: proc.error || 'ACP boot failed', status: 503 };
+    }
+  }
+
+  // Switch to the correct session for this chat (if known)
+  if (chatId) {
+    const chatSessionId = getChatSession(sess, chatId);
+    const savedSessionId = await getStoredChatAgentSessionId(userId, chatId, agentId);
+
+    if (!savedSessionId) {
+      // Persisted mapping was cleared (for example after git-context change).
+      // Drop in-memory affinity too, so next send creates a fresh session.
+      sess.chatSessions.delete(chatId);
+      if (chatSessionId && sess.sessionId === chatSessionId) sess.sessionId = null;
+    } else if (chatSessionId && chatSessionId === savedSessionId) {
+      if (chatSessionId !== sess.sessionId) {
+        sess.sessionId = chatSessionId;
+        // Don't null activeTurns — other chats may have active turns
+      }
+    } else {
+      const loadedSavedSession = await loadSavedChatSessionForSend(proc, sess, agentId, userId, chatId, savedSessionId, isAdmin);
+      if (!loadedSavedSession) sess.sessionId = null;
+    }
+  }
+
+  // Ensure this user has a session on the agent
+  await ensureUserSession(proc, sess, agentId, userId, isAdmin, chatId);
+
+  // Store in chatSessions list and persist to SQLite
+  if (chatId && sess.sessionId) {
+    pushChatSession(sess, chatId, sess.sessionId);
+    updateChatAgentSession(userId, chatId, agentId, sess.sessionId).catch(() => { /* ignore */ });
+  }
+
+  log(`[ACP:${agentId}] send: chat=${chatId}, session=${sess.sessionId}, sessions=${JSON.stringify(chatId ? sess.chatSessions.get(chatId) : null)}`);
+
+  const turnChatKey = chatId || '__default';
+  const existingTurn = sess.activeTurns.get(turnChatKey);
+  if (existingTurn && !existingTurn.done) {
+    return { error: 'turn_in_progress', status: 409 };
+  }
+  if (sess.sessionId && findActiveTurnKeyForSession(sess, sess.sessionId, turnChatKey)) {
+    return { error: 'turn_in_progress', status: 409 };
+  }
+
+  try {
+    await applySessionModelIfRequested(proc, sess.sessionId, requestedModelId);
+  } catch (err) {
+    if (isSessionNotFoundError(err)) {
+      const staleSessionId = sess.sessionId;
+      log(`[ACP:${agentId}] model switch found stale session ${staleSessionId || '(none)'}; attempting session/load before send`);
+      try {
+        const recovery = await recoverStaleSessionForSend(proc, sess, agentId, userId, chatId, staleSessionId, isAdmin);
+        if (recovery === 'created' && !chatHistory && chatId) chatHistory = await getStoredChatHistoryForRecovery(userId, chatId);
+        await applySessionModelIfRequested(proc, sess.sessionId, requestedModelId);
+      } catch (recoveryErr) {
+        const msg = recoveryErr instanceof Error ? recoveryErr.message : String(recoveryErr);
+        return { error: msg, status: 400 };
+      }
+    } else {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { error: msg, status: 400 };
+    }
+  }
+
+  const turn = sendPrompt(proc, sess, agentId, text, isAdmin, userId, chatHistory, chatId, messageId, attachments, requestedModelId, messageTs);
+  return { turn };
+}
+
+const FOLLOWUP_DISPATCH_DELAY_MS = 3000;
+const dispatchingFollowups = new Set<string>();
+
+/** After a turn ends cleanly, sends the chat's queued follow-ups; errors and interrupts leave the queue paused. */
+function scheduleFollowupDispatch(proc: AgentProcess, sess: UserSession, agentId: string, userId: string, isAdmin: boolean, chatId: string | undefined, turn: TurnState): void {
+  if (!chatId || turn.error || turn.statusText === 'Interrupted') return;
+  setTimeout(() => {
+    void dispatchQueuedFollowups(proc, sess, agentId, userId, isAdmin, chatId).then((result) => {
+      if ('error' in result) log(`[ACP:${agentId}] queued follow-ups not sent for chat ${chatId}: ${result.error}`);
+    }).catch(err => logger.warn({ agentId, chatId, err: err instanceof Error ? err.message : String(err) }, `[ACP:${agentId}] Failed to dispatch queued follow-ups`));
+  }, FOLLOWUP_DISPATCH_DELAY_MS);
+}
+
+async function dispatchQueuedFollowups(proc: AgentProcess, sess: UserSession, agentId: string, userId: string, isAdmin: boolean, chatId: string): Promise<{ turn?: TurnState } | { error: string; status: number }> {
+  const key = `${agentId}\u0000${userId}\u0000${chatId}`;
+  const current = sess.activeTurns.get(chatId);
+  if (dispatchingFollowups.has(key) || (current && !current.done)) return { error: 'turn_in_progress', status: 409 };
+  dispatchingFollowups.add(key);
+  let items: Followup[] = [];
+  let started = false;
+  try {
+    const chat = await getChat(userId, chatId);
+    const config = getAgentById(agentId);
+    if (!chat || !config) return { error: 'chat_deleted_or_missing', status: 410 };
+    items = takeFollowups(userId, chatId, agentId);
+    if (items.length === 0) return {};
+    const text = combineFollowups(items);
+    let requestedModelId: string | undefined;
+    try { requestedModelId = validateRequestedModel(config, items[items.length - 1].modelId); } catch { requestedModelId = undefined; }
+    const ts = Date.now();
+    const id = `followup-${ts.toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const result = await startChatTurn(proc, sess, agentId, userId, isAdmin, { text, chatId, messageId: `pending-${id}`, messageTs: ts + 1, attachments: [], requestedModelId });
+    if ('error' in result) return result;
+    started = true;
+    await appendMessageToChat(userId, chat, { id, type: 'user', content: text, ts });
+    return { turn: result.turn };
+  } finally {
+    if (!started && items.length > 0) restoreFollowups(userId, items);
+    dispatchingFollowups.delete(key);
+  }
+}
+
+/** Live turns of this user in a chat across agents, so other devices can attach to queued follow-up turns. */
+function listUserChatTurns(userId: string, chatId: string) {
+  const turns: { agentId: string; messageId: string; done: boolean; phase: TurnPhase; statusText: string; fullText: string }[] = [];
+  for (const sess of getUserSessions().values()) {
+    const turn = sess.activeTurns.get(chatId);
+    if (turn && turn.userId === userId) turns.push({ agentId: turn.agentId, messageId: turn.messageId, done: turn.done, phase: turn.phase, statusText: turn.statusText, fullText: turn.fullText.trim() });
+  }
+  return turns;
+}
+
 /* ──────────────────── API Handler ──────────────────── */
 
 export async function POST(req: NextRequest) {
@@ -2027,6 +2167,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, access: accessList });
     }
 
+    if (action === 'followup-list' || action === 'followup-update' || action === 'followup-remove') {
+      if (!authToken) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+      const followupUserId = String(authToken.email || authToken.name || authToken.sub || 'anonymous');
+      if (action === 'followup-remove') return NextResponse.json({ ok: removeFollowup(followupUserId, String(body?.id || '')) });
+      if (action === 'followup-update') {
+        const result = updateFollowup(followupUserId, String(body?.id || ''), String(body?.text ?? ''), Number(body?.version));
+        return NextResponse.json(result, { status: result.ok ? 200 : ({ missing: 404, conflict: 409 } as Record<string, number>)[result.error] || 400 });
+      }
+      const chatId = typeof body?.chatId === 'string' ? body.chatId : '';
+      return NextResponse.json({ ok: true, items: chatId ? listFollowups(followupUserId, chatId) : [], counts: countFollowupsByChat(followupUserId), activeTurns: chatId ? listUserChatTurns(followupUserId, chatId) : [] });
+    }
+
     // ─── Agent runtime actions (require agentId + userId) ───
 
     if (!agentId) {
@@ -2170,7 +2322,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: false, error: 'access_denied' }, { status: 403 });
       }
 
-      let chatHistory = Array.isArray(body?.chatHistory) ? body.chatHistory as { type: string; content: string; agentId?: string }[] : undefined;
+      const chatHistory = Array.isArray(body?.chatHistory) ? body.chatHistory as { type: string; content: string; agentId?: string }[] : undefined;
       const chatId = body?.chatId as string | undefined;
       const messageId = typeof body?.messageId === 'string' ? body.messageId : undefined;
       // The client stamps the user prompt and the pending reply with its own clock; reuse it so a
@@ -2179,82 +2331,38 @@ export async function POST(req: NextRequest) {
         ? body.messageTs
         : undefined;
 
-      if (!proc.ready) {
-        if (!proc.booting) {
-          await bootAgent(agentId);
-        } else {
-          const promises = getBootPromises();
-          const p = promises.get(agentId);
-          if (p) await p;
-        }
-        if (!proc.ready) {
-          return NextResponse.json({ ok: false, error: proc.error || 'ACP boot failed' }, { status: 503 });
-        }
-      }
-
-      // Switch to the correct session for this chat (if known)
-      if (chatId) {
-        const chatSessionId = getChatSession(sess, chatId);
-        const savedSessionId = await getStoredChatAgentSessionId(userId, chatId, agentId);
-
-        if (!savedSessionId) {
-          // Persisted mapping was cleared (for example after git-context change).
-          // Drop in-memory affinity too, so next send creates a fresh session.
-          sess.chatSessions.delete(chatId);
-          if (chatSessionId && sess.sessionId === chatSessionId) sess.sessionId = null;
-        } else if (chatSessionId && chatSessionId === savedSessionId) {
-          if (chatSessionId !== sess.sessionId) {
-            sess.sessionId = chatSessionId;
-            // Don't null activeTurns — other chats may have active turns
-          }
-        } else {
-          const loadedSavedSession = await loadSavedChatSessionForSend(proc, sess, agentId, userId, chatId, savedSessionId, isAdmin);
-          if (!loadedSavedSession) sess.sessionId = null;
-        }
-      }
-
-      // Ensure this user has a session on the agent
-      await ensureUserSession(proc, sess, agentId, userId, isAdmin, chatId);
-
-      // Store in chatSessions list and persist to SQLite
-      if (chatId && sess.sessionId) {
-        pushChatSession(sess, chatId, sess.sessionId);
-        updateChatAgentSession(userId, chatId, agentId, sess.sessionId).catch(() => { /* ignore */ });
-      }
-
-      log(`[ACP:${agentId}] send: chat=${chatId}, session=${sess.sessionId}, sessions=${JSON.stringify(chatId ? sess.chatSessions.get(chatId) : null)}`);
-
-      const turnChatKey = chatId || '__default';
-      const existingTurn = sess.activeTurns.get(turnChatKey);
-      if (existingTurn && !existingTurn.done) {
-        return NextResponse.json({ ok: false, error: 'turn_in_progress' }, { status: 409 });
-      }
-      if (sess.sessionId && findActiveTurnKeyForSession(sess, sess.sessionId, turnChatKey)) {
-        return NextResponse.json({ ok: false, error: 'turn_in_progress' }, { status: 409 });
-      }
-
-      try {
-        await applySessionModelIfRequested(proc, sess.sessionId, requestedModelId);
-      } catch (err) {
-        if (isSessionNotFoundError(err)) {
-          const staleSessionId = sess.sessionId;
-          log(`[ACP:${agentId}] model switch found stale session ${staleSessionId || '(none)'}; attempting session/load before send`);
-          try {
-            const recovery = await recoverStaleSessionForSend(proc, sess, agentId, userId, chatId, staleSessionId, isAdmin);
-            if (recovery === 'created' && !chatHistory && chatId) chatHistory = await getStoredChatHistoryForRecovery(userId, chatId);
-            await applySessionModelIfRequested(proc, sess.sessionId, requestedModelId);
-          } catch (recoveryErr) {
-            const msg = recoveryErr instanceof Error ? recoveryErr.message : String(recoveryErr);
-            return NextResponse.json({ ok: false, error: msg }, { status: 400 });
-          }
-        } else {
-          const msg = err instanceof Error ? err.message : String(err);
-          return NextResponse.json({ ok: false, error: msg }, { status: 400 });
-        }
-      }
-
-      const turn = sendPrompt(proc, sess, agentId, text, isAdmin, userId, chatHistory, chatId, messageId, attachments, requestedModelId, messageTs);
+      const started = await startChatTurn(proc, sess, agentId, userId, isAdmin, { text, chatId, messageId, messageTs, attachments, requestedModelId, chatHistory });
+      if ('error' in started) return NextResponse.json({ ok: false, error: started.error }, { status: started.status });
+      const { turn } = started;
       return NextResponse.json({ ok: true, phase: sess.phase, sessionId: sess.sessionId, turn: serializeTurn(turn) });
+    }
+
+    if (action === 'followup-add' || action === 'followup-send-now') {
+      const chatId = typeof body?.chatId === 'string' ? body.chatId : '';
+      const agentRecord = configStore.getAgentById(agentId);
+      if (!token || !chatId) return NextResponse.json({ ok: false, error: !token ? 'unauthorized' : 'missing_chatId' }, { status: !token ? 401 : 400 });
+      if (agentRecord && !canTalkTo(token, agentRecord.owner, agentId, agentRecord.public, configStore.hasAgentAccess)) {
+        return NextResponse.json({ ok: false, error: 'access_denied' }, { status: 403 });
+      }
+      if (!await getChat(userId, chatId)) return NextResponse.json({ ok: false, error: 'chat_deleted_or_missing' }, { status: 410 });
+      const turn = sess.activeTurns.get(chatId);
+      if (action === 'followup-add') {
+        const result = addFollowup(userId, { chatId, agentId, text: String(body?.text ?? ''), modelId: typeof body?.modelId === 'string' ? body.modelId : undefined });
+        if (!result.ok) return NextResponse.json(result, { status: 400 });
+        // The turn may have finished cleanly while the item was being queued; don't strand it.
+        if (!turn || (turn.done && !turn.error && turn.statusText !== 'Interrupted')) scheduleFollowupDispatch(proc, sess, agentId, userId, isAdmin, chatId, turn || ({ done: true } as TurnState));
+        return NextResponse.json(result);
+      }
+      if (turn && !turn.done && proc.rpc) {
+        clearPendingUserRequestForTurn(turn, 'interrupted');
+        await cancelTurnPrompt(proc, turn);
+        turn.done = true;
+        turn.phase = 'done';
+        turn.statusText = 'Interrupted';
+      }
+      const result = await dispatchQueuedFollowups(proc, sess, agentId, userId, isAdmin, chatId);
+      if ('error' in result) return NextResponse.json({ ok: false, error: result.error }, { status: result.status });
+      return NextResponse.json({ ok: true, turn: serializeTurn(result.turn ?? null) });
     }
 
     if (action === 'poll') {
@@ -2329,7 +2437,8 @@ export async function POST(req: NextRequest) {
       const chatId = body?.chatId as string | undefined;
       const turnChatKey = chatId || '__default';
       const turn = sess.activeTurns.get(turnChatKey);
-      if (turn) {
+      // A queued follow-up may already own the slot; only clear the turn the caller watched.
+      if (turn && (typeof body?.messageId !== 'string' || body.messageId === turn.messageId)) {
         if (turn.persistTimer) {
           clearTimeout(turn.persistTimer);
           turn.persistTimer = undefined;

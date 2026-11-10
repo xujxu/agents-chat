@@ -7,6 +7,8 @@ import type { SlashCommand } from '../slashCommandTypes';
 import { ATTACHMENT_ACCEPT } from '../attachmentHelpers';
 import { AttachmentList } from './AttachmentList';
 import { SlashCommandPalette } from './SlashCommandPalette';
+import { FollowupQueueTray } from './FollowupQueueTray';
+import type { FollowupQueueController } from '../../chat/runtime/useFollowupQueue';
 
 type ChatComposerProps = {
   composerRef: RefObject<HTMLTextAreaElement | null>;
@@ -23,6 +25,7 @@ type ChatComposerProps = {
   slashSelectedIndex: number;
   targetControls: ReactNode;
   optionalActions?: ReactNode;
+  followupQueue?: FollowupQueueController;
   isSending: boolean;
   sendDisabled: boolean;
   onMentionSelect: (agentId: string) => void;
@@ -55,6 +58,7 @@ export function ChatComposer({
   slashSelectedIndex,
   targetControls,
   optionalActions,
+  followupQueue,
   isSending,
   sendDisabled,
   onMentionSelect,
@@ -113,6 +117,7 @@ export function ChatComposer({
             onSelect={onSlashCommandSelect}
           />
         )}
+        {followupQueue ? <FollowupQueueTray controller={followupQueue} /> : null}
         <div className="inputArea">
           <div
             className={`composerShell ${isDraggingAttachment ? 'dragOver' : ''}`}
@@ -173,6 +178,9 @@ export function ChatComposer({
                 {targetControls}
               </div>
               <div className="composerActions composerToolbarActions">
+                {isSending && followupQueue
+                  ? <button type="button" className="sendButton queueButton" onClick={() => void followupQueue.queue()} disabled={followupQueue.busy} title="Queue this message; it is sent when the agent finishes" aria-label="Queue follow-up">Queue</button>
+                  : null}
                 {isSending
                   ? <button className="sendButton stopButton" onClick={onStop} aria-label="Stop generation"><span className="stopButtonIcon" aria-hidden="true" /></button>
                   : <button className="sendButton" onClick={onSend} disabled={sendDisabled} aria-label="Send message">

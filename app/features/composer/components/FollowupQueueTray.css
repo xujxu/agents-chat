@@ -1,0 +1,22 @@
+.followupTray {
+  margin: 0 0 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-soft, var(--panel));
+  font-size: 12px;
+  color: var(--text);
+}
+.followupTrayHeader { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); }
+.followupList { margin: 4px 0 0; padding: 0; list-style: none; max-height: 160px; overflow-y: auto; }
+.followupItem { display: flex; align-items: center; gap: 6px; padding: 3px 0; min-width: 0; }
+.followupItem.editing { flex-direction: column; align-items: stretch; }
+.followupIndex { color: var(--muted); flex: 0 0 auto; }
+.followupText { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.followupEditInput { width: 100%; resize: vertical; font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 4px 6px; }
+.followupItemActions { display: inline-flex; gap: 4px; flex: 0 0 auto; justify-content: flex-end; }
+.followupTray button { font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: inherit; cursor: pointer; }
+.followupTray button:disabled { opacity: 0.5; cursor: not-allowed; }
+.followupTray .followupSendNow { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.followupError { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; color: var(--danger); }
+.queueButton { width: auto !important; padding: 0 12px !important; margin-right: 6px; font-size: 12px; }

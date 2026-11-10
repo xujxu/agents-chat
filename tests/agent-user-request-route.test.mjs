@@ -396,7 +396,7 @@ assert.match(
 
 assert.match(
   routeSource,
-  /action\s*===\s*['"]send['"][\s\S]*?const\s+turnChatKey\s*=\s*chatId\s*\|\|\s*['"]__default['"][\s\S]*?const\s+existingTurn\s*=\s*sess\.activeTurns\.get\(turnChatKey\);[\s\S]*?if\s*\(existingTurn\s*&&\s*!existingTurn\.done\)\s*\{[\s\S]*?error:\s*['"]turn_in_progress['"][\s\S]*?\}[\s\S]*?if\s*\(sess\.sessionId\s*&&\s*findActiveTurnKeyForSession\(sess,\s*sess\.sessionId,\s*turnChatKey\)\)\s*\{[\s\S]*?error:\s*['"]turn_in_progress['"][\s\S]*?\}[\s\S]*?sendPrompt\(/,
+  /async\s+function\s+startChatTurn\([\s\S]*?const\s+turnChatKey\s*=\s*chatId\s*\|\|\s*['"]__default['"][\s\S]*?const\s+existingTurn\s*=\s*sess\.activeTurns\.get\(turnChatKey\);[\s\S]*?if\s*\(existingTurn\s*&&\s*!existingTurn\.done\)\s*\{[\s\S]*?error:\s*['"]turn_in_progress['"][\s\S]*?\}[\s\S]*?if\s*\(sess\.sessionId\s*&&\s*findActiveTurnKeyForSession\(sess,\s*sess\.sessionId,\s*turnChatKey\)\)\s*\{[\s\S]*?error:\s*['"]turn_in_progress['"][\s\S]*?\}[\s\S]*?sendPrompt\(/,
   'send should reject when the current session id is already owned by another unfinished turn before sending the prompt',
 );
 
@@ -546,7 +546,7 @@ assert.match(
 
 assert.match(
   routeSource,
-  /action\s*===\s*['"]send['"][\s\S]*?const\s+chatSessionId\s*=\s*getChatSession\(sess,\s*chatId\);[\s\S]*?const\s+savedSessionId\s*=\s*await\s+getStoredChatAgentSessionId\(userId,\s*chatId,\s*agentId\);[\s\S]*?if\s*\(!savedSessionId\)\s*\{[\s\S]*?\}\s*else\s+if[\s\S]*?await\s+loadSavedChatSessionForSend\(proc,\s*sess,\s*agentId,\s*userId,\s*chatId,\s*savedSessionId,\s*isAdmin\)[\s\S]*?await\s+ensureUserSession\(proc,\s*sess,\s*agentId,\s*userId,\s*isAdmin,\s*chatId\)/,
+  /async\s+function\s+startChatTurn\([\s\S]*?const\s+chatSessionId\s*=\s*getChatSession\(sess,\s*chatId\);[\s\S]*?const\s+savedSessionId\s*=\s*await\s+getStoredChatAgentSessionId\(userId,\s*chatId,\s*agentId\);[\s\S]*?if\s*\(!savedSessionId\)\s*\{[\s\S]*?\}\s*else\s+if[\s\S]*?await\s+loadSavedChatSessionForSend\(proc,\s*sess,\s*agentId,\s*userId,\s*chatId,\s*savedSessionId,\s*isAdmin\)[\s\S]*?await\s+ensureUserSession\(proc,\s*sess,\s*agentId,\s*userId,\s*isAdmin,\s*chatId\)/,
   'send should try the saved SQLite session for this chat before ensureUserSession creates a new session',
 );
 
@@ -809,3 +809,21 @@ assert.match(
 );
 
 console.log('agent user request route shape checks passed');
+
+assert.match(
+  routeSource,
+  /action\s*===\s*['"]send['"][\s\S]*?await\s+startChatTurn\(proc,\s*sess,\s*agentId,\s*userId,\s*isAdmin,/,
+  'send should start turns through the shared startChatTurn helper used by queued follow-ups',
+);
+
+assert.match(
+  routeSource,
+  /action\s*===\s*['"]turn-clear['"][\s\S]*?body\.messageId\s*===\s*turn\.messageId/,
+  'turn-clear should not clear a newer turn (for example a queued follow-up) than the one the caller watched',
+);
+
+assert.match(
+  routeSource,
+  /function\s+scheduleFollowupDispatch\([\s\S]*?turn\.error\s*\|\|\s*turn\.statusText\s*===\s*['"]Interrupted['"]/,
+  'queued follow-ups should stay paused after errored or interrupted turns',
+);

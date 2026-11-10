@@ -711,7 +711,7 @@ async function pollTurn(
       const suffix = error ? `⚠️ ${error}` : (turn.statusText === 'Interrupted' ? '⏹ Stopped.' : '');
       const finalText = suffix ? `${fullText}${fullText ? '\n\n' : ''}${suffix}` : fullText;
       await streamer.finish(finalText);
-      await acp(config, user, agentId, { action: 'turn-clear', chatId }).catch(() => undefined);
+      await acp(config, user, agentId, { action: 'turn-clear', chatId, messageId: agentMessageId }).catch(() => undefined);
       return;
     }
 
