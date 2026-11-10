@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { buildPromptParts, normalizePromptAttachments } from '../lib/acp/attachments';
+import { withReplyGuidelines } from '../lib/acp/replyGuidelines';
 import { installMobileChatFixture, loginMobileFixture } from './helpers/mobileChatFixture';
 import { TRANSFER_CHUNK_BYTES } from '../lib/chatSyncProtocol';
 
@@ -55,7 +56,7 @@ test('real ACP send expands an authenticated upload reference and persists the a
     const response = await api.post('/api/acp', { data: reference });
     expect(await response.json()).toMatchObject({ ok: true });
     const expectedDigest = createHash('sha256').update(JSON.stringify(
-      buildPromptParts(text, normalizePromptAttachments(attachments)),
+      buildPromptParts(withReplyGuidelines(text), normalizePromptAttachments(attachments)),
     )).digest('hex');
     await expect.poll(async () => {
       const stored = await (await api.get(`/api/chats?id=${chatId}`)).json();
