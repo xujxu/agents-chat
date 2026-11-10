@@ -9,7 +9,7 @@ import { type FileCommentCallbacks, createAcpHandlers } from './chatAcpService';
 import { createOrchestrationHandlers } from './chatOrchestrationService';
 import { createPersistenceHandlers, type ChatSaveResult } from './chatPersistenceService';
 import { useChatOutbox } from './useChatOutbox';
-import { getMentionedAgentIds, getDefaultAgentId, getExistingAgentId, parseAgents, normalizeChatHistory, replaceChatHistoryEntry, migrateFailedSendWarnings, lastSessionId, getMessageCopyText } from '../chatHelpers';
+import { getMentionedAgentIds, getDefaultAgentId, getExistingAgentId, parseAgents, normalizeChatHistory, replaceChatHistoryEntry, migrateFailedSendWarnings, lastSessionId, getIdleChatStatus } from '../chatHelpers';
 import { detectWorkflowFollowUp } from '../../orchestration/workflowFollowUp';
 import { persistOrchestrationDiff, loadPersistedOrchestrations } from '../../orchestration/orchestrationPersistence';
 import { recoverInterruptedOrchestration } from '@/lib/workflow/recoverInterrupted.mjs';
@@ -807,11 +807,7 @@ export function useChatRuntime({
     const chatMessages = chatMessagesRef.current[chatId] || (chatId === currentChatIdRef.current ? messagesRef.current : []);
     const pendingAgent = [...chatMessages].reverse().find(m => m.type === 'agent' && m.pending);
     if (hasActiveRun || pendingAgent) return { label: pendingAgent?.statusText || 'Running', kind: 'running' };
-    if ([...chatMessages].reverse().some(m => m.type === 'user' && m.sendStatus === 'failed')) return { label: 'Error', kind: 'error' };
-    const lastAgent = [...chatMessages].reverse().find(m => m.type === 'agent');
-    if (!lastAgent) return null;
-    if (getMessageCopyText(lastAgent).trim().startsWith('⚠️')) return { label: 'Error', kind: 'error' };
-    return { label: 'Done', kind: 'done' };
+    return getIdleChatStatus(chatMessages);
   }, [currentChatId, messages, runVersion]);
 
   return {

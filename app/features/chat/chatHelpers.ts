@@ -210,6 +210,15 @@ export function getPersistableMessages(chatMessages: ChatMessage[]): ChatMessage
   return chatMessages.filter(m => !(m.type === 'system' && m.ts !== 0));
 }
 
+/** Sidebar status once no turn is running; a failed send only counts until an agent replies after it. */
+export function getIdleChatStatus(chatMessages: ChatMessage[]): { label: string; kind: 'done' | 'error' } | null {
+  const lastAgentIndex = chatMessages.findLastIndex(m => m.type === 'agent');
+  if (chatMessages.slice(lastAgentIndex + 1).some(m => m.type === 'user' && m.sendStatus === 'failed')) return { label: 'Error', kind: 'error' };
+  if (lastAgentIndex < 0) return null;
+  if (getMessageCopyText(chatMessages[lastAgentIndex]).trim().startsWith('⚠️')) return { label: 'Error', kind: 'error' };
+  return { label: 'Done', kind: 'done' };
+}
+
 export function getMessageCopyText(message: ChatMessage): string {
   if (message.parts && message.parts.length > 0) {
     return message.parts
