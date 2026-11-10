@@ -5,6 +5,7 @@ import type { AgentRecord } from "../configStore.ts";
 import { canUseAgent } from "../rbac.ts";
 import type { CronJob } from "../../app/features/scheduler/scheduleTypes.ts";
 import { createNdjsonRpc } from "../acp/rpc.ts";
+import { withReplyGuidelines } from "../acp/replyGuidelines.ts";
 
 export type RunResult = {
   replyText: string;
@@ -185,7 +186,7 @@ async function runViaAcpPrimitives(
     append('→ session/prompt\n');
     const result = await rpc.send('session/prompt', {
       sessionId,
-      prompt: [{ type: 'text', text: prompt }],
+      prompt: [{ type: 'text', text: withReplyGuidelines(prompt) }],
     }, 0) as Record<string, unknown> | undefined;
 
     const stopReason = result?.stopReason ?? 'unknown';
