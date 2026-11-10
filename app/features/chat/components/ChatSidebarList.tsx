@@ -6,7 +6,7 @@ import type { Agent } from '../../agents/agentTypes';
 import type { ChatHistoryEntry } from '../chatTypes';
 import { normalizeChatHistory } from '../chatHelpers';
 
-export type ChatSidebarStatus = { label: string; kind: 'running' | 'done' | 'error' };
+export type ChatSidebarStatus = { label: string; kind: 'running' | 'done' | 'error' | 'queued' };
 
 function getStatusDisplayText(label: string | undefined, fallback: string): string {
   const trimmed = label?.trim() || '';
@@ -164,7 +164,7 @@ export function ChatSidebarList({
                         className={`chatStatusBadge ${sidebarStatus.kind}`}
                         title={getStatusDisplayText(sidebarStatus.label, 'Running')}
                       >
-                        {getSidebarStatusDisplayLabel(sidebarStatus.label)}
+                        {sidebarStatus.kind === 'queued' ? sidebarStatus.label : getSidebarStatusDisplayLabel(sidebarStatus.label)}
                       </span>
                     ) : null}
                   </span>

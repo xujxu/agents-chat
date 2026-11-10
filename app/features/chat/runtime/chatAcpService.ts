@@ -234,7 +234,7 @@ export function createAcpHandlers(ctx: AcpServiceContext) {
       consecutiveErrors = 0;
 
       const turn = result?.activeTurn as {
-        fullText?: string; done?: boolean; phase?: string; statusText?: string; error?: string;
+        messageId?: string; fullText?: string; done?: boolean; phase?: string; statusText?: string; error?: string;
         userRequest?: AgentUserRequest;
         events?: {
           type: string; ts: number; toolName?: string; toolCallId?: string;
@@ -242,6 +242,12 @@ export function createAcpHandlers(ctx: AcpServiceContext) {
         }[];
       } | null;
 
+      if (turn?.messageId && turn.messageId !== current.pendingId) {
+        // The server already moved on (e.g. queued follow-ups); its persisted copy of this reply is authoritative.
+        ctx.updateMessage(current.pendingId, { content: current.currentText || '', pending: false, userRequest: undefined }, effectiveChatId);
+        finalizeRun(runKey);
+        return;
+      }
       if (turn) {
         const progressSignature = getAcpTurnProgressSignature(turn);
         if (progressSignature !== lastProgressSignature) { lastProgressSignature = progressSignature; lastProgressAt = Date.now(); }
@@ -289,7 +295,7 @@ export function createAcpHandlers(ctx: AcpServiceContext) {
             userRequest: undefined,
           }, effectiveChatId);
           try {
-            const cleared = await ctx.acp({ action: 'turn-clear', agentId, chatId: effectiveChatId });
+            const cleared = await ctx.acp({ action: 'turn-clear', agentId, chatId: effectiveChatId, messageId: current.pendingId });
             if (!cleared?.ok) throw new Error(cleared?.error || 'Failed to save agent reply');
           } catch (err) {
             const error = err instanceof Error ? err.message : String(err);

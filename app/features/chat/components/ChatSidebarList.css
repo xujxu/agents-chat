@@ -159,6 +159,7 @@
 .chatStatusBadge.running { color: var(--accent); background: var(--accent-soft); }
 .chatStatusBadge.done { color: var(--success); background: rgba(134, 239, 172, 0.12); }
 .chatStatusBadge.error { color: var(--danger); background: rgba(239, 68, 68, 0.12); }
+.chatStatusBadge.queued { color: var(--warning, #f59e0b); background: rgba(245, 158, 11, 0.14); }
 .chatHistoryRow {
   display: flex;
   align-items: center;

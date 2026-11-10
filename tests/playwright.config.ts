@@ -4,6 +4,7 @@ const mobileSpecs = [
   '**/chat-welcome.spec.ts',
   '**/mobile-responsive.spec.ts',
   '**/mobile-composer-viewport.spec.ts',
+  '**/followup-queue-mobile.spec.ts',
 ];
 const typographySpecs = ['**/markdown-typography.spec.ts'];
 const readingSpecs = ['**/chat-reading-anchor.spec.ts'];

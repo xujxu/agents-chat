@@ -233,6 +233,20 @@ export function getDb(): Database.Database {
     );
 
     CREATE INDEX IF NOT EXISTS idx_orchestration_nodes_orch ON orchestration_nodes(orchestration_id);
+
+    CREATE TABLE IF NOT EXISTS chat_followups (
+      id         TEXT PRIMARY KEY,
+      user_id    TEXT NOT NULL,
+      chat_id    TEXT NOT NULL,
+      agent_id   TEXT NOT NULL,
+      text       TEXT NOT NULL,
+      model_id   TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      version    INTEGER NOT NULL DEFAULT 1
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_chat_followups_user_chat ON chat_followups(user_id, chat_id, created_at);
   `);
 
   // Migration: add agent_id column to chats
@@ -559,6 +573,7 @@ export async function deleteChat(userId: string, chatId: string): Promise<void> 
     db.prepare('INSERT OR IGNORE INTO chat_tombstones (user_id, chat_id, deleted_at) VALUES (?, ?, ?)')
       .run(userId, chatId, Date.now());
     db.prepare('DELETE FROM chats WHERE user_id = ? AND chat_id = ?').run(userId, chatId);
+    db.prepare('DELETE FROM chat_followups WHERE user_id = ? AND chat_id = ?').run(userId, chatId);
     db.prepare(`
       UPDATE user_prefs SET last_chat_id = NULL, updated_at = ?
       WHERE user_id = ? AND last_chat_id = ?
