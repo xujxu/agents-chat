@@ -1607,8 +1607,23 @@ async function compareAndRecover(
 
 type StartChatTurnInput = { text: string; chatId?: string; messageId?: string; messageTs?: number; attachments: PromptAttachment[]; requestedModelId?: string; chatHistory?: { type: string; content: string; agentId?: string }[] };
 
+const startingChatTurns = new Set<string>();
+const chatTurnKey = (agentId: string, userId: string, chatId: string) => `${agentId}\u0000${userId}\u0000${chatId}`;
+
 /** Boots the agent, binds the chat's session and starts a prompt turn (shared by `send` and queued follow-ups). */
 async function startChatTurn(proc: AgentProcess, sess: UserSession, agentId: string, userId: string, isAdmin: boolean, input: StartChatTurnInput): Promise<{ turn: TurnState } | { error: string; status: number }> {
+  if (!input.chatId) return startChatTurnUnmarked(proc, sess, agentId, userId, isAdmin, input);
+  // While a turn is still booting/binding there is no active turn yet; mark it so queued follow-ups wait for it.
+  const key = chatTurnKey(agentId, userId, input.chatId);
+  startingChatTurns.add(key);
+  try {
+    return await startChatTurnUnmarked(proc, sess, agentId, userId, isAdmin, input);
+  } finally {
+    startingChatTurns.delete(key);
+  }
+}
+
+async function startChatTurnUnmarked(proc: AgentProcess, sess: UserSession, agentId: string, userId: string, isAdmin: boolean, input: StartChatTurnInput): Promise<{ turn: TurnState } | { error: string; status: number }> {
   const { text, chatId, messageId, messageTs, attachments, requestedModelId } = input;
   let { chatHistory } = input;
   if (!proc.ready) {
@@ -1703,9 +1718,9 @@ function scheduleFollowupDispatch(proc: AgentProcess, sess: UserSession, agentId
 }
 
 async function dispatchQueuedFollowups(proc: AgentProcess, sess: UserSession, agentId: string, userId: string, isAdmin: boolean, chatId: string): Promise<{ turn?: TurnState } | { error: string; status: number }> {
-  const key = `${agentId}\u0000${userId}\u0000${chatId}`;
+  const key = chatTurnKey(agentId, userId, chatId);
   const current = sess.activeTurns.get(chatId);
-  if (dispatchingFollowups.has(key) || (current && !current.done)) return { error: 'turn_in_progress', status: 409 };
+  if (dispatchingFollowups.has(key) || startingChatTurns.has(key) || (current && !current.done)) return { error: 'turn_in_progress', status: 409 };
   dispatchingFollowups.add(key);
   let items: Followup[] = [];
   let started = false;
