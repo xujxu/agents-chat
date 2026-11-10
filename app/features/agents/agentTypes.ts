@@ -27,6 +27,8 @@ export type Agent = {
   public?: boolean;
   models?: AgentModel[];
   defaultModelId?: string;
+  /** URL template with `{id}` used to link bare work item IDs in this agent's replies. */
+  workItemUrl?: string;
   authMethods?: AgentAuthMethod[];
   needsAuth?: boolean;
   /** The user's default agent (set when they accept a share link); preferred for new chats. */

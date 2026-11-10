@@ -109,6 +109,7 @@ export type AgentConfig = {
   models?: AgentModel[];
   defaultModelId?: string;
   env?: string; // JSON string: '{"KEY":"value"}'
+  workItemUrl?: string;
 };
 
 export type PendingRequest = {

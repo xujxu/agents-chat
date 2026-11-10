@@ -14,6 +14,7 @@ import { MessageContentParts } from './MessageContentParts';
 import { WorkflowSaveButton } from '../../orchestration/components/WorkflowSaveButton';
 import { getStatusDisplayText } from '../messageDisplayHelpers';
 import { formatMessageTime } from '../../chat/chatHelpers';
+import { linkWorkItems } from '@/lib/workItemLinks';
 
 function getMessageCopyText(message: ChatMessage): string {
   if (message.parts && message.parts.length > 0) {
@@ -57,6 +58,7 @@ export const MessageBubble = memo(function MessageBubble({
   onDismissAgentUserRequest: (requestId: string) => void;
 }) {
   const hasParts = message.parts && message.parts.length > 0;
+  const workItemUrl = message.type === 'agent' ? agents.find((a) => a.id === message.agentId)?.workItemUrl : undefined;
   const isLong = (message.content || '').length > 400 || (message.content || '').split('\n').length > 12;
   const messageActionsClassName = `messageActions ${failedSend ? 'messageActionsWithFailure' : ''}`;
   const partsContentRef = useRef<HTMLDivElement | null>(null);
@@ -118,6 +120,7 @@ export const MessageBubble = memo(function MessageBubble({
                     parts={message.parts!}
                     pending={message.pending}
                     statusText={message.statusText}
+                    workItemUrl={workItemUrl}
                   />
                 </div>
                 <AttachmentList attachments={message.attachments} mode="message" onPreview={onOpenImage} />
@@ -166,7 +169,7 @@ export const MessageBubble = memo(function MessageBubble({
             <>
               <FailedSendNotice failure={failedSend} />
               <div ref={markdownContentRef} className={`messageContent markdownBody ${message.pending ? 'pending' : ''} ${isLong && isCollapsed ? 'collapsed' : ''}`}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{message.content}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{linkWorkItems(message.content, workItemUrl)}</ReactMarkdown>
               </div>
               <AttachmentList attachments={message.attachments} mode="message" onPreview={onOpenImage} />
               {message.pending && message.content && (

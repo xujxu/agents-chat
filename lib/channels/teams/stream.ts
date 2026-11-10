@@ -29,8 +29,17 @@ export class TeamsStreamer {
   /** True until the first message of the response (which carries the header) is delivered. */
   private headerPending: boolean;
 
-  /** `header` (e.g. the agent name) is shown above the first message of the response. */
-  constructor(private readonly config: TeamsConfig, private readonly ref: ConversationRef, private readonly maxText = TEAMS_MAX_TEXT, private readonly header = '') {
+  /**
+   * `header` (e.g. the agent name) is shown above the first message of the response. `finalize`
+   * rewrites text sent as a final message (streamed chunks must extend each other, so they are left as-is).
+   */
+  constructor(
+    private readonly config: TeamsConfig,
+    private readonly ref: ConversationRef,
+    private readonly maxText = TEAMS_MAX_TEXT,
+    private readonly header = '',
+    private readonly finalize: (text: string) => string = (text) => text,
+  ) {
     this.headerPending = !!header;
   }
 
@@ -86,7 +95,7 @@ export class TeamsStreamer {
     if (remaining.trim()) {
       for (const chunk of splitForTeams(remaining, this.maxText)) {
         if (!(await this.commit(chunk))) {
-          await sendText(this.config, this.ref, this.withHeader(chunk));
+          await sendText(this.config, this.ref, this.withHeader(this.finalize(chunk)));
           this.headerPending = false;
           this.anySent = true;
         }
@@ -101,7 +110,7 @@ export class TeamsStreamer {
 
   /** Send `text` as a final message, closing the current stream if any. Returns false if it could not be delivered. */
   private async commit(segment: string): Promise<boolean> {
-    const text = this.withHeader(segment);
+    const text = this.withHeader(this.finalize(segment));
     try {
       if (this.streamId && !this.fallback) {
         await sendActivity(this.config, this.ref, {

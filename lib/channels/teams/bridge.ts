@@ -4,6 +4,7 @@ import { appendMessageToChat, getChat, listChats, saveChat, searchChats } from '
 import * as configStore from '@/lib/configStore';
 import type { AgentModel } from '@/lib/configStore';
 import { createLogger } from '@/lib/logger';
+import { linkWorkItems } from '@/lib/workItemLinks';
 import type { TeamsConfig } from './config';
 import { getMember, sendActivity, sendText, type ConversationRef } from './connector';
 import * as defaults from './defaultAgent';
@@ -605,7 +606,8 @@ async function runTurn(config: TeamsConfig, ref: ConversationRef, user: TeamsUse
   const agentId = activeAgentId(config, user, ref.conversationId);
   state.agentId = agentId;
   const agentName = agentDisplayName(agentId);
-  const streamer = new TeamsStreamer(config, ref, undefined, agentLabel(agentName));
+  const workItemUrl = configStore.getAgentById(agentId)?.workItemUrl;
+  const streamer = new TeamsStreamer(config, ref, undefined, agentLabel(agentName), (text) => linkWorkItems(text, workItemUrl));
   const indicator = streamer.informative(thinkingLine(agentName));
   const slowTimers: ReturnType<typeof setTimeout>[] = [];
   try {

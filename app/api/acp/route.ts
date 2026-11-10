@@ -16,6 +16,7 @@ import {
 import { isAdminToken, getUserEmail, canModify, canTalkTo, getAuthToken } from '@/lib/auth';
 import { canUseAgent, getUserRole } from '@/lib/rbac';
 import * as configStore from '@/lib/configStore';
+import { normalizeWorkItemUrlTemplate } from '@/lib/workItemLinks';
 import { pruneGitHubBindings } from '@/lib/githubIdentity';
 import type { AcpPromptPart, AgentConfig, AgentModel, AgentProcess, PromptAttachment, StoredContentPart, TurnEvent, TurnPhase, TurnState, UserSession, WarmLocalAgentResult } from '@/lib/acp/types';
 import { AttachmentValidationError, buildPromptParts, normalizePromptAttachments } from '@/lib/acp/attachments';
@@ -121,6 +122,7 @@ function getAgentById(agentId: string): AgentConfig | null {
     models: a.models,
     defaultModelId: a.defaultModelId,
     env: JSON.stringify(a.env || {}),
+    workItemUrl: a.workItemUrl,
   };
 }
 
@@ -1828,7 +1830,7 @@ export async function POST(req: NextRequest) {
         const proc = procs.get(a.id);
         const authMethods = proc?.authMethods ?? [];
         const needsAuth = !!proc?.needsAuth;
-        const base = { id: a.id, name: a.name, owner: a.owner, canModify: userCanModify, canTalk: userCanTalk, public: a.public, relay: a.relay, noTools: a.noTools, relayConnectionName: a.relayConnectionName, relayConnectionLabel: relayNode?.label, cwd: a.cwd, models: a.models, defaultModelId: a.defaultModelId, authMethods, needsAuth, ...(a.id === defaultAgentId ? { isDefault: true } : {}) };
+        const base = { id: a.id, name: a.name, owner: a.owner, canModify: userCanModify, canTalk: userCanTalk, public: a.public, relay: a.relay, noTools: a.noTools, relayConnectionName: a.relayConnectionName, relayConnectionLabel: relayNode?.label, cwd: a.cwd, models: a.models, defaultModelId: a.defaultModelId, workItemUrl: a.workItemUrl, authMethods, needsAuth, ...(a.id === defaultAgentId ? { isDefault: true } : {}) };
         if (userCanModify) {
           return [{ ...base, command: a.command, args: a.args, cwd: a.cwd, yolo: a.yolo, relayConnectionName: a.relayConnectionName, relayConnectionLabel: relayNode?.label }];
         }
@@ -1880,6 +1882,9 @@ export async function POST(req: NextRequest) {
 
       const updates = body?.updates as Partial<AgentConfig> | undefined;
       if (!updates) return NextResponse.json({ ok: false, error: 'missing_updates' }, { status: 400 });
+      if (updates.workItemUrl && !normalizeWorkItemUrlTemplate(updates.workItemUrl)) {
+        return NextResponse.json({ ok: false, error: 'Work item link must be an http(s) URL containing {id}' }, { status: 400 });
+      }
 
       configStore.updateAgent(agentId, {
         name: updates.name,
@@ -1891,6 +1896,7 @@ export async function POST(req: NextRequest) {
         models: updates.models,
         defaultModelId: updates.defaultModelId,
         env: (body?.updates as any)?.env,
+        workItemUrl: typeof updates.workItemUrl === 'string' ? updates.workItemUrl : undefined,
       });
 
       // Only restart the agent process when fields that affect spawn/runtime change.

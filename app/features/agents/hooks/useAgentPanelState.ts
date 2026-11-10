@@ -312,6 +312,7 @@ export function useAgentPanelState({
           yolo: agentConfig.yolo,
           public: agentConfig.public,
           env: envObj,
+          workItemUrl: agentConfig.workItemUrl?.trim() ?? '',
         },
       });
       requireSuccessfulMutation(data, 'Failed to update agent');

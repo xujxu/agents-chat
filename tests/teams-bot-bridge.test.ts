@@ -542,6 +542,15 @@ async function main() {
     await longReply.finish('first part.\n\nsecond part');
     assert.deepEqual(finals(since(start).posts), ['*🤖 teams*\n\nfirst part.', 'second part']);
 
+    // Work item IDs are linked only in the final message; streamed chunks stay plain so they extend each other.
+    const { linkWorkItems } = await import('../lib/workItemLinks');
+    start = calls.length;
+    const linked = new TeamsStreamer(config, { serviceUrl: SERVICE_URL, conversationId: 'personal-link', botId: BOT_ID, userId: '29:alice' }, undefined, '', (t) => linkWorkItems(t, 'https://ado.example/_workitems/edit/{id}'));
+    await linked.update('Fixed 5809224');
+    await linked.finish('Fixed 5809224 and 5614876');
+    assert.deepEqual(finals(since(start).posts), ['Fixed [5809224](https://ado.example/_workitems/edit/5809224) and [5614876](https://ado.example/_workitems/edit/5614876)']);
+    assert.ok(!JSON.stringify(since(start).posts.filter((p) => p.type !== 'message')).includes('_workitems'), 'streamed chunks are not linked');
+
     // Warm-up fetches the bot token once, so the first message does not wait for it.
     const auth = await import('../lib/channels/teams/auth');
     auth.resetTeamsAuthForTests();

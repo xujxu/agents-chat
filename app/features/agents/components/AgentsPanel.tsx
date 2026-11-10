@@ -333,6 +333,15 @@ export function AgentsPanel({
                 )}
               </>
             )}
+            <label>
+              <span>Work Item Link</span>
+              <input
+                value={settingsAgentConfig.workItemUrl || ''}
+                onChange={(e) => setSettingsAgentConfig((c) => c ? { ...c, workItemUrl: e.target.value } : c)}
+                placeholder="https://dev.azure.com/org/project/_workitems/edit/{id}"
+              />
+              <span className="fieldHint">Optional. Bare 6–8 digit IDs in replies link to this URL, with {'{id}'} replaced (web and Teams).</span>
+            </label>
             <div className="agentAccessSection">
               <h3>🔐 Access Control</h3>
               <label className="checkboxLabel">

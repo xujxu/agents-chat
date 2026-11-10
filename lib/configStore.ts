@@ -4,6 +4,7 @@ import * as crypto from 'crypto';
 import Database from 'better-sqlite3';
 import { createLogger } from '@/lib/logger';
 import { setDbRoleLookup, setGitHubBindingLookup } from '@/lib/auth';
+import { normalizeWorkItemUrlTemplate } from '@/lib/workItemLinks';
 
 const logger = createLogger('configStore');
 
@@ -39,6 +40,8 @@ export type AgentRecord = {
   models: AgentModel[];
   defaultModelId: string;
   env: Record<string, string>;
+  /** URL template (with `{id}`) used to link bare work item IDs in replies; '' disables linking. */
+  workItemUrl: string;
   owner: string;
   createdAt: string;
   updatedAt: string;
@@ -80,6 +83,7 @@ function getDb(): ReturnType<typeof Database> {
       models TEXT NOT NULL DEFAULT '[]',
       default_model_id TEXT NOT NULL DEFAULT '',
       env TEXT NOT NULL DEFAULT '{}',
+      work_item_url TEXT NOT NULL DEFAULT '',
       owner TEXT NOT NULL DEFAULT 'system',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -282,6 +286,15 @@ function runMigrations(): void {
     db.prepare('INSERT OR IGNORE INTO migrations (key) VALUES (?)').run('add_env_column');
   }
 
+  if (!db.prepare('SELECT 1 FROM migrations WHERE key = ?').get('add_work_item_url_column')) {
+    try {
+      db.exec(`ALTER TABLE agents ADD COLUMN work_item_url TEXT NOT NULL DEFAULT ''`);
+    } catch {
+      // Column already exists if DB was created fresh with the new schema
+    }
+    db.prepare('INSERT OR IGNORE INTO migrations (key) VALUES (?)').run('add_work_item_url_column');
+  }
+
   // Share links: grants now expire and only count once the recipient opens the agent's share link. Grants
   // made before this keep working (accepted) and get a fresh expiry.
   const sharingMigrated = db.prepare('SELECT 1 FROM migrations WHERE key = ?').get('agent_access_sharing');
@@ -391,6 +404,7 @@ function rowToAgent(row: any): AgentRecord {
     models,
     defaultModelId: normalizeDefaultModelId(row.default_model_id, models),
     env: parseEnv(row.env),
+    workItemUrl: row.work_item_url || '',
     owner: row.owner,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -423,14 +437,15 @@ export function createAgent(agent: {
   models?: AgentModel[];
   defaultModelId?: string;
   env?: Record<string, string>;
+  workItemUrl?: string;
   owner: string;
 }): AgentRecord {
   const db = getDb();
   const models = normalizeAgentModels(agent.models);
   const defaultModelId = normalizeDefaultModelId(agent.defaultModelId, models);
   db.prepare(`
-    INSERT INTO agents (id, name, command, args, cwd, yolo, no_tools, relay, relay_connection_name, public, models, default_model_id, env, owner)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO agents (id, name, command, args, cwd, yolo, no_tools, relay, relay_connection_name, public, models, default_model_id, env, work_item_url, owner)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     agent.id,
     agent.name || agent.id,
@@ -445,6 +460,7 @@ export function createAgent(agent: {
     JSON.stringify(models),
     defaultModelId,
     JSON.stringify(agent.env || {}),
+    normalizeWorkItemUrlTemplate(agent.workItemUrl),
     agent.owner,
   );
   return getAgentById(agent.id)!;
@@ -461,6 +477,7 @@ export function updateAgent(agentId: string, updates: Partial<{
   relayConnectionName: string;
   public: boolean;
   env: Record<string, string>;
+  workItemUrl: string;
   models: AgentModel[];
   defaultModelId: string;
 }>): AgentRecord | null {
@@ -481,6 +498,7 @@ export function updateAgent(agentId: string, updates: Partial<{
   if (updates.relayConnectionName !== undefined) { fields.push('relay_connection_name = ?'); values.push(updates.relayConnectionName); }
   if (updates.public !== undefined) { fields.push('public = ?'); values.push(updates.public ? 1 : 0); }
   if (updates.env !== undefined) { fields.push('env = ?'); values.push(JSON.stringify(updates.env)); }
+  if (updates.workItemUrl !== undefined) { fields.push('work_item_url = ?'); values.push(normalizeWorkItemUrlTemplate(updates.workItemUrl)); }
   if (updates.models !== undefined) {
     const models = normalizeAgentModels(updates.models);
     fields.push('models = ?');

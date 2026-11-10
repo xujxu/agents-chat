@@ -6,14 +6,17 @@ import { mdComponents } from '../markdownHelpers';
 import type { ContentPart } from '../../chat/chatTypes';
 import { MessageToolCall } from './MessageToolCall';
 import { getStatusDisplayText } from '../messageDisplayHelpers';
+import { linkWorkItems } from '@/lib/workItemLinks';
 export function MessageContentParts({
   parts,
   pending,
   statusText,
+  workItemUrl,
 }: {
   parts: ContentPart[];
   pending?: boolean;
   statusText?: string;
+  workItemUrl?: string;
 }) {
   return (
     <>
@@ -43,7 +46,7 @@ export function MessageContentParts({
         if (part.kind === 'text') {
           return (
             <div key={pi} className={`messageContent markdownBody ${pending ? 'pending' : ''}`}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{part.text}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{linkWorkItems(part.text, workItemUrl)}</ReactMarkdown>
             </div>
           );
         }
