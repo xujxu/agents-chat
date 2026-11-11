@@ -1226,6 +1226,13 @@ test.describe('Chat UI', () => {
     await expect(contentPending.locator('.streamingIndicator')).toContainText('Generating');
     await expect(contentPending.locator('.ptyStatusBadge')).not.toHaveText('.');
     await expect(contentPending.locator('.streamingIndicator')).not.toContainText('.');
+
+    const pulse = contentPending.locator('.streamingPulse');
+    await expect(pulse).toHaveCSS('animation-name', 'streamPulse');
+    await page.locator('textarea.composerTextarea').pressSequentially('typing while streaming');
+    await expect(pulse).toHaveCSS('animation-name', 'none');
+    await expect(pulse).toBeVisible();
+    await expect(pulse).toHaveCSS('animation-name', 'streamPulse', { timeout: 5000 });
   });
 
   test('should send a message and receive a reply', async ({ page }) => {

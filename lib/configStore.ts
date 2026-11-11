@@ -690,7 +690,10 @@ export function listUserAgentGrants(email: string): (AgentAccessEntry & { agentI
 export function requestAgentAccessExtension(agentId: string, email: string, days: number): boolean {
   if (!Number.isInteger(days) || days < 1 || days > MAX_EXTENSION_DAYS) return false;
   const db = getDb();
-  const result = db.prepare(`UPDATE agent_access SET extension_days = ?, extension_requested_at = datetime('now')
+  // Reset the Teams notice marker: timestamps have 1 s precision, so a new request in the same
+  // second as an earlier, already-notified one would otherwise look notified too.
+  const result = db.prepare(`UPDATE agent_access SET extension_days = ?, extension_requested_at = datetime('now'),
+    extension_notified_for = NULL
     WHERE agent_id = ? AND email = ? AND accepted_at IS NOT NULL
       AND expires_at > datetime('now', '-${EXPIRED_GRACE_DAYS} days')`).run(days, agentId, email.toLowerCase());
   return result.changes > 0;

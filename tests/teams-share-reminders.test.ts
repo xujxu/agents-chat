@@ -122,7 +122,8 @@ async function main() {
     assert.ok(configStore.denyAgentAccessExtension('research', 'alice@contoso.com'));
     goneConversations.add('dm-admin');
     goneConversations.add('dm-boss');
-    db.prepare(`UPDATE agent_access SET extension_requested_at = datetime('now', '+1 seconds'), extension_days = 30 WHERE email = 'alice@contoso.com'`).run();
+    // Re-requesting right after a deny (same second as the notified request) must notify admins again.
+    assert.ok(configStore.requestAgentAccessExtension('research', 'alice@contoso.com', 30));
     db.prepare(`UPDATE agent_access SET expiry_reminded_for = expires_at WHERE email = 'alice@contoso.com'`).run();
     r = await runOnce();
     assert.deepEqual([r.posts.length, r.result.failed], [0, 2]);

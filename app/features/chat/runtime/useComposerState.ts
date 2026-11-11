@@ -6,11 +6,14 @@ import type { ChatAttachment } from '../../composer/attachmentTypes';
 import { filesToAttachments } from '../../composer/attachmentHelpers';
 import { STORAGE_CHAT_INPUT } from './sessionPersistence';
 
+const TYPING_IDLE_MS = 1000;
+
 export function useComposerState() {
   const [input, setInput] = useState('');
   const inputRef = useRef('');
   const inputRevisionRef = useRef(0);
   const inputDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingIdleRef = useRef<{ timer: ReturnType<typeof setTimeout>; main: Element } | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const inputHistoryIndexRef = useRef(-1);
@@ -52,17 +55,37 @@ export function useComposerState() {
     }
   }, [resizeComposer]);
 
+  const markComposerTyping = useCallback((el: HTMLTextAreaElement) => {
+    const main = el.closest('.chatMain');
+    if (!main) return;
+    const previous = typingIdleRef.current;
+    if (previous) {
+      clearTimeout(previous.timer);
+      if (previous.main !== main) previous.main.classList.remove('composerTyping');
+    }
+    // Running animations delay keystroke paints by about a frame on long chats.
+    main.classList.add('composerTyping');
+    typingIdleRef.current = {
+      main,
+      timer: setTimeout(() => {
+        main.classList.remove('composerTyping');
+        typingIdleRef.current = null;
+      }, TYPING_IDLE_MS),
+    };
+  }, []);
+
   const composerInputHandler = useCallback(() => {
     const el = composerRef.current;
     if (!el) return;
     inputRevisionRef.current++;
     inputRef.current = el.value;
     resizeComposer();
+    markComposerTyping(el);
     if (inputDebounceRef.current) clearTimeout(inputDebounceRef.current);
     inputDebounceRef.current = setTimeout(() => {
       startTransition(() => setInput(composerRef.current?.value || ''));
     }, 300);
-  }, [resizeComposer]);
+  }, [markComposerTyping, resizeComposer]);
 
   async function addFilesToComposer(fileList: FileList | File[]) {
     const files = Array.from(fileList).filter(Boolean);
@@ -160,6 +183,13 @@ export function useComposerState() {
     const savedInput = window.localStorage.getItem(STORAGE_CHAT_INPUT);
     if (savedInput) setInputProgrammatic(savedInput);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => () => {
+    const typing = typingIdleRef.current;
+    if (!typing) return;
+    clearTimeout(typing.timer);
+    typing.main.classList.remove('composerTyping');
   }, []);
 
   useEffect(() => {
