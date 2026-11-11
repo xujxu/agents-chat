@@ -2,7 +2,6 @@ import type { MutableRefObject } from 'react';
 import type { Agent } from '../../agents/agentTypes';
 import type { ChatAttachment } from '../../composer/attachmentTypes';
 import type { AgentUserRequest, ChatMessage, ContentPart, OrchestrationState, SessionRunContext } from '../chatTypes';
-import { getAcpTurnProgressSignature } from '../chatHelpers';
 import { mapTurnPhase, makeId, PromptSendFailedError } from './chatRunLoop';
 import { looksLikeQuestion } from '../../orchestration/workflowFollowUp';
 
@@ -201,20 +200,14 @@ export function createAcpHandlers(ctx: AcpServiceContext) {
     const runKey = `acp:${agentId}:${effectiveChatId}`;
     let consecutiveErrors = 0;
     const MAX_ERRORS = 10;
-    const POLL_TIMEOUT = 10 * 60_000;
-    let lastProgressAt = Date.now();
-    let lastProgressSignature = '';
+    // Only a turn the server no longer reports can time out; a live turn may legitimately stay
+    // silent for a long time (e.g. while the agent waits on a long-running shell command).
+    const MISSING_TURN_TIMEOUT = 10 * 60_000;
+    let lastSeenTurnAt = Date.now();
 
     while (ctx.sessionRunsRef.current[runKey]) {
       const current = ctx.sessionRunsRef.current[runKey];
       if (!current) break;
-      if (Date.now() - lastProgressAt > POLL_TIMEOUT) {
-        ctx.updateMessage(current.pendingId, {
-          content: current.currentText || '⚠️ Response timed out', pending: false, userRequest: undefined,
-        }, effectiveChatId);
-        finalizeRun(runKey);
-        return;
-      }
       let result: any;
       try {
         result = await ctx.acp({ action: 'poll', agentId, chatId: effectiveChatId });
@@ -249,8 +242,7 @@ export function createAcpHandlers(ctx: AcpServiceContext) {
         return;
       }
       if (turn) {
-        const progressSignature = getAcpTurnProgressSignature(turn);
-        if (progressSignature !== lastProgressSignature) { lastProgressSignature = progressSignature; lastProgressAt = Date.now(); }
+        lastSeenTurnAt = Date.now();
         const phaseStatusMap: Record<string, string> = { thinking: 'Thinking', tool_exec: 'Executing tool', replying: 'Generating response', booting: 'Starting environment' };
         const statusText = turn.statusText || phaseStatusMap[turn.phase || ''] || '';
         const parts: ContentPart[] = [];
@@ -324,6 +316,12 @@ export function createAcpHandlers(ctx: AcpServiceContext) {
           if (serverText) { patch.content = serverText; current.currentText = serverText; }
           ctx.updateMessage(current.pendingId, patch, effectiveChatId);
         }
+      } else if (Date.now() - lastSeenTurnAt > MISSING_TURN_TIMEOUT) {
+        ctx.updateMessage(current.pendingId, {
+          content: current.currentText || '⚠️ Response timed out', pending: false, userRequest: undefined,
+        }, effectiveChatId);
+        finalizeRun(runKey);
+        return;
       }
       await new Promise((r) => setTimeout(r, 800));
     }

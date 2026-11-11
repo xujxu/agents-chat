@@ -1,5 +1,5 @@
 import type { Agent } from '../agents/agentTypes';
-import type { ChatHistoryEntry, AgentUserRequestOption, AgentUserRequest, ChatMessage } from './chatTypes';
+import type { ChatHistoryEntry, AgentUserRequestOption, ChatMessage } from './chatTypes';
 
 export const SCHEDULER_AGENT_ID = 'scheduler';
 
@@ -8,39 +8,6 @@ export function getAgentUserRequestOptionLabel(option: AgentUserRequestOption): 
     return 'Always allow in current session';
   }
   return option.label;
-}
-
-export function getAcpTurnProgressSignature(turn: {
-  fullText?: string;
-  done?: boolean;
-  phase?: string;
-  statusText?: string;
-  error?: string;
-  userRequest?: AgentUserRequest;
-  events?: { type: string; toolName?: string; toolCallId?: string; toolArgs?: string; toolResult?: string; text?: string }[];
-}): string {
-  const events = Array.isArray(turn.events) ? turn.events : [];
-  const lastEvent = events[events.length - 1];
-  const lastEventSignature = lastEvent
-    ? [
-        lastEvent.type,
-        lastEvent.toolCallId || '',
-        lastEvent.toolName || '',
-        lastEvent.toolArgs?.length || 0,
-        lastEvent.toolResult?.length || 0,
-        lastEvent.text?.length || 0,
-      ].join(':')
-    : '';
-  return [
-    turn.done ? 'done' : 'active',
-    turn.phase || '',
-    turn.statusText || '',
-    turn.error || '',
-    turn.userRequest?.id || '',
-    turn.fullText?.length || 0,
-    events.length,
-    lastEventSignature,
-  ].join('|');
 }
 
 export function normalizeChatHistory(chats: ChatHistoryEntry[]): ChatHistoryEntry[] {
