@@ -6,6 +6,7 @@ import type { ChatAttachment } from '../../composer/attachmentTypes';
 import type { ChatSidebarStatus } from '../components/ChatSidebarList';
 import type { Agent } from '../../agents/agentTypes';
 import { getMentionedAgentIds } from '../chatHelpers';
+import type { IncrementalChatSaver } from './incrementalChatSaver';
 
 export type FollowupItem = { id: string; chatId: string; agentId: string; text: string; modelId?: string; version: number; createdAt: number };
 type ActiveTurn = { agentId: string; messageId?: string; done: boolean; phase?: string; statusText?: string; fullText?: string };
@@ -19,6 +20,7 @@ type FollowupRuntime = {
   runVersion: number;
   isChatRunning: (chatId: string) => boolean;
   setMessagesForChat: (chatId: string, messages: ChatMessage[]) => void;
+  chatSaver: Pick<IncrementalChatSaver, 'hydrate'>;
   resumeActiveTurn: (agentId: string, turn: ActiveTurn) => void;
   getChatSidebarStatus: (chatId: string) => ChatSidebarStatus | null;
 };
@@ -62,7 +64,10 @@ export function useFollowupQueue({ chatId, runtime, acp, prepareSubmission, getM
     const local = rt.chatMessagesRef.current[targetChatId] || (targetChatId === rt.currentChatIdRef.current ? rt.messagesRef.current : []);
     const localIds = new Set(local.map(message => message.id));
     const missing = ((data.chat.messages || []) as ChatMessage[]).filter(message => !localIds.has(message.id));
-    if (missing.length) rt.setMessagesForChat(targetChatId, [...local, ...missing]);
+    if (!missing.length) return;
+    // Record the server copies as saved; otherwise the next autosave re-creates them and conflicts.
+    rt.chatSaver.hydrate(targetChatId, missing);
+    rt.setMessagesForChat(targetChatId, [...local, ...missing]);
   }, []);
 
   // A follow-up turn is started by the server after the previous turn ends, so

@@ -8,6 +8,12 @@ test('queued follow-ups are sent together after the running turn ends', async ({
   await login(page);
   const api = page.context().request;
   const agentId = await createSlowAgent(api, { SLOW_AGENT_DELAY_MS: '8000', SLOW_AGENT_INIT_DELAY_MS: '5000' });
+  const rejectedSaves: string[] = [];
+  page.on('response', response => {
+    if (response.url().includes('/api/chats') && response.status() === 409) {
+      void response.text().then(body => rejectedSaves.push(body), () => rejectedSaves.push('409'));
+    }
+  });
 
   try {
     const textarea = await startBusyChat(page, agentId);
@@ -46,6 +52,12 @@ test('queued follow-ups are sent together after the running turn ends', async ({
     }
     await expect(chatArea.locator('.message.agent', { hasText: 'Turn 2 done; saw 3 queued items' })).toBeVisible({ timeout: 30_000 });
     await expect(chatArea.locator('.message.agent', { hasText: /Turn 3/ })).toHaveCount(0);
+    // Neither the server-created combined message nor the restored chat after a reload may come back as a conflicting local draft.
+    await page.waitForTimeout(3000);
+    await page.reload();
+    await expect(combined).toHaveCount(1, { timeout: 15_000 });
+    await page.waitForTimeout(3000);
+    expect(rejectedSaves).toEqual([]);
   } finally {
     await deleteAgent(api, agentId);
   }

@@ -51,7 +51,8 @@ function responseError(
   return new Error(error || (response.ok ? fallback : `${fallback} (${response.status})`));
 }
 
-export function useInitialChatRestore(params: UseInitialChatRestoreParams) {
+// Restore only once auth settles, so baselines hydrate into the final per-user chat saver.
+export function useInitialChatRestore(params: UseInitialChatRestoreParams, enabled = true) {
   const paramsRef = useRef(params);
   paramsRef.current = params;
   const sequenceRef = useRef(0);
@@ -116,11 +117,12 @@ export function useInitialChatRestore(params: UseInitialChatRestoreParams) {
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     void restore();
     return () => {
       sequenceRef.current++;
     };
-  }, [restore]);
+  }, [enabled, restore]);
 
   return {
     state,
