@@ -4581,13 +4581,88 @@ test.describe('Chat UI', () => {
     console.log('PASS: refreshed page reattached to active turn and finished polling');
   });
 
-  test('should stop polling a stalled active turn with no progress', async ({ page }) => {
+  test('should keep polling a silent live turn past the stall timeout and show the final reply', async ({ page }) => {
     const initialNow = Date.now();
     await page.clock.setFixedTime(initialNow);
 
     const chatArea = page.locator('.chatContainer');
     const textarea = page.locator('textarea.composerTextarea');
-    const finalLookingText = 'Implemented in `app/page.tsx`.';
+    const partialText = 'Running the regression suite now.';
+    const finalText = 'All regression tests passed; opened the PR.';
+    let pollCount = 0;
+    let turnDone = false;
+
+    await page.route('**/api/acp', async (route) => {
+      const body = route.request().postDataJSON() as any;
+      if (body?.action === 'list-agents') {
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            agents: [{ id: 'alpha', name: 'Alpha Agent', command: 'mock', args: [], cwd: '', running: true }],
+          }),
+        });
+        return;
+      }
+      if (body?.action === 'send') {
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({ ok: true, phase: 'replying', turn: { id: 'turn-silent' } }),
+        });
+        return;
+      }
+      if (body?.action === 'poll') {
+        pollCount++;
+        const text = turnDone ? `${partialText}\n\n${finalText}` : partialText;
+        await route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            activeTurn: {
+              id: 'turn-silent',
+              messageId: body.messageId,
+              fullText: text,
+              done: turnDone,
+              phase: turnDone ? 'done' : 'replying',
+              statusText: '',
+              events: [{ type: 'text_chunk', ts: 123, text }],
+            },
+          }),
+        });
+        return;
+      }
+      await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true }) });
+    });
+
+    await page.reload();
+    await page.waitForSelector('.chatContainer', { timeout: 30000 });
+    await textarea.fill('@alpha run the long regression suite');
+    await textarea.press('Enter');
+
+    const agentMessage = chatArea.locator('.message.agent', { hasText: 'Running the regression suite' }).last();
+    await expect(agentMessage).toBeVisible({ timeout: 10000 });
+    await expect(agentMessage.locator('.streamingIndicator')).toBeVisible();
+    await expect.poll(() => pollCount).toBeGreaterThanOrEqual(3);
+
+    // The server turn is alive but silent well past the 10-minute client stall timeout.
+    await page.clock.setFixedTime(initialNow + 30 * 60_000);
+    const pollsAfterSilence = pollCount;
+    await expect.poll(() => pollCount).toBeGreaterThan(pollsAfterSilence + 2);
+    await expect(agentMessage.locator('.streamingIndicator')).toBeVisible();
+
+    turnDone = true;
+    await expect(agentMessage).toContainText(finalText, { timeout: 15000 });
+    await expect(agentMessage.locator('.streamingIndicator')).toHaveCount(0, { timeout: 15000 });
+    await expect(page.getByRole('button', { name: 'Stop generation' })).toHaveCount(0);
+  });
+
+  test('should stop polling when the server no longer reports the turn', async ({ page }) => {
+    const initialNow = Date.now();
+    await page.clock.setFixedTime(initialNow);
+
+    const chatArea = page.locator('.chatContainer');
+    const textarea = page.locator('textarea.composerTextarea');
+    const partialText = 'Implemented in `app/page.tsx`.';
     let pollCount = 0;
 
     await page.route('**/api/acp', async (route) => {
@@ -4605,27 +4680,16 @@ test.describe('Chat UI', () => {
       if (body?.action === 'send') {
         await route.fulfill({
           contentType: 'application/json',
-          body: JSON.stringify({ ok: true, phase: 'replying', turn: { id: 'turn-stalled' } }),
+          body: JSON.stringify({ ok: true, phase: 'replying', turn: { id: 'turn-lost' } }),
         });
         return;
       }
       if (body?.action === 'poll') {
         pollCount++;
-        await route.fulfill({
-          contentType: 'application/json',
-          body: JSON.stringify({
-            ok: true,
-            activeTurn: {
-              id: 'turn-stalled',
-              messageId: body.messageId,
-              fullText: finalLookingText,
-              done: false,
-              phase: 'replying',
-              statusText: '',
-              events: [{ type: 'text_chunk', ts: 123, text: finalLookingText }],
-            },
-          }),
-        });
+        const activeTurn = pollCount <= 3
+          ? { id: 'turn-lost', messageId: body.messageId, fullText: partialText, done: false, phase: 'replying', statusText: '', events: [{ type: 'text_chunk', ts: 123, text: partialText }] }
+          : null;
+        await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, activeTurn }) });
         return;
       }
       await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true }) });
@@ -4633,17 +4697,12 @@ test.describe('Chat UI', () => {
 
     await page.reload();
     await page.waitForSelector('.chatContainer', { timeout: 30000 });
-    await textarea.fill('@alpha finish and do not report done');
+    await textarea.fill('@alpha finish and then disappear');
     await textarea.press('Enter');
 
     const agentMessage = chatArea.locator('.message.agent', { hasText: 'Implemented in' }).last();
     await expect(agentMessage).toBeVisible({ timeout: 10000 });
-    await expect(agentMessage.locator('.streamingIndicator')).toBeVisible();
-    await expect.poll(() => pollCount).toBeGreaterThanOrEqual(3);
-
-    await page.clock.setFixedTime(initialNow + 10 * 60_000);
-    const pollsAtThreshold = pollCount;
-    await expect.poll(() => pollCount).toBeGreaterThan(pollsAtThreshold);
+    await expect.poll(() => pollCount).toBeGreaterThan(4);
     await expect(agentMessage.locator('.streamingIndicator')).toBeVisible();
 
     await page.clock.setFixedTime(initialNow + 10 * 60_000 + 1);
