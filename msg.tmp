@@ -1,0 +1,9 @@
+Fix duplicated agent stream and agent filter mismatch on restore
+
+- Deduplicate concurrent session/load per session (loadSessionOnce). After a
+  restart, resume-session and the send path both loaded the same session,
+  making the CLI subscribe twice and emit every chunk twice.
+- When restoring the last chat whose agent differs from the browser's
+  persisted filter, switch the filter to the chat's agent.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>

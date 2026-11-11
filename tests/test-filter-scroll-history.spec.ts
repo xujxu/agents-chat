@@ -209,6 +209,23 @@ test.describe('Agent Filter Persistence', () => {
     await expect(page.locator('.chatContainer')).toContainText('@alpha hello');
     await expect(page.locator('.chatContainer')).toContainText('reply from alpha');
   });
+
+  test('restoring a chat owned by another agent switches the filter to that agent', async ({ page }) => {
+    await selectChatAgentFilter(page, 'alpha');
+    await page.click('button.emptyHomepageNewChat');
+    await page.waitForSelector('.chatContainer', { timeout: 10000 });
+    await sendMessage(page, '@alpha owned by alpha');
+
+    // Another browser/device left this browser's filter on beta while the
+    // server-side last chat is alpha's.
+    await page.evaluate(() => window.localStorage.setItem('acp_agent_filter_v1', 'beta'));
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('.chatContainer', { timeout: 30000 });
+
+    await expect(page.locator('.chatContainer')).toContainText('@alpha owned by alpha');
+    await expect(chatAgentFilterTrigger(page)).toHaveAttribute('data-value', 'alpha');
+    await expect(page.locator('.chatHistoryRow.active')).toHaveCount(1);
+  });
 });
 
 test.describe('Chat List Sort Order', () => {

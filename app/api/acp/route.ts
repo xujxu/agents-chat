@@ -25,7 +25,7 @@ import { withReplyGuidelinesOnce } from '@/lib/acp/replyGuidelines';
 import { createNdjsonRpc, createRelayNdjsonRpc } from '@/lib/acp/rpc';
 import { getTerminals, handleTerminalCreate, handleTerminalKill, handleTerminalOutput, handleTerminalRelease, handleTerminalWaitForExit } from '@/lib/acp/terminalTools';
 import { handleReadTextFile, handleWriteTextFile } from '@/lib/acp/fsTools';
-import { cleanupStaleSessions, getAgentProcess, getAgentProcesses, getBootPromises, getPendingUserRequestResponders, getReplayBuffers, getUserSession, getUserSessions, pendingUserRequestResponders, PENDING_USER_REQUEST_TIMEOUT_MS, userSessionKey, type PendingUserRequestResponder } from '@/lib/acp/runtimeState';
+import { cleanupStaleSessions, getAgentProcess, getAgentProcesses, getBootPromises, getPendingUserRequestResponders, getReplayBuffers, getUserSession, getUserSessions, loadSessionOnce, pendingUserRequestResponders, PENDING_USER_REQUEST_TIMEOUT_MS, userSessionKey, type PendingUserRequestResponder } from '@/lib/acp/runtimeState';
 import { applySessionModelIfRequested, normalizeSessionModels, syncAgentModelsFromSessionResult, validateRequestedModel } from '@/lib/acp/models';
 import { createLogger } from '@/lib/logger';
 import { resolvePreparedPrompt } from '@/lib/acp/preparedPrompt';
@@ -705,10 +705,8 @@ async function recoverStaleSessionForSend(
       }
     } else if (proc.supportsLoadSession && proc.rpc) {
       try {
-        const sessionParams = await buildSessionParams(proc, isAdmin);
-        await proc.rpc.send('session/load', { sessionId: staleSessionId, ...sessionParams });
+        await loadSessionOnce(proc, staleSessionId, () => buildSessionParams(proc, isAdmin));
         sess.sessionId = staleSessionId;
-        proc.knownSessions.add(staleSessionId);
         if (sess.activeTurns.size === 0) sess.phase = 'idle';
         log(`[ACP:${agentId}] Recovered stale session ${staleSessionId} with session/load for user ${userId}`);
         return 'loaded';
@@ -744,20 +742,14 @@ async function loadSavedChatSessionForSend(
     return false;
   }
 
-  const replayBuffers = getReplayBuffers();
-  replayBuffers.set(savedSessionId, []);
   try {
-    const sessionParams = await buildSessionParamsForChat(proc, isAdmin, userId, chatId);
-    await proc.rpc.send('session/load', { sessionId: savedSessionId, ...sessionParams });
-    replayBuffers.delete(savedSessionId);
+    await loadSessionOnce(proc, savedSessionId, () => buildSessionParamsForChat(proc, isAdmin, userId, chatId));
     sess.sessionId = savedSessionId;
     pushChatSession(sess, chatId, savedSessionId);
     if (sess.activeTurns.size === 0) sess.phase = 'idle';
-    proc.knownSessions.add(savedSessionId);
     log(`[ACP:${agentId}] Loaded saved chat session ${savedSessionId} for send: chat=${chatId}, user=${userId}`);
     return true;
   } catch (loadErr: any) {
-    replayBuffers.delete(savedSessionId);
     const errStr = loadErr instanceof Error ? loadErr.message : String(loadErr);
     let code = loadErr?.data?.code ?? loadErr?.code;
     if (!code) { try { code = JSON.parse(errStr)?.code; } catch { /* ignore */ } }
@@ -2608,21 +2600,13 @@ export async function POST(req: NextRequest) {
       }
       // Try session/load if the agent supports it
       if (proc.supportsLoadSession) {
-        // Set up replay buffer to capture messages during session/load
-        const replayBuffers = getReplayBuffers();
-        replayBuffers.set(savedSessionId, []);
         try {
-          const sessionParams = await buildSessionParamsForChat(proc, isAdmin, userId, chatId);
-          await proc.rpc!.send('session/load', { sessionId: savedSessionId, ...sessionParams });
+          const replayMessages = await loadSessionOnce(proc, savedSessionId, () => buildSessionParamsForChat(proc, isAdmin, userId, chatId));
           sess.sessionId = savedSessionId;
           if (chatId) pushChatSession(sess, chatId, savedSessionId);
           // Don't clear other chats' active turns
           if (sess.activeTurns.size === 0) sess.phase = 'idle';
-          proc.knownSessions.add(savedSessionId);
 
-          // Extract replay buffer and compare with SQLite
-          const replayMessages = replayBuffers.get(savedSessionId) || [];
-          replayBuffers.delete(savedSessionId);
           log(`[ACP:${agentId}] Loaded session ${savedSessionId} for user ${userId}, replayed ${replayMessages.length} message chunks`);
           // Compare with stored chat to find recovered messages
           const recovery = await compareAndRecover(userId, chatId, agentId, replayMessages);
@@ -2632,7 +2616,6 @@ export async function POST(req: NextRequest) {
           }
           return NextResponse.json({ ok: true, sessionId: savedSessionId, loaded: true, activeTurn: serializeTurn(activeTurn), ...recovery });
         } catch (loadErr: any) {
-          replayBuffers.delete(savedSessionId);
           // If session is already loaded, just reuse it
           const errStr = loadErr instanceof Error ? loadErr.message : String(loadErr);
           let code = loadErr?.data?.code ?? loadErr?.code;
