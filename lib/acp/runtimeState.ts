@@ -76,24 +76,27 @@ export function loadSessionOnce(
   buildParams: () => Promise<Record<string, unknown>>,
 ): Promise<{ role: 'user' | 'agent'; text: string }[]> {
   const loading = proc.loadingSessions ??= new Map();
-  const inflight = loading.get(sessionId);
-  if (inflight) return inflight;
   const rpc = proc.rpc;
+  const inflight = loading.get(sessionId);
+  // A load started on a connection that has since died (agent restart) may
+  // stay pending until its RPC timeout; never let new callers join it.
+  if (inflight && inflight.rpc === rpc) return inflight.promise;
   const promise = Promise.resolve().then(async () => {
     if (!rpc) throw new Error('Agent process not ready');
     const replayBuffers = getReplayBuffers();
-    replayBuffers.set(sessionId, []);
+    const buffer: { role: 'user' | 'agent'; text: string }[] = [];
+    replayBuffers.set(sessionId, buffer);
     try {
       const params = await buildParams();
       await rpc.send('session/load', { sessionId, ...params });
-      proc.knownSessions.add(sessionId);
-      return replayBuffers.get(sessionId) || [];
+      if (proc.rpc === rpc) proc.knownSessions.add(sessionId);
+      return buffer;
     } finally {
-      replayBuffers.delete(sessionId);
-      if (loading.get(sessionId) === promise) loading.delete(sessionId);
+      if (replayBuffers.get(sessionId) === buffer) replayBuffers.delete(sessionId);
+      if (loading.get(sessionId)?.promise === promise) loading.delete(sessionId);
     }
   });
-  loading.set(sessionId, promise);
+  loading.set(sessionId, { rpc, promise });
   return promise;
 }
 
