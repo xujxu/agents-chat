@@ -55,3 +55,28 @@ test('a failed load rejects every waiter and allows a later retry', async () => 
   await assert.rejects(loadSessionOnce(proc, 's2', async () => ({})), /load failed/);
   assert.equal(calls.length, 2);
 });
+
+test('after an agent restart, a new load does not join the load pending on the dead connection', async () => {
+  const dead = fakeProc();
+  const proc = dead.proc;
+  const stale = loadSessionOnce(proc, 's3', async () => ({}));
+  await new Promise((r) => setTimeout(r, 0));
+
+  // Agent restarted: same proc object, new rpc, knownSessions cleared.
+  const fresh = fakeProc();
+  (proc as { rpc: unknown }).rpc = fresh.proc.rpc;
+  proc.knownSessions.clear();
+  fresh.release();
+  const replay = await loadSessionOnce(proc, 's3', async () => ({}));
+  assert.deepEqual(fresh.calls, ['session/load']);
+  assert.deepEqual(replay, [{ role: 'agent', text: 'hello' }]);
+  assert.ok(proc.knownSessions.has('s3'));
+
+  // The stale load finishing late must not mark the session known on the new
+  // process or disturb the new entry.
+  proc.knownSessions.clear();
+  dead.release();
+  await stale;
+  assert.equal(proc.knownSessions.has('s3'), false);
+  assert.equal(proc.loadingSessions?.has('s3'), false);
+});
