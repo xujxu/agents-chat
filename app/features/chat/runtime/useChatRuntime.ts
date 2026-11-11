@@ -731,7 +731,7 @@ export function useChatRuntime({
         }
       })();
     },
-  });
+  }, authStatus !== 'loading');
 
   /* ── Session resume effect ── */
   useEffect(() => {
@@ -836,7 +836,7 @@ export function useChatRuntime({
     orchestrationsRef, currentAgentSessionsRef, needsContextRestoreRef,
     inputHistoryRef, fileCommentCallbacksRef, panelCallbacksRef,
     /* core message functions */
-    setMessagesForChat, addMessage, updateMessage, removeMessage, notifyRunStateChanged,
+    setMessagesForChat, addMessage, updateMessage, removeMessage, notifyRunStateChanged, chatSaver,
     /* failed send */
     markUserMessageSendFailed, clearUserMessageSendFailure,
     /* acp handlers */
