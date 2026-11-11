@@ -151,6 +151,8 @@ export type AgentProcess = {
   cachedCwd: string;
   supportsLoadSession: boolean;
   knownSessions: Set<string>; // sessions active in agent memory (no need to session/load)
+  /** In-flight session/load requests, keyed by sessionId; concurrent callers share one load. */
+  loadingSessions?: Map<string, Promise<{ role: 'user' | 'agent'; text: string }[]>>;
   /** Slash commands advertised by the agent via `session/update` notifications, keyed by sessionId. */
   availableCommandsBySession: Map<string, SlashCommand[]>;
   /** Authentication methods advertised by the agent in its `initialize` response. */

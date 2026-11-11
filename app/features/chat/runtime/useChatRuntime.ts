@@ -656,6 +656,13 @@ export function useChatRuntime({
       setChatHistory(history);
       const target = history.find((chat) => chat.id === data.lastChatId) || history[0];
       if (!target) return null;
+      // The agent filter is per-browser while lastChatId is per-user, so the
+      // restored chat may belong to another agent; follow it to keep the
+      // filter, sidebar and open chat consistent.
+      const filter = chatAgentFilterRef.current;
+      if (filter && target.agentId && target.agentId !== filter) {
+        panelCallbacksRef.current.setSelectedAgentFilter?.(target.agentId);
+      }
       return {
         chatId: target.id,
         chatName: target.name || target.id,

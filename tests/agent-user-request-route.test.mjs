@@ -510,7 +510,7 @@ assert.match(
 
 assert.match(
   routeSource,
-  /if\s*\(proc\.supportsLoadSession\)\s*\{[\s\S]*?await\s+proc\.rpc!\.send\('session\/load'[\s\S]*?const\s+activeTurn\s*=\s*getActiveTurnForResume\(chatTurn,\s*savedSessionId\)[\s\S]*?return\s+NextResponse\.json\(\{\s*ok:\s*true,\s*sessionId:\s*savedSessionId,\s*loaded:\s*true,\s*activeTurn:\s*serializeTurn\(activeTurn\),\s*\.\.\.recovery\s*\}\)/,
+  /if\s*\(proc\.supportsLoadSession\)\s*\{[\s\S]*?await\s+loadSessionOnce\(proc,\s*savedSessionId,[\s\S]*?const\s+activeTurn\s*=\s*getActiveTurnForResume\(chatTurn,\s*savedSessionId\)[\s\S]*?return\s+NextResponse\.json\(\{\s*ok:\s*true,\s*sessionId:\s*savedSessionId,\s*loaded:\s*true,\s*activeTurn:\s*serializeTurn\(activeTurn\),\s*\.\.\.recovery\s*\}\)/,
   'successful session/load resume should return the matching active turn so the frontend keeps polling pending requests',
 );
 
@@ -540,7 +540,7 @@ assert.match(
 
 assert.match(
   routeSource,
-  /async\s+function\s+loadSavedChatSessionForSend\([\s\S]*?proc\.knownSessions\.has\(savedSessionId\)[\s\S]*?proc\.supportsLoadSession[\s\S]*?await\s+proc\.rpc!\.send\('session\/load',\s*\{\s*sessionId:\s*savedSessionId[\s\S]*?logSessionLoadFallback\(agentId,\s*userId,\s*chatId,\s*savedSessionId/,
+  /async\s+function\s+loadSavedChatSessionForSend\([\s\S]*?proc\.knownSessions\.has\(savedSessionId\)[\s\S]*?proc\.supportsLoadSession[\s\S]*?await\s+loadSessionOnce\(proc,\s*savedSessionId,[\s\S]*?logSessionLoadFallback\(agentId,\s*userId,\s*chatId,\s*savedSessionId/,
   'send should load a saved chat session before falling back to session/new',
 );
 

@@ -64,6 +64,39 @@ export function getReplayBuffers(): Map<string, { role: 'user' | 'agent'; text: 
   return globalStore.__acpReplayBuffers;
 }
 
+/**
+ * Run session/load once per (process, sessionId). Loading the same session
+ * twice makes some agents subscribe twice and emit every update twice, so
+ * concurrent callers (e.g. resume-session and send racing after a restart)
+ * await the same in-flight load and share its replayed messages.
+ */
+export function loadSessionOnce(
+  proc: AgentProcess,
+  sessionId: string,
+  buildParams: () => Promise<Record<string, unknown>>,
+): Promise<{ role: 'user' | 'agent'; text: string }[]> {
+  const loading = proc.loadingSessions ??= new Map();
+  const inflight = loading.get(sessionId);
+  if (inflight) return inflight;
+  const rpc = proc.rpc;
+  const promise = Promise.resolve().then(async () => {
+    if (!rpc) throw new Error('Agent process not ready');
+    const replayBuffers = getReplayBuffers();
+    replayBuffers.set(sessionId, []);
+    try {
+      const params = await buildParams();
+      await rpc.send('session/load', { sessionId, ...params });
+      proc.knownSessions.add(sessionId);
+      return replayBuffers.get(sessionId) || [];
+    } finally {
+      replayBuffers.delete(sessionId);
+      if (loading.get(sessionId) === promise) loading.delete(sessionId);
+    }
+  });
+  loading.set(sessionId, promise);
+  return promise;
+}
+
 export function userSessionKey(agentId: string, userId: string): string {
   return `${agentId}:${userId}`;
 }
