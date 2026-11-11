@@ -1645,10 +1645,11 @@ async function startChatTurnUnmarked(proc: AgentProcess, sess: UserSession, agen
     const savedSessionId = await getStoredChatAgentSessionId(userId, chatId, agentId);
 
     if (!savedSessionId) {
-      // Persisted mapping was cleared (for example after git-context change).
-      // Drop in-memory affinity too, so next send creates a fresh session.
+      // New chat, or persisted mapping was cleared (for example after git-context change).
+      // Drop in-memory affinity too, so next send creates a fresh session instead of
+      // inheriting the session another chat left active.
       sess.chatSessions.delete(chatId);
-      if (chatSessionId && sess.sessionId === chatSessionId) sess.sessionId = null;
+      if (!chatSessionId || sess.sessionId === chatSessionId) sess.sessionId = null;
     } else if (chatSessionId && chatSessionId === savedSessionId) {
       if (chatSessionId !== sess.sessionId) {
         sess.sessionId = chatSessionId;
