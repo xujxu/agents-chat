@@ -85,6 +85,37 @@ test('responsive composer placeholder stays on one line without shrinking on inp
   await expect(textarea).toHaveValue('Keep my draft');
 });
 
+test('typing never collapses the composer, so the mobile caret stays put', async ({ page }) => {
+  const textarea = page.locator('textarea.composerTextarea');
+  await textarea.click();
+  await textarea.evaluate((element) => {
+    const heights: string[] = [];
+    (window as unknown as { __composerHeights: string[] }).__composerHeights = heights;
+    new MutationObserver((records) => {
+      for (const record of records) heights.push(record.oldValue ?? '', element.style.height);
+    }).observe(element, { attributes: true, attributeFilter: ['style'], attributeOldValue: true });
+  });
+  const singleLineHeight = await textarea.evaluate((element) => element.getBoundingClientRect().height);
+
+  await page.keyboard.type('hello');
+  await expect(textarea).toHaveValue('hello');
+  expect(await textarea.evaluate((element) => element.getBoundingClientRect().height))
+    .toBeCloseTo(singleLineHeight, 0);
+  await page.keyboard.press('Shift+Enter');
+  await page.keyboard.type('world');
+  await expect.poll(() => textarea.evaluate((element) => element.getBoundingClientRect().height))
+    .toBeGreaterThan(singleLineHeight + 10);
+  await page.keyboard.press('Backspace');
+  for (let i = 0; i < 5; i++) await page.keyboard.press('Backspace');
+  await expect.poll(() => textarea.evaluate((element) => element.getBoundingClientRect().height))
+    .toBeCloseTo(singleLineHeight, 0);
+
+  const heights = await page.evaluate(
+    () => (window as unknown as { __composerHeights: string[] }).__composerHeights,
+  );
+  expect(heights.some((value) => /height:\s*0px|^0px$/.test(value))).toBe(false);
+});
+
 test('mobile header controls match the account chip height on every viewport', async ({ page }) => {
   for (const width of [320, 390, 560, 561, 844, 900, 1100, 1280]) {
     await page.setViewportSize({ width, height: 844 });
