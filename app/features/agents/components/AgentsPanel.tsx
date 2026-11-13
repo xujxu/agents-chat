@@ -92,6 +92,9 @@ export function AgentsPanel({
     closeAgentSettings,
     saveAgentSettings,
     deleteAgent,
+    settingsProcess,
+    agentProcessAction,
+    controlAgentProcess,
     addAccess,
     removeAccess,
     renewAccess,
@@ -332,6 +335,25 @@ export function AgentsPanel({
                   </label>
                 )}
               </>
+            )}
+            {settingsProcess && settingsAgentId && (
+              <div className="agentAccessSection agentProcessSection">
+                <h3>⚙️ Process</h3>
+                <div className="agentProcessRow">
+                  <span className={`agentProcessState ${settingsProcess.state}`} role="status">
+                    {agentProcessAction === 'stop' ? 'Stopping...' : agentProcessAction === 'restart' ? (settingsProcess.state === 'stopped' ? 'Starting...' : 'Restarting...') : settingsProcess.state === 'running' ? '● Running' : settingsProcess.state === 'starting' ? '◌ Starting' : '○ Stopped'}
+                  </span>
+                  {settingsProcess.state === 'stopped' ? (
+                    <button type="button" className="modalButton compact" onClick={() => void controlAgentProcess(settingsAgentId, settingsAgentConfig.name, 'restart')} disabled={agentSettingsLoading || agentAccessLoading}>Start</button>
+                  ) : (
+                    <>
+                      <button type="button" className="modalButton compact" onClick={() => void controlAgentProcess(settingsAgentId, settingsAgentConfig.name, 'restart')} disabled={agentSettingsLoading || agentAccessLoading}>Restart</button>
+                      <button type="button" className="modalButton compact danger" onClick={() => void controlAgentProcess(settingsAgentId, settingsAgentConfig.name, 'stop')} disabled={agentSettingsLoading || agentAccessLoading}>Stop</button>
+                    </>
+                  )}
+                </div>
+                {settingsProcess.state === 'stopped' && <p className="agentSectionNote">{settingsProcess.error ? `Last start failed: ${settingsProcess.error}` : 'Not started on page load. The next message to this agent starts it.'}</p>}
+              </div>
             )}
             <div className="agentAccessSection">
               <h3>🔐 Access Control</h3>

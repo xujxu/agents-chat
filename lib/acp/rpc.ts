@@ -1,8 +1,24 @@
 import type { ChildProcess } from 'child_process';
+import { execFile } from 'child_process';
 import type { NdjsonRpc, PendingRequest } from './types';
 import { createLogger } from '@/lib/logger';
 
 const logger = createLogger('acp.rpc');
+
+/** Agents run under `shell: true`; on Windows `cp.kill()` only ends cmd.exe and leaves the agent running. */
+export function killProcessTree(cp: ChildProcess): void {
+  try { cp.stdin?.end(); } catch { /* ignore */ }
+  if (process.platform === 'win32' && cp.pid && cp.exitCode === null) {
+    execFile('taskkill', ['/pid', String(cp.pid), '/T', '/F'], { windowsHide: true }, (err) => {
+      if (err) {
+        logger.debug({ pid: cp.pid, err: err.message }, '[ACP] taskkill failed; falling back to kill()');
+        try { cp.kill(); } catch { /* ignore */ }
+      }
+    });
+    return;
+  }
+  try { cp.kill(); } catch { /* ignore */ }
+}
 
 /* ─────────── Minimal NDJSON-RPC over raw Node streams ─────────── */
 
@@ -48,7 +64,7 @@ export function createNdjsonRpc(cp: ChildProcess): NdjsonRpc {
     destroy() {
       for (const p of pending.values()) p.reject(new Error('ACP destroyed'));
       pending.clear();
-      try { cp.kill(); } catch { /* ignore */ }
+      killProcessTree(cp);
     },
   };
 

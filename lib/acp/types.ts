@@ -174,7 +174,7 @@ export type UserSession = {
   lastActive: number;
 };
 
-export type WarmLocalAgentStatus = 'ready' | 'booting' | 'started' | 'failed' | 'skipped_remote';
+export type WarmLocalAgentStatus = 'ready' | 'booting' | 'started' | 'failed' | 'skipped_remote' | 'skipped_stopped';
 
 export type WarmLocalAgentResult = {
   agentId: string;

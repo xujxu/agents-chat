@@ -25,7 +25,8 @@ import { withReplyGuidelinesOnce } from '@/lib/acp/replyGuidelines';
 import { createNdjsonRpc, createRelayNdjsonRpc } from '@/lib/acp/rpc';
 import { getTerminals, handleTerminalCreate, handleTerminalKill, handleTerminalOutput, handleTerminalRelease, handleTerminalWaitForExit } from '@/lib/acp/terminalTools';
 import { handleReadTextFile, handleWriteTextFile } from '@/lib/acp/fsTools';
-import { cleanupStaleSessions, getAgentProcess, getAgentProcesses, getBootPromises, getPendingUserRequestResponders, getReplayBuffers, getUserSession, getUserSessions, loadSessionOnce, pendingUserRequestResponders, PENDING_USER_REQUEST_TIMEOUT_MS, userSessionKey, type PendingUserRequestResponder } from '@/lib/acp/runtimeState';
+import { cleanupStaleSessions, getAgentProcess, getAgentProcesses, getBootPromises, getPendingUserRequestResponders, getReplayBuffers, getStoppedAgents, getUserSession, getUserSessions, loadSessionOnce, pendingUserRequestResponders, PENDING_USER_REQUEST_TIMEOUT_MS, userSessionKey, type PendingUserRequestResponder } from '@/lib/acp/runtimeState';
+import { getAgentProcessState, settlesWithin, stopAgentRuntime as stopAgentRuntimeWith } from '@/lib/acp/processControl';
 import { applySessionModelIfRequested, normalizeSessionModels, syncAgentModelsFromSessionResult, validateRequestedModel } from '@/lib/acp/models';
 import { createLogger } from '@/lib/logger';
 import { resolvePreparedPrompt } from '@/lib/acp/preparedPrompt';
@@ -183,6 +184,9 @@ async function warmLocalAgents(): Promise<WarmLocalAgentResult[]> {
     if (agent.relay) {
       return { agentId: agent.id, status: 'skipped_remote' };
     }
+    if (getStoppedAgents().has(agent.id)) {
+      return { agentId: agent.id, status: 'skipped_stopped' };
+    }
 
     const proc = getAgentProcess(agent.id, agent);
     if (proc.ready) {
@@ -213,9 +217,17 @@ async function bootAgent(agentId: string): Promise<void> {
   const promises = getBootPromises();
   if (promises.has(agentId)) return promises.get(agentId)!;
 
-  const promise = doBootAgent(agentId).finally(() => promises.delete(agentId));
+  getStoppedAgents().delete(agentId);
+  // A stop/restart may drop this promise and start a new boot before this one settles; don't remove the newer one.
+  const promise: Promise<void> = doBootAgent(agentId).finally(() => {
+    if (promises.get(agentId) === promise) promises.delete(agentId);
+  });
   promises.set(agentId, promise);
   return promise;
+}
+
+function stopAgentRuntime(agentId: string, reason: string): boolean {
+  return stopAgentRuntimeWith(agentId, reason, sess => clearPendingUserRequestsForSession(agentId, sess, reason));
 }
 
 async function doBootAgent(agentId: string): Promise<void> {
@@ -243,6 +255,8 @@ async function doBootAgent(agentId: string): Promise<void> {
         proc.ready = false;
         proc.booting = false;
         proc.knownSessions.clear();
+        // Stopped or replaced on purpose: the stopper already settled the sessions, which may now belong to a newer process.
+        if (getAgentProcesses().get(agentId) !== proc) return;
         for (const [key, sess] of getUserSessions()) {
           if (key.startsWith(`${agentId}:`)) {
             clearPendingUserRequestsForSession(agentId, sess, 'relay disconnected');
@@ -296,6 +310,8 @@ async function doBootAgent(agentId: string): Promise<void> {
         proc.ready = false;
         proc.booting = false;
         proc.knownSessions.clear();
+        // Stopped or replaced on purpose: the stopper already settled the sessions, which may now belong to a newer process.
+        if (getAgentProcesses().get(agentId) !== proc) return;
         for (const [key, sess] of getUserSessions()) {
           if (key.startsWith(`${agentId}:`)) {
             clearPendingUserRequestsForSession(agentId, sess, 'process exited');
@@ -503,6 +519,7 @@ async function doBootAgent(agentId: string): Promise<void> {
     proc.needsAuth = false;
 
     // No longer create a session at boot — sessions are created per-user on first send
+    if (getAgentProcesses().get(agentId) !== proc) throw new Error('Agent was stopped while starting');
     proc.ready = true;
     proc.booting = false;
     log(`[ACP:${agentId}] Ready. Awaiting user sessions.`);
@@ -2016,7 +2033,7 @@ export async function POST(req: NextRequest) {
       // Return env as parsed object for the UI
       let envObj: Record<string, string> = {};
       try { if (agent.env) envObj = JSON.parse(agent.env); } catch { /* ignore */ }
-      return NextResponse.json({ ok: true, agent: { ...agent, env: envObj } });
+      return NextResponse.json({ ok: true, agent: { ...agent, env: envObj }, ...getAgentProcessState(agentId) });
     }
 
     if (action === 'get-sessions') {
@@ -2063,17 +2080,8 @@ export async function POST(req: NextRequest) {
       const needsRestart = updateKeys.some(k => restartRequiringKeys.has(k));
 
       let restarted = false;
-      const procs = getAgentProcesses();
-      const existing = procs.get(agentId);
-      if (needsRestart && existing?.ready) {
-        if (existing.rpc) existing.rpc.destroy();
-        procs.delete(agentId);
-        for (const [key, staleSess] of [...getUserSessions().entries()]) {
-          if (key.startsWith(`${agentId}:`)) {
-            clearPendingUserRequestsForSession(agentId, staleSess, 'agent restarted');
-            getUserSessions().delete(key);
-          }
-        }
+      if (needsRestart && getAgentProcesses().get(agentId)?.ready) {
+        stopAgentRuntime(agentId, 'Agent restarted to apply new settings');
         bootAgent(agentId).catch(err => logger.error({ agentId, err: err instanceof Error ? err.message : String(err) }, `[ACP:${agentId}] Restart failed`));
         restarted = true;
       }
@@ -2131,21 +2139,34 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: false, error: 'permission_denied' }, { status: 403 });
       }
 
-      // Stop if running
-      const procs2 = getAgentProcesses();
-      const existing2 = procs2.get(agentId);
-      if (existing2?.rpc) existing2.rpc.destroy();
-      procs2.delete(agentId);
-      for (const [key, staleSess] of [...getUserSessions().entries()]) {
-        if (key.startsWith(`${agentId}:`)) {
-          clearPendingUserRequestsForSession(agentId, staleSess, 'agent deleted');
-          getUserSessions().delete(key);
-        }
+      stopAgentRuntime(agentId, 'Agent deleted');
+      getStoppedAgents().delete(agentId);
+      for (const key of [...getUserSessions().keys()]) {
+        if (key.startsWith(`${agentId}:`)) getUserSessions().delete(key);
       }
 
       configStore.deleteAgent(agentId);
       pruneGitHubBindings();
       return NextResponse.json({ ok: true });
+    }
+
+    if (action === 'stop-agent' || action === 'restart-agent') {
+      if (!agentId) return NextResponse.json({ ok: false, error: 'missing_agentId' }, { status: 400 });
+      const agent = configStore.getAgentById(agentId);
+      if (!agent) return NextResponse.json({ ok: false, error: 'agent_not_found' }, { status: 404 });
+      if (!canManageAgent(agent.owner)) {
+        return NextResponse.json({ ok: false, error: 'permission_denied' }, { status: 403 });
+      }
+      const restart = action === 'restart-agent';
+      const actor = getUserEmail(authToken) || userRole;
+      const wasRunning = stopAgentRuntime(agentId, restart ? 'Agent restarted' : 'Agent stopped');
+      logger.info({ agentId, actor, wasRunning }, `[ACP:${agentId}] ${restart ? 'Restart' : 'Stop'} requested by ${actor}`);
+      if (!restart) {
+        getStoppedAgents().add(agentId);
+        return NextResponse.json({ ok: true, wasRunning, ...getAgentProcessState(agentId) });
+      }
+      const settled = await settlesWithin(bootAgent(agentId));
+      return NextResponse.json({ ok: true, wasRunning, settled, ...getAgentProcessState(agentId) });
     }
 
     // ─── Agent access: owners and admins can view the list; only admins share (grant or revoke) ───
@@ -2244,6 +2265,10 @@ export async function POST(req: NextRequest) {
       }
       const chatId = body?.chatId as string | undefined;
       if (!chatId) return NextResponse.json({ ok: false, error: 'missing_chatId' }, { status: 400 });
+      // Model discovery runs when a chat opens; it must not undo an explicit Stop.
+      if (!proc.ready && !proc.booting && getStoppedAgents().has(agentId)) {
+        return NextResponse.json({ ok: true, models: [], stopped: true });
+      }
       if (!proc.ready) {
         if (!proc.booting) {
           await bootAgent(agentId);

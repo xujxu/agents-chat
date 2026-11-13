@@ -28,6 +28,8 @@ export const globalStore = globalThis as typeof globalThis & {
   __acpAgents?: Map<string, AgentProcess>;
   __acpUserSessions?: Map<string, UserSession>;
   __acpBootPromises?: Map<string, Promise<void>>;
+  /** Agents explicitly stopped by an owner/admin; page-load warmup leaves them stopped. */
+  __acpStoppedAgents?: Set<string>;
   /** Collects replayed messages during session/load (keyed by sessionId) */
   __acpReplayBuffers?: Map<string, { role: 'user' | 'agent'; text: string }[]>;
 };
@@ -57,6 +59,11 @@ export function cleanupStaleSessions() {
 export function getBootPromises(): Map<string, Promise<void>> {
   if (!globalStore.__acpBootPromises) globalStore.__acpBootPromises = new Map();
   return globalStore.__acpBootPromises;
+}
+
+export function getStoppedAgents(): Set<string> {
+  if (!globalStore.__acpStoppedAgents) globalStore.__acpStoppedAgents = new Set();
+  return globalStore.__acpStoppedAgents;
 }
 
 export function getReplayBuffers(): Map<string, { role: 'user' | 'agent'; text: string }[]> {

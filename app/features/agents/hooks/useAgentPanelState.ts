@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ChatMessage } from '../../chat/chatTypes';
 import type { Agent } from '../agentTypes';
 import type { NodeData } from '../../nodes/nodeTypes';
+import { processActionVerb, processResultMessage, readProcessInfo, type AgentProcessInfo, type AgentProcessOp } from '../agentProcess';
 
 export type { NodeData };
 
@@ -89,6 +90,8 @@ export function useAgentPanelState({
   const [agentAccessLoading, setAgentAccessLoading] = useState(false);
   const [agentAccessList, setAgentAccessList] = useState<AccessEntry[]>([]);
   const [newAccessEmail, setNewAccessEmail] = useState('');
+  const [settingsProcess, setSettingsProcess] = useState<AgentProcessInfo | null>(null);
+  const [agentProcessAction, setAgentProcessAction] = useState<AgentProcessOp | null>(null);
   const settingsRequestGeneration = useRef(0);
 
   function openAddAgent() {
@@ -200,6 +203,7 @@ export function useAgentPanelState({
     setAgentSettingsLoading(true);
     setAgentAccessList([]);
     setNewAccessEmail('');
+    setSettingsProcess(null);
     try {
       const [configData, accessData] = await Promise.all([
         acp({ action: 'get-agent-config', agentId }),
@@ -209,6 +213,7 @@ export function useAgentPanelState({
       requireSuccessfulMutation(configData, 'Failed to load agent settings');
       requireSuccessfulMutation(accessData, 'Failed to load agent settings');
       setSettingsAgentConfig(configData.agent);
+      setSettingsProcess(readProcessInfo(configData));
       const env = configData.agent.env || {};
       setSettingsEnvText(Object.entries(env).map(([k, v]) => `${k}=${v}`).join('\n'));
       setAgentAccessList(accessData.access || []);
@@ -343,12 +348,39 @@ export function useAgentPanelState({
     }
   }
 
+  async function controlAgentProcess(agentId: string, agentName: string, op: AgentProcessOp) {
+    if (agentSettingsLoading || agentAccessLoading) return;
+    const verb = processActionVerb(op, settingsProcess);
+    if (verb !== 'Start' && !confirm(`${verb} agent "${agentName}"? Replies in progress for every user of this agent will end.`)) return;
+    const requestGeneration = settingsRequestGeneration.current;
+    setFormError(null);
+    setAgentSettingsLoading(true);
+    setAgentProcessAction(op);
+    try {
+      const data = await acp({ action: op === 'stop' ? 'stop-agent' : 'restart-agent', agentId });
+      requireSuccessfulMutation(data, `Failed to ${verb.toLowerCase()} agent`);
+      const info = readProcessInfo(data);
+      if (requestGeneration === settingsRequestGeneration.current) setSettingsProcess(info);
+      if (info?.error) throw new Error(info.error);
+      addMessage({ type: 'system', content: processResultMessage(op, verb, agentName, info) });
+    } catch (error) {
+      if (requestGeneration === settingsRequestGeneration.current) setFormError(mutationError(error, `Failed to ${verb.toLowerCase()} agent`));
+    } finally {
+      if (requestGeneration === settingsRequestGeneration.current) {
+        setAgentSettingsLoading(false);
+        setAgentProcessAction(null);
+      }
+    }
+  }
+
   function closeAgentSettings() {
     settingsRequestGeneration.current += 1;
     setFormError(null);
     setShowAgentSettings(false);
     setSettingsAgentId(null);
     setSettingsAgentConfig(null);
+    setSettingsProcess(null);
+    setAgentProcessAction(null);
     setSettingsEnvText('');
     setAgentAccessList([]);
     setNewAccessEmail('');
@@ -448,6 +480,9 @@ export function useAgentPanelState({
     closeAgentSettings,
     saveAgentSettings,
     deleteAgent,
+    settingsProcess,
+    agentProcessAction,
+    controlAgentProcess,
     addAccess,
     removeAccess,
     renewAccess,
