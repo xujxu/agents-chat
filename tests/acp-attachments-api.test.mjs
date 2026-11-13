@@ -38,8 +38,8 @@ expectIncludes("if (!parsed || parsedMimeType !== mimeType || !isAllowedAttachme
 expectIncludes('attachments = normalizePromptAttachments(body?.attachments)', 'send action should read body.attachments', routeSource);
 expectIncludes('if (!text && attachments.length === 0)', 'attachment-only sends should be allowed while empty sends are rejected', routeSource);
 expectIncludes('sendPrompt(proc, sess, agentId, text, isAdmin, userId, chatHistory, chatId, messageId, attachments, requestedModelId, messageTs)', 'sendPrompt should receive normalized attachments and requested model ID', routeSource);
-expectIncludes('prompt: promptParts', 'initial session/prompt should use buildPromptParts output', routeSource);
-expectIncludes('prompt: buildPromptParts(withReplyGuidelinesOnce(sess.sessionId, retryText), attachments)', 'retry session/prompt should use buildPromptParts output', routeSource);
+expectIncludes('sendPromptAfterPrior(proc, turn, promptParts,', 'initial session/prompt should use buildPromptParts output', routeSource);
+expectIncludes('sendPromptAfterPrior(proc, turn, buildPromptParts(withReplyGuidelinesOnce(sess.sessionId, retryText), attachments)', 'retry session/prompt should use buildPromptParts output', routeSource);
 
 const sendPromptSignature = routeSource.match(/function sendPrompt\([^)]*attachments: PromptAttachment\[\] = \[\][^)]*\)/s);
 assert.ok(sendPromptSignature, 'sendPrompt signature should accept attachments');

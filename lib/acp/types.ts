@@ -76,6 +76,8 @@ export type TurnState = {
   persistTimer?: ReturnType<typeof setTimeout>;
   /** Resolves once the agent has answered this turn's `session/prompt` (including after a cancel). */
   settled?: Promise<void>;
+  /** True until the session's previous (e.g. cancelled) prompt is answered; its late updates must not land in this turn. */
+  awaitingPrior?: boolean;
 };
 
 export type StoredContentPart =
@@ -153,6 +155,8 @@ export type AgentProcess = {
   knownSessions: Set<string>; // sessions active in agent memory (no need to session/load)
   /** In-flight session/load requests, keyed by sessionId; concurrent callers share one load. */
   loadingSessions?: Map<string, { rpc: unknown; promise: Promise<{ role: 'user' | 'agent'; text: string }[]> }>;
+  /** Latest unanswered session/prompt per sessionId; the next prompt waits for it (see waitForPriorPrompt). */
+  promptsInFlight?: Map<string, { rpc: unknown; promise: Promise<void> }>;
   /** Slash commands advertised by the agent via `session/update` notifications, keyed by sessionId. */
   availableCommandsBySession: Map<string, SlashCommand[]>;
   /** Authentication methods advertised by the agent in its `initialize` response. */

@@ -4,8 +4,8 @@
 // Locally: npx --yes --package=tsx@4.20.6 tsx --test tests/acp-session-load-once.test.ts
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { getReplayBuffers, loadSessionOnce } from '../lib/acp/runtimeState';
-import type { AgentProcess } from '../lib/acp/types';
+import { getReplayBuffers, loadSessionOnce, sendPromptAfterPrior } from '../lib/acp/runtimeState';
+import type { AgentProcess, TurnState } from '../lib/acp/types';
 
 function fakeProc(fail = false) {
   const calls: string[] = [];
@@ -79,4 +79,65 @@ test('after an agent restart, a new load does not join the load pending on the d
   await stale;
   assert.equal(proc.knownSessions.has('s3'), false);
   assert.equal(proc.loadingSessions?.has('s3'), false);
+});
+
+// sendPromptAfterPrior: a prompt sent right after an interrupt must wait for
+// the cancelled one to be answered, otherwise the agent's late "Operation
+// cancelled" chunk is credited to the new reply.
+function promptProc() {
+  const sent: string[] = [];
+  const answers = new Map<string, () => void>();
+  const proc = {
+    knownSessions: new Set<string>(),
+    rpc: {
+      send: (_method: string, params: { prompt: string[] }) => new Promise((resolve) => {
+        sent.push(params.prompt[0]);
+        answers.set(params.prompt[0], () => resolve({ stopReason: 'end_turn' }));
+      }),
+    },
+  } as unknown as AgentProcess;
+  return { proc, sent, answers };
+}
+const promptTurn = (sessionId: string) => ({ sessionId, done: false, statusText: 'Thinking' }) as TurnState;
+const tick = () => new Promise((r) => setTimeout(r, 5));
+
+test('the next prompt on a session is held, and its updates dropped, until the prior one is answered', async () => {
+  const { proc, sent, answers } = promptProc();
+  const first = sendPromptAfterPrior(proc, promptTurn('p1'), ['first'], 60_000);
+  const next = promptTurn('p1');
+  const second = sendPromptAfterPrior(proc, next, ['second'], 60_000);
+  const other = sendPromptAfterPrior(proc, promptTurn('p2'), ['other'], 60_000);
+  await tick();
+  assert.deepEqual(sent, ['first', 'other']);
+  assert.equal(next.awaitingPrior, true);
+  answers.get('first')!();
+  await first;
+  await tick();
+  assert.deepEqual(sent, ['first', 'other', 'second']);
+  assert.equal(next.awaitingPrior, false);
+  answers.get('second')!();
+  answers.get('other')!();
+  await Promise.all([second, other]);
+});
+
+test('a turn interrupted while waiting is never sent; a hung or pre-restart prior is not waited on for good', async () => {
+  const { proc, sent } = promptProc();
+  void sendPromptAfterPrior(proc, promptTurn('p3'), ['hung'], 20);
+  const interrupted = promptTurn('p3');
+  const skipped = sendPromptAfterPrior(proc, interrupted, ['skipped'], 20);
+  Object.assign(interrupted, { done: true, statusText: 'Interrupted' });
+  assert.deepEqual(await skipped, { stopReason: 'cancelled' });
+  assert.equal(interrupted.statusText, 'Interrupted');
+  const capped = promptTurn('p3');
+  void sendPromptAfterPrior(proc, capped, ['capped'], 20);
+  await new Promise((r) => setTimeout(r, 40));
+  assert.deepEqual(sent, ['hung', 'capped']);
+  assert.equal(capped.awaitingPrior, false);
+  // After an agent restart, prompts pending on the dead connection are ignored.
+  const restarted = promptProc();
+  (proc as { rpc: unknown }).rpc = restarted.proc.rpc;
+  void sendPromptAfterPrior(proc, promptTurn('p3'), ['fresh'], 60_000);
+  await tick();
+  assert.deepEqual(restarted.sent, ['fresh']);
+  restarted.answers.get('fresh')!();
 });

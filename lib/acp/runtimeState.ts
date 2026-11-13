@@ -107,6 +107,51 @@ export function loadSessionOnce(
   return promise;
 }
 
+/**
+ * Resolves once the session's previous session/prompt on this connection is
+ * answered (or after maxWaitMs), or returns null when none is pending. A
+ * cancelled prompt can take seconds to unwind; until it does, its late
+ * updates are indistinguishable from the next prompt's, so callers hold the
+ * next prompt (and its updates) back until then.
+ */
+export function waitForPriorPrompt(proc: AgentProcess, sessionId: string | null | undefined, maxWaitMs: number): Promise<void> | null {
+  const prior = sessionId ? proc.promptsInFlight?.get(sessionId) : undefined;
+  if (!prior || prior.rpc !== proc.rpc) return null;
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, maxWaitMs);
+    void prior.promise.then(() => { clearTimeout(timer); resolve(); });
+  });
+}
+
+/** Records `settled` as the session's in-flight prompt until it resolves or rejects. */
+export function trackPromptInFlight(proc: AgentProcess, sessionId: string | null | undefined, settled: Promise<unknown>): void {
+  if (!sessionId) return;
+  const inFlight = proc.promptsInFlight ??= new Map();
+  const promise = settled.then(() => undefined, () => undefined);
+  inFlight.set(sessionId, { rpc: proc.rpc, promise });
+  void promise.then(() => {
+    if (inFlight.get(sessionId)?.promise === promise) inFlight.delete(sessionId);
+  });
+}
+
+/**
+ * Sends the turn's session/prompt once the session's previous prompt is
+ * answered, dropping the turn's updates meanwhile (`awaitingPrior`). A turn
+ * interrupted while waiting is never sent.
+ */
+export function sendPromptAfterPrior(proc: AgentProcess, turn: TurnState, prompt: unknown[], maxWaitMs: number): Promise<Record<string, unknown> | undefined> {
+  const prior = waitForPriorPrompt(proc, turn.sessionId, maxWaitMs);
+  if (prior) Object.assign(turn, { awaitingPrior: true, statusText: 'Stopping the previous reply' });
+  const answered = (prior ?? Promise.resolve()).then(() => {
+    if (turn.awaitingPrior) Object.assign(turn, { awaitingPrior: false, statusText: turn.done ? turn.statusText : 'Thinking' });
+    if (turn.done) return { stopReason: 'cancelled' };
+    if (!proc.rpc) throw new Error('Agent process not ready');
+    return proc.rpc.send('session/prompt', { sessionId: turn.sessionId, prompt });
+  });
+  trackPromptInFlight(proc, turn.sessionId, answered);
+  return answered;
+}
+
 export function userSessionKey(agentId: string, userId: string): string {
   return `${agentId}:${userId}`;
 }
