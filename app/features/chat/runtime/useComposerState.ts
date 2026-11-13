@@ -7,6 +7,39 @@ import { filesToAttachments } from '../../composer/attachmentHelpers';
 import { STORAGE_CHAT_INPUT } from './sessionPersistence';
 
 const TYPING_IDLE_MS = 1000;
+const COMPOSER_MIN_HEIGHT = 28;
+const COMPOSER_MAX_HEIGHT = 300;
+const MIRRORED_TEXTAREA_STYLES = [
+  'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+  'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderStyle',
+  'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'fontVariant', 'fontStretch',
+  'letterSpacing', 'wordSpacing', 'lineHeight', 'textTransform', 'textIndent', 'tabSize',
+  'whiteSpace', 'wordBreak', 'overflowWrap', 'direction',
+] as const;
+let measureTextarea: HTMLTextAreaElement | null = null;
+
+function measureTextareaContentHeight(el: HTMLTextAreaElement, width: number): number {
+  if (!measureTextarea || !measureTextarea.isConnected) {
+    measureTextarea = document.createElement('textarea');
+    measureTextarea.setAttribute('aria-hidden', 'true');
+    measureTextarea.tabIndex = -1;
+    measureTextarea.rows = 1;
+    Object.assign(measureTextarea.style, {
+      position: 'absolute', top: '0', left: '-10000px', visibility: 'hidden',
+      boxSizing: 'border-box',
+      pointerEvents: 'none', height: '0px', minHeight: '0', maxHeight: 'none',
+      overflow: 'hidden', resize: 'none',
+    });
+    document.body.appendChild(measureTextarea);
+  }
+  const computed = getComputedStyle(el);
+  for (const prop of MIRRORED_TEXTAREA_STYLES) measureTextarea.style[prop] = computed[prop];
+  measureTextarea.style.width = `${width}px`;
+  // Chrome includes placeholder text in scrollHeight; mirror it to match the live textarea.
+  measureTextarea.placeholder = el.placeholder;
+  measureTextarea.value = el.value;
+  return measureTextarea.scrollHeight;
+}
 
 export function useComposerState() {
   const [input, setInput] = useState('');
@@ -28,19 +61,16 @@ export function useComposerState() {
   const resizeComposer = useCallback(() => {
     const el = composerRef.current;
     if (!el) return;
-    const row = el.parentElement;
-    const minHeight = row?.style.minHeight ?? '';
-    // Measuring must not expand the chat viewport and clamp its scroll offset.
-    if (row) row.style.minHeight = `${row.getBoundingClientRect().height}px`;
-    try {
-      el.style.height = '0px';
-      el.style.overflowY = 'hidden';
-      const next = Math.min(Math.max(el.scrollHeight, 28), 300);
-      el.style.height = `${next}px`;
-      if (el.scrollHeight > 300) el.style.overflowY = 'auto';
-    } finally {
-      if (row) row.style.minHeight = minHeight;
-    }
+    // Collapsing the live textarea to measure it moves the caret out of view, so
+    // iOS scrolls the visual viewport on every keystroke. Measure a mirror instead.
+    const width = el.getBoundingClientRect().width;
+    // A hidden composer has no width; measuring then would wrap every character to max height.
+    if (!width && el.value) return;
+    const contentHeight = width ? measureTextareaContentHeight(el, width) : COMPOSER_MIN_HEIGHT;
+    const next = `${Math.min(Math.max(contentHeight, COMPOSER_MIN_HEIGHT), COMPOSER_MAX_HEIGHT)}px`;
+    const overflowY = contentHeight > COMPOSER_MAX_HEIGHT ? 'auto' : 'hidden';
+    if (el.style.height !== next) el.style.height = next;
+    if (el.style.overflowY !== overflowY) el.style.overflowY = overflowY;
   }, []);
 
   const setInputProgrammatic = useCallback((value: string) => {
