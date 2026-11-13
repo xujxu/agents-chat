@@ -25,7 +25,7 @@ import { withReplyGuidelinesOnce } from '@/lib/acp/replyGuidelines';
 import { createNdjsonRpc, createRelayNdjsonRpc } from '@/lib/acp/rpc';
 import { getTerminals, handleTerminalCreate, handleTerminalKill, handleTerminalOutput, handleTerminalRelease, handleTerminalWaitForExit } from '@/lib/acp/terminalTools';
 import { handleReadTextFile, handleWriteTextFile } from '@/lib/acp/fsTools';
-import { cleanupStaleSessions, getAgentProcess, getAgentProcesses, getBootPromises, getPendingUserRequestResponders, getReplayBuffers, getStoppedAgents, getUserSession, getUserSessions, loadSessionOnce, pendingUserRequestResponders, PENDING_USER_REQUEST_TIMEOUT_MS, userSessionKey, type PendingUserRequestResponder } from '@/lib/acp/runtimeState';
+import { cleanupStaleSessions, getAgentProcess, getAgentProcesses, getBootPromises, getPendingUserRequestResponders, getReplayBuffers, getStoppedAgents, getUserSession, getUserSessions, loadSessionOnce, pendingUserRequestResponders, PENDING_USER_REQUEST_TIMEOUT_MS, sendPromptAfterPrior, userSessionKey, type PendingUserRequestResponder } from '@/lib/acp/runtimeState';
 import { getAgentProcessState, isHeldStopped, settlesWithin, stopAgentRuntime as stopAgentRuntimeWith } from '@/lib/acp/processControl';
 import { applySessionModelIfRequested, normalizeSessionModels, syncAgentModelsFromSessionResult, validateRequestedModel } from '@/lib/acp/models';
 import { createLogger } from '@/lib/logger';
@@ -456,7 +456,7 @@ async function doBootAgent(agentId: string): Promise<void> {
       const turn = notifSessionId
         ? findTurnBySessionId(agentId, notifSessionId)
         : undefined;
-      if (!turn || turn.done) return;
+      if (!turn || turn.done || turn.awaitingPrior) return;
 
       if (kind === 'agent_message_chunk' && update.content?.type === 'text') {
         turn.fullText += update.content.text;
@@ -950,11 +950,8 @@ function sendPrompt(proc: AgentProcess, sess: UserSession, agentId: string, prom
   sess.phase = 'busy';
   sess.turnCount++;
 
-  turn.settled = proc.rpc!
-    .send('session/prompt', {
-      sessionId: sess.sessionId,
-      prompt: promptParts,
-    })
+  // An interrupted prompt may still be unwinding; its late updates must not be credited to this turn.
+  turn.settled = sendPromptAfterPrior(proc, turn, promptParts, PRIOR_PROMPT_SETTLE_TIMEOUT_MS)
     .then(async (result: Record<string, unknown> | undefined) => {
       const stopReason = result?.stopReason ?? 'unknown';
       const elapsed = ((Date.now() - turn.startedAt) / 1000).toFixed(1);
@@ -1228,13 +1225,10 @@ function buildAbandonedUserRequestResponse(request: PendingUserRequest): Record<
 
 async function cancelTurnPrompt(proc: AgentProcess, turn: TurnState): Promise<void> {
   if (turn.done || !turn.sessionId || !proc.rpc) return;
+  // ACP defines session/cancel as a notification: there is no reply to wait for.
   try {
-    await proc.rpc.send('session/cancel', { sessionId: turn.sessionId }, 5000);
-  } catch {
-    try {
-      proc.rpc.writeRaw(JSON.stringify({ jsonrpc: '2.0', method: 'session/cancel', params: { sessionId: turn.sessionId } }));
-    } catch { /* ignore */ }
-  }
+    proc.rpc.writeRaw(JSON.stringify({ jsonrpc: '2.0', method: 'session/cancel', params: { sessionId: turn.sessionId } }));
+  } catch { /* ignore */ }
 }
 
 function clearPendingUserRequestForTurn(turn: TurnState, reason: string, requestOverride?: PendingUserRequest): void {
@@ -1715,7 +1709,7 @@ async function startChatTurnUnmarked(proc: AgentProcess, sess: UserSession, agen
 }
 
 const FOLLOWUP_DISPATCH_DELAY_MS = 3000;
-const INTERRUPT_SETTLE_TIMEOUT_MS = 10_000;
+const PRIOR_PROMPT_SETTLE_TIMEOUT_MS = 30_000;
 const dispatchingFollowups = new Set<string>();
 const scheduledFollowups = new Set<string>();
 
@@ -2407,9 +2401,8 @@ export async function POST(req: NextRequest) {
         turn.done = true;
         turn.phase = 'done';
         turn.statusText = 'Interrupted';
-        // Agents reject a new prompt on a session that is still unwinding the cancelled one.
-        if (turn.settled) await Promise.race([turn.settled.catch(() => undefined), new Promise(resolve => setTimeout(resolve, INTERRUPT_SETTLE_TIMEOUT_MS))]);
       }
+      // sendPrompt holds the follow-up until the cancelled prompt unwinds, so this returns at once.
       const result = await dispatchQueuedFollowups(proc, sess, agentId, userId, isAdmin, chatId);
       if ('error' in result) return NextResponse.json({ ok: false, error: result.error }, { status: result.status });
       return NextResponse.json({ ok: true, turn: serializeTurn(result.turn ?? null) });

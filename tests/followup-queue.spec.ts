@@ -94,3 +94,29 @@ test('interrupt & send now waits for the cancelled turn before sending the queue
     await deleteAgent(api, agentId);
   }
 });
+
+test('interrupt & send now shows the follow-up at once and keeps the slow cancel out of its reply', async ({ page }) => {
+  test.setTimeout(120_000);
+  await login(page);
+  const api = page.context().request;
+  // Like Copilot CLI: a cancel takes a while to unwind, and a prompt sent meanwhile is held, not rejected.
+  const agentId = await createSlowAgent(api, { SLOW_AGENT_DELAY_MS: '20000', SLOW_AGENT_CANCEL_DELAY_MS: '12000', SLOW_AGENT_QUEUE_OVERLAP: '1' });
+
+  try {
+    const textarea = await startBusyChat(page, agentId);
+    const tray = page.locator('.followupTray');
+    const chatArea = page.locator('.chatContainer');
+    await textarea.fill('queued-item-1 fix the cursor');
+    await textarea.press('Enter');
+    await expect(tray.locator('.followupItem')).toHaveCount(1);
+
+    await tray.getByRole('button', { name: 'Interrupt & send now' }).click();
+    await expect(chatArea.locator('.message.user', { hasText: 'queued-item-1 fix the cursor' })).toBeVisible({ timeout: 6_000 });
+    const reply = chatArea.locator('.message.agent', { hasText: 'Turn 2 done; saw 1 queued items' });
+    await expect(reply).toBeVisible({ timeout: 60_000 });
+    await expect(reply).not.toContainText('cancelled');
+    await expect(chatArea).not.toContainText('Turn 1 cancelled');
+  } finally {
+    await deleteAgent(api, agentId);
+  }
+});
