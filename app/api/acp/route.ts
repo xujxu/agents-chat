@@ -156,7 +156,8 @@ function findTurnBySessionId(agentId: string, sessionId: string): TurnState | un
   for (const [key, sess] of getUserSessions().entries()) {
     if (!key.startsWith(`${agentId}:`)) continue;
     for (const turn of sess.activeTurns.values()) {
-      if (!turn.done && turn.agentId === agentId && turn.sessionId === sessionId) return turn;
+      // A turn awaiting the session's cancelled prompt must not receive that prompt's late updates or requests.
+      if (!turn.done && !turn.awaitingPrior && turn.agentId === agentId && turn.sessionId === sessionId) return turn;
     }
   }
 
@@ -456,7 +457,7 @@ async function doBootAgent(agentId: string): Promise<void> {
       const turn = notifSessionId
         ? findTurnBySessionId(agentId, notifSessionId)
         : undefined;
-      if (!turn || turn.done || turn.awaitingPrior) return;
+      if (!turn || turn.done) return;
 
       if (kind === 'agent_message_chunk' && update.content?.type === 'text') {
         turn.fullText += update.content.text;
@@ -1009,10 +1010,7 @@ function sendPrompt(proc: AgentProcess, sess: UserSession, agentId: string, prom
 
         await applySessionModelIfRequested(proc, sess.sessionId, requestedModelId);
 
-        const retryResult = await proc.rpc!.send('session/prompt', {
-          sessionId: sess.sessionId,
-          prompt: buildPromptParts(withReplyGuidelinesOnce(sess.sessionId, retryText), attachments),
-        });
+        const retryResult = await sendPromptAfterPrior(proc, turn, buildPromptParts(withReplyGuidelinesOnce(sess.sessionId, retryText), attachments), PRIOR_PROMPT_SETTLE_TIMEOUT_MS);
         const stopReason = retryResult?.stopReason ?? 'unknown';
         const elapsed = ((Date.now() - turn.startedAt) / 1000).toFixed(1);
         log(`[ACP:${agentId}] retry prompt done: reason=${stopReason}, ${elapsed}s`);
@@ -1078,7 +1076,7 @@ function findSingleActiveTurnForAgent(agentId: string): TurnState | null {
     if (!key.startsWith(`${agentId}:`)) continue;
     for (const turn of sess.activeTurns.values()) {
       if (turn.agentId !== agentId || turn.done) continue;
-      if (candidate) return null;
+      if (candidate || turn.awaitingPrior) return null;
       candidate = turn;
     }
   }
@@ -1474,11 +1472,7 @@ function continueTurnWithPrompt(proc: AgentProcess, sess: UserSession, turn: Tur
     return;
   }
 
-  proc.rpc
-    .send('session/prompt', {
-      sessionId: turn.sessionId,
-      prompt: [{ type: 'text', text: prompt }],
-    })
+  sendPromptAfterPrior(proc, turn, [{ type: 'text', text: prompt }], PRIOR_PROMPT_SETTLE_TIMEOUT_MS)
     .then(async (result: Record<string, unknown> | undefined) => {
       if (!turn.done) {
         finishTurnAfterPromptResult(turn, result);

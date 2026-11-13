@@ -12,8 +12,7 @@ const cancelDelayMs = Number(process.env.SLOW_AGENT_CANCEL_DELAY_MS || 0);
 const queueOverlap = process.env.SLOW_AGENT_QUEUE_OVERLAP === '1';
 const held = [];
 const input = createInterface({ input: process.stdin });
-const write = message => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}
-`);
+const write = message => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`);
 const busy = new Map();
 let turns = 0;
 let rejected = 0;
