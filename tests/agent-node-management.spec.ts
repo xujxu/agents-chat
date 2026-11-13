@@ -76,6 +76,7 @@ async function installIsolatedBackend(page: Page) {
     }],
   ]);
   const access = new Map<string, AccessEntry[]>();
+  const processStates = new Map<string, { processState: 'running' | 'starting' | 'stopped'; processError: string | null }>();
   const acpRequests: Record<string, any>[] = [];
   const nodeRequests: Record<string, any>[] = [];
   const chat = {
@@ -142,8 +143,14 @@ async function installIsolatedBackend(page: Page) {
       await route.fulfill({
         status: agent ? 200 : 404,
         contentType: 'application/json',
-        body: JSON.stringify(agent ? { ok: true, agent } : { ok: false, error: 'agent_not_found' }),
+        body: JSON.stringify(agent ? { ok: true, agent, ...processStates.get(agent.id) } : { ok: false, error: 'agent_not_found' }),
       });
+      return;
+    }
+    if ((body.action === 'stop-agent' || body.action === 'restart-agent') && agentId) {
+      const wasRunning = processStates.get(agentId)?.processState !== 'stopped';
+      processStates.set(agentId, { processState: body.action === 'stop-agent' ? 'stopped' : 'running', processError: null });
+      await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, wasRunning, settled: true, ...processStates.get(agentId) }) });
       return;
     }
     if (body.action === 'update-agent-config' && agentId) {
@@ -249,7 +256,7 @@ async function installIsolatedBackend(page: Page) {
     await route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'unknown action' }) });
   });
 
-  return { agents, nodes, access, acpRequests, nodeRequests };
+  return { agents, nodes, access, processStates, acpRequests, nodeRequests };
 }
 
 async function login(page: Page) {
@@ -270,6 +277,46 @@ function settingsField(modal: Locator, name: string) {
 }
 
 test.describe('agent and node management', () => {
+  test('stops, starts and restarts an owned agent from its settings', async ({ page }) => {
+    const backend = await installIsolatedBackend(page);
+    backend.agents.set('owned-agent', {
+      id: 'owned-agent', name: 'Owned Agent', command: 'mock-copilot', args: ['--acp'], cwd: '/w', yolo: true, env: {},
+      owner: 'admin@local', canModify: true, canTalk: true, public: false, models: [],
+    });
+    backend.processStates.set('owned-agent', { processState: 'running', processError: null });
+    await login(page);
+    await openAgents(page);
+
+    await page.locator('.agentsSidebar .agentListItem', { hasText: 'Owned Agent' }).click();
+    const settings = page.locator('.agentSettingsModal', { hasText: 'Owned Agent' });
+    const status = settings.locator('.agentProcessState');
+    await expect(status).toHaveText('● Running');
+    await expect(settings.getByRole('button', { name: 'Start', exact: true })).toHaveCount(0);
+
+    // Stop warns that live replies end, and does nothing when dismissed.
+    let stopPrompt = '';
+    page.once('dialog', (dialog) => { stopPrompt = dialog.message(); void dialog.dismiss(); });
+    await settings.getByRole('button', { name: 'Stop', exact: true }).click();
+    expect(stopPrompt).toContain('Replies in progress for every user');
+    expect(backend.acpRequests.some((r) => r.action === 'stop-agent')).toBe(false);
+
+    page.once('dialog', (dialog) => dialog.accept());
+    await settings.getByRole('button', { name: 'Stop', exact: true }).click();
+    await expect(status).toHaveText('○ Stopped');
+    await expect(settings).toContainText('The next message to this agent starts it.');
+    await expect(page.locator('.chatToast', { hasText: 'Agent "Owned Agent" stopped' })).toBeVisible();
+
+    // Start needs no confirmation.
+    await settings.getByRole('button', { name: 'Start', exact: true }).click();
+    await expect(status).toHaveText('● Running');
+    await expect(page.locator('.chatToast', { hasText: 'Agent "Owned Agent" started' })).toBeVisible();
+
+    page.once('dialog', (dialog) => dialog.accept());
+    await settings.getByRole('button', { name: 'Restart', exact: true }).click();
+    await expect(page.locator('.chatToast', { hasText: 'Agent "Owned Agent" restarted' })).toBeVisible();
+    expect(backend.acpRequests.filter((r) => r.action === 'stop-agent' || r.action === 'restart-agent').map((r) => [r.action, r.agentId]))
+      .toEqual([['stop-agent', 'owned-agent'], ['restart-agent', 'owned-agent'], ['restart-agent', 'owned-agent']]);
+  });
   test('creates, edits permissions and environment, then deletes a local server agent', async ({ page }) => {
     const backend = await installIsolatedBackend(page);
     await login(page);

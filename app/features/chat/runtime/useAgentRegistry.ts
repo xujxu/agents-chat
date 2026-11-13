@@ -139,7 +139,7 @@ export function useAgentRegistry({ acp }: UseAgentRegistryParams) {
     setEnsuringAgentModels((prev) => ({ ...prev, [agentId]: true }));
     try {
       const data = await acp({ action: 'ensure-agent-models', agentId, chatId: currentChatId });
-      if (data.ok) {
+      if (data.ok && !data.stopped) {
         const models = Array.isArray(data.models) ? data.models : [];
         setAgents((current) => current.map((agent) => agent.id === agentId ? { ...agent, models } : agent));
         const storedPref = selectedAgentModels[agentId];
