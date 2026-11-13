@@ -410,6 +410,32 @@
   min-width: 120px;
 }
 
+/* A capped pill truncates its contents instead of letting them spill past the border;
+   the model name gives way well before the agent name. */
+.targetPillAgent {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modelTargetPill .agentModelSelectWrap {
+  flex: 0 4 auto;
+  min-width: 0;
+}
+
+.chatPageRoot .modelTargetPill .agentModelSelect,
+.chatPageRoot .modelTargetPill .agentModelSelectLabel {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.modelTargetPill .agentModelSelectCaret,
+.modelTargetPill .rememberedAgentRemove {
+  flex-shrink: 0;
+}
+
 .rememberedAgentPill {
   gap: 6px;
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
