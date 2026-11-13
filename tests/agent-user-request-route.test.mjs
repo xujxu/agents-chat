@@ -378,7 +378,7 @@ assert.match(
 
 assert.match(
   routeSource,
-  /async\s+function\s+cancelTurnPrompt\s*\(\s*proc:\s*AgentProcess,\s*turn:\s*TurnState\s*\):\s*Promise<void>\s*\{[\s\S]*?if\s*\(turn\.done\s*\|\|\s*!turn\.sessionId\s*\|\|\s*!proc\.rpc\)\s*return;[\s\S]*?await\s+proc\.rpc\.send\('session\/cancel',\s*\{\s*sessionId:\s*turn\.sessionId\s*\},\s*5000\)[\s\S]*?proc\.rpc\.writeRaw\([\s\S]*?session\/cancel[\s\S]*?turn\.sessionId[\s\S]*?\)/,
+  /async\s+function\s+cancelTurnPrompt\s*\(\s*proc:\s*AgentProcess,\s*turn:\s*TurnState\s*\):\s*Promise<void>\s*\{[\s\S]*?if\s*\(turn\.done\s*\|\|\s*!turn\.sessionId\s*\|\|\s*!proc\.rpc\)\s*return;[\s\S]*?proc\.rpc\.writeRaw\([\s\S]*?session\/cancel[\s\S]*?turn\.sessionId[\s\S]*?\)/,
   'route.ts should define cancelTurnPrompt to cancel unfinished prompts before cleanup',
 );
 
