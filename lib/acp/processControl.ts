@@ -1,5 +1,5 @@
-import type { UserSession } from '@/lib/acp/types';
-import { getAgentProcesses, getBootPromises, getUserSessions } from '@/lib/acp/runtimeState';
+import type { AgentProcess, UserSession } from '@/lib/acp/types';
+import { getAgentProcesses, getBootPromises, getStoppedAgents, getUserSessions } from '@/lib/acp/runtimeState';
 
 export type AgentProcessState = 'running' | 'starting' | 'stopped';
 export const AGENT_RESTART_WAIT_MS = 60_000;
@@ -8,6 +8,14 @@ export function getAgentProcessState(agentId: string): { processState: AgentProc
   const proc = getAgentProcesses().get(agentId);
   const processState: AgentProcessState = proc?.ready ? 'running' : proc?.booting ? 'starting' : 'stopped';
   return { processState, processError: processState === 'stopped' ? proc?.error ?? null : null };
+}
+
+/**
+ * True while an explicit Stop holds: only a sent message (or Start/Restart) boots the agent again,
+ * so opening a chat (resume-session) or model discovery must not.
+ */
+export function isHeldStopped(agentId: string, proc: Pick<AgentProcess, 'ready' | 'booting'> | undefined): boolean {
+  return !!proc && !proc.ready && !proc.booting && getStoppedAgents().has(agentId);
 }
 
 /**

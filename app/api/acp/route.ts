@@ -26,7 +26,7 @@ import { createNdjsonRpc, createRelayNdjsonRpc } from '@/lib/acp/rpc';
 import { getTerminals, handleTerminalCreate, handleTerminalKill, handleTerminalOutput, handleTerminalRelease, handleTerminalWaitForExit } from '@/lib/acp/terminalTools';
 import { handleReadTextFile, handleWriteTextFile } from '@/lib/acp/fsTools';
 import { cleanupStaleSessions, getAgentProcess, getAgentProcesses, getBootPromises, getPendingUserRequestResponders, getReplayBuffers, getStoppedAgents, getUserSession, getUserSessions, loadSessionOnce, pendingUserRequestResponders, PENDING_USER_REQUEST_TIMEOUT_MS, userSessionKey, type PendingUserRequestResponder } from '@/lib/acp/runtimeState';
-import { getAgentProcessState, settlesWithin, stopAgentRuntime as stopAgentRuntimeWith } from '@/lib/acp/processControl';
+import { getAgentProcessState, isHeldStopped, settlesWithin, stopAgentRuntime as stopAgentRuntimeWith } from '@/lib/acp/processControl';
 import { applySessionModelIfRequested, normalizeSessionModels, syncAgentModelsFromSessionResult, validateRequestedModel } from '@/lib/acp/models';
 import { createLogger } from '@/lib/logger';
 import { resolvePreparedPrompt } from '@/lib/acp/preparedPrompt';
@@ -2265,10 +2265,7 @@ export async function POST(req: NextRequest) {
       }
       const chatId = body?.chatId as string | undefined;
       if (!chatId) return NextResponse.json({ ok: false, error: 'missing_chatId' }, { status: 400 });
-      // Model discovery runs when a chat opens; it must not undo an explicit Stop.
-      if (!proc.ready && !proc.booting && getStoppedAgents().has(agentId)) {
-        return NextResponse.json({ ok: true, models: [], stopped: true });
-      }
+      if (isHeldStopped(agentId, proc)) return NextResponse.json({ ok: true, models: [], stopped: true });
       if (!proc.ready) {
         if (!proc.booting) {
           await bootAgent(agentId);
@@ -2589,6 +2586,10 @@ export async function POST(req: NextRequest) {
       }
       if (findActiveTurnKeyForSession(sess, savedSessionId, turnChatKey)) {
         return NextResponse.json({ ok: false, error: 'turn_in_progress' }, { status: 409 });
+      }
+      if (isHeldStopped(agentId, proc)) {
+        if (chatId) await reconcileStalePendingMessagesForAgent(userId, chatId, agentId);
+        return NextResponse.json({ ok: true, sessionId: savedSessionId, loaded: false, stopped: true, activeTurn: serializeTurn(getActiveTurnForResume(chatTurn, savedSessionId)) });
       }
       if (!proc.ready || !proc.rpc) {
         // Agent not running — boot it first

@@ -22,6 +22,10 @@ test('stop ends a live reply and start resumes the chat', async ({ page }) => {
 
     const warm = await acp({ action: 'warm-local-agents' });
     expect(warm.agents.find((agent: { agentId: string }) => agent.agentId === agentId)).toMatchObject({ status: 'skipped_stopped' });
+    // Reopening the chat resumes its saved session; that must not boot a stopped agent.
+    await page.reload();
+    await expect(page.locator('.message.agent').last()).toContainText('Agent stopped', { timeout: 15_000 });
+    expect(await acp({ action: 'resume-session', sessionId: 'saved-session' })).toMatchObject({ ok: true, loaded: false, stopped: true });
     expect(await acp({ action: 'get-agent-config' })).toMatchObject({ processState: 'stopped' });
 
     // Not running, so this saves without a restart.
