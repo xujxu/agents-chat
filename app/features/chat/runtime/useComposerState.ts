@@ -18,7 +18,7 @@ const MIRRORED_TEXTAREA_STYLES = [
 ] as const;
 let measureTextarea: HTMLTextAreaElement | null = null;
 
-function measureTextareaContentHeight(el: HTMLTextAreaElement): number {
+function measureTextareaContentHeight(el: HTMLTextAreaElement, width: number): number {
   if (!measureTextarea || !measureTextarea.isConnected) {
     measureTextarea = document.createElement('textarea');
     measureTextarea.setAttribute('aria-hidden', 'true');
@@ -34,7 +34,9 @@ function measureTextareaContentHeight(el: HTMLTextAreaElement): number {
   }
   const computed = getComputedStyle(el);
   for (const prop of MIRRORED_TEXTAREA_STYLES) measureTextarea.style[prop] = computed[prop];
-  measureTextarea.style.width = `${el.getBoundingClientRect().width}px`;
+  measureTextarea.style.width = `${width}px`;
+  // Chrome includes placeholder text in scrollHeight; mirror it to match the live textarea.
+  measureTextarea.placeholder = el.placeholder;
   measureTextarea.value = el.value;
   return measureTextarea.scrollHeight;
 }
@@ -61,7 +63,10 @@ export function useComposerState() {
     if (!el) return;
     // Collapsing the live textarea to measure it moves the caret out of view, so
     // iOS scrolls the visual viewport on every keystroke. Measure a mirror instead.
-    const contentHeight = measureTextareaContentHeight(el);
+    const width = el.getBoundingClientRect().width;
+    // A hidden composer has no width; measuring then would wrap every character to max height.
+    if (!width && el.value) return;
+    const contentHeight = width ? measureTextareaContentHeight(el, width) : COMPOSER_MIN_HEIGHT;
     const next = `${Math.min(Math.max(contentHeight, COMPOSER_MIN_HEIGHT), COMPOSER_MAX_HEIGHT)}px`;
     const overflowY = contentHeight > COMPOSER_MAX_HEIGHT ? 'auto' : 'hidden';
     if (el.style.height !== next) el.style.height = next;
