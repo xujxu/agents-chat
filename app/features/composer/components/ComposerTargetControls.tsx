@@ -68,7 +68,7 @@ export function ComposerTargetControls({
       <div className="targetPills">
         {mentionedAgentIds.map((agentId) => (
           <span key={agentId} className="targetPill modelTargetPill">
-            <span>@{agentId}</span>{modelSelect(agentId)}
+            <span className="targetPillAgent" title={`@${agentId}`}>@{agentId}</span>{modelSelect(agentId)}
           </span>
         ))}
         {orchestrationEnabled && (
@@ -88,7 +88,7 @@ export function ComposerTargetControls({
   return (
     <div className="targetPills">
       <span className="targetPill rememberedAgentPill modelTargetPill">
-        <span>@{effectiveComposerAgentId}</span>{modelSelect(effectiveComposerAgentId)}
+        <span className="targetPillAgent" title={`@${effectiveComposerAgentId}`}>@{effectiveComposerAgentId}</span>{modelSelect(effectiveComposerAgentId)}
         {rememberedComposerAgentId ? (
           <button
             type="button"

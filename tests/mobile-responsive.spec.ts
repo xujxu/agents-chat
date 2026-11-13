@@ -3,6 +3,7 @@ import { settleChatLayout } from './helpers/chatLayout';
 import {
   installMobileChatFixture,
   loginMobileFixture,
+  TEST_AGENT,
   type MobileFixture,
 } from './helpers/mobileChatFixture';
 import {
@@ -134,6 +135,36 @@ test('composer controls share a compact height on mobile and desktop', async ({ 
         expect(Math.abs(box!.y - sendBox!.y)).toBeLessThanOrEqual(1);
       }
     }
+  }
+});
+
+test('long agent and model names stay inside their composer pill on phones', async ({ page }) => {
+  fixture.agents.set('custconnstarter', {
+    ...TEST_AGENT,
+    id: 'custconnstarter',
+    name: 'Customer Connector Starter',
+    models: [{ modelId: 'claude-sonnet-5.5', name: 'Claude Sonnet 5.5 (1M context)' }],
+    defaultModelId: 'claude-sonnet-5.5',
+  });
+  await page.reload();
+  const textarea = page.locator('textarea.composerTextarea');
+  const pill = page.locator('.modelTargetPill');
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await setTestVisualViewport(page, 844, 0);
+    await textarea.fill('@custconnstarter does this support Linux?');
+    await expect(pill.getByRole('button', { name: 'Model for custconnstarter' })).toBeVisible();
+    const layout = await pill.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const label = element.querySelector('.agentModelSelectLabel') as HTMLElement;
+      const overflow = Array.from(element.querySelectorAll('*'))
+        .map((child) => child.getBoundingClientRect())
+        .filter((rect) => rect.width > 0)
+        .map((rect) => Math.max(box.left - rect.left, rect.right - box.right));
+      return { overflow: Math.max(...overflow), truncated: label.scrollWidth > label.clientWidth };
+    });
+    expect(layout.overflow).toBeLessThanOrEqual(0.5);
+    expect(layout.truncated).toBe(true);
   }
 });
 
