@@ -17,6 +17,31 @@ export function killProcessTree(cp: ChildProcess): void {
     });
     return;
   }
+  if (cp.pid && cp.exitCode === null) {
+    // `sh -c` does not always exec the command, so the agent can be a grandchild.
+    // Collect descendants while the shell is still alive, then signal them all.
+    const rootPid = cp.pid;
+    execFile('ps', ['-A', '-o', 'pid=,ppid='], (err, stdout) => {
+      const pids: number[] = [];
+      if (!err) {
+        const children = new Map<number, number[]>();
+        for (const line of stdout.split('\n')) {
+          const [pid, ppid] = line.trim().split(/\s+/).map(Number);
+          if (!pid || Number.isNaN(ppid)) continue;
+          children.set(ppid, [...(children.get(ppid) ?? []), pid]);
+        }
+        const queue = [rootPid];
+        while (queue.length) {
+          for (const child of children.get(queue.shift()!) ?? []) { pids.push(child); queue.push(child); }
+        }
+      } else {
+        logger.debug({ pid: rootPid, err: err.message }, '[ACP] ps failed; killing only the direct child');
+      }
+      try { cp.kill(); } catch { /* ignore */ }
+      for (const pid of pids) { try { process.kill(pid, 'SIGTERM'); } catch { /* already gone */ } }
+    });
+    return;
+  }
   try { cp.kill(); } catch { /* ignore */ }
 }
 

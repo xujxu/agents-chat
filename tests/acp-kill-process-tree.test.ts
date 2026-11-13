@@ -1,5 +1,5 @@
-// killProcessTree (lib/acp/rpc.ts): agents are spawned with `shell: true`, so on
-// Windows a plain cp.kill() only ends cmd.exe and leaves the agent running.
+// killProcessTree (lib/acp/rpc.ts): agents are spawned with `shell: true`, so a plain
+// cp.kill() only ends cmd.exe / sh and can leave the agent running.
 // Stopping/restarting an agent must end the agent process itself.
 // Locally: npx --yes --package=tsx@4.20.6 tsx --test tests/acp-kill-process-tree.test.ts
 import assert from 'node:assert/strict';
