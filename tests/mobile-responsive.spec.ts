@@ -138,7 +138,7 @@ test('composer controls share a compact height on mobile and desktop', async ({ 
   }
 });
 
-test('long agent and model names stay inside their composer pill on phones', async ({ page }) => {
+test('long agent and model names stay inside their composer pill on phones and desktop', async ({ page }) => {
   fixture.agents.set('custconnstarter', {
     ...TEST_AGENT,
     id: 'custconnstarter',
@@ -149,7 +149,7 @@ test('long agent and model names stay inside their composer pill on phones', asy
   await page.reload();
   const textarea = page.locator('textarea.composerTextarea');
   const pill = page.locator('.modelTargetPill');
-  for (const width of [320, 390]) {
+  for (const width of [320, 390, 1280]) {
     await page.setViewportSize({ width, height: 844 });
     await setTestVisualViewport(page, 844, 0);
     await textarea.fill('@custconnstarter does this support Linux?');
@@ -164,7 +164,7 @@ test('long agent and model names stay inside their composer pill on phones', asy
       return { overflow: Math.max(...overflow), truncated: label.scrollWidth > label.clientWidth };
     });
     expect(layout.overflow).toBeLessThanOrEqual(0.5);
-    expect(layout.truncated).toBe(true);
+    if (width < 1000) expect(layout.truncated).toBe(true);
   }
 });
 
