@@ -1945,9 +1945,9 @@ export async function POST(req: NextRequest) {
         try {
           const probeParams: any = { cwd: config.cwd || process.cwd(), mcpServers: [] };
           const probe = await proc.rpc.send('session/new', probeParams);
-          // Best-effort cleanup; ignore errors — many agents don't implement session/cancel.
+          // Best-effort cleanup. session/cancel is a notification; agents never reply, so don't wait.
           if (probe?.sessionId) {
-            try { await proc.rpc.send('session/cancel', { sessionId: probe.sessionId }); } catch { /* ignore */ }
+            try { proc.rpc.writeRaw(JSON.stringify({ jsonrpc: '2.0', method: 'session/cancel', params: { sessionId: probe.sessionId } })); } catch { /* ignore */ }
           }
         } catch (probeErr) {
           probeError = probeErr;
