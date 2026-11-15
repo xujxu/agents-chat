@@ -1056,9 +1056,17 @@ function serializeTurn(turn: TurnState | null, sinceEvent?: number) {
     statusText: turn.statusText,
     error: turn.error,
     events,
+    eventsFrom: sinceEvent ?? 0,
     userRequest: turn.userRequest,
     totalEvents: turn.events.length,
   };
+}
+
+/** Pollers that already hold this turn's first N events get only the rest; anything else gets them all. */
+function pollEventCursor(turn: TurnState | undefined, body: Record<string, unknown> | undefined): number | undefined {
+  const since = body?.sinceEvent;
+  if (!turn || body?.turnId !== turn.id || !Number.isInteger(since)) return undefined;
+  return (since as number) >= 0 && (since as number) <= turn.events.length ? since as number : undefined;
 }
 
 function createUserRequestId(agentId: string, rpcRequestId: number | string): string {
@@ -2405,13 +2413,14 @@ export async function POST(req: NextRequest) {
     if (action === 'poll') {
       const chatId = body?.chatId as string | undefined;
       const turnChatKey = chatId || '__default';
+      const activeTurn = sess.activeTurns.get(turnChatKey);
       return NextResponse.json({
         ok: true,
         phase: sess.sessionId ? sess.phase : (proc.booting ? 'booting' : (proc.ready ? 'idle' : 'idle')),
         ready: proc.ready,
         booting: proc.booting,
         sessionId: sess.sessionId,
-        activeTurn: serializeTurn(sess.activeTurns.get(turnChatKey) ?? null),
+        activeTurn: serializeTurn(activeTurn ?? null, pollEventCursor(activeTurn, body)),
       });
     }
 
