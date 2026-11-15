@@ -7,7 +7,7 @@ const mobileSpecs = [
   '**/followup-queue-mobile.spec.ts',
 ];
 const typographySpecs = ['**/markdown-typography.spec.ts'];
-const readingSpecs = ['**/chat-reading-anchor.spec.ts'];
+const readingSpecs = ['**/chat-reading-anchor.spec.ts', '**/message-window.spec.ts'];
 const persistenceSpecs = ['**/chat-persistence.spec.ts', '**/chat-outbox.spec.ts'];
 
 export default defineConfig({

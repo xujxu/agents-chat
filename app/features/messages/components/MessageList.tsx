@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import type { Agent } from '../../agents/agentTypes';
 import type { ChatMessage, AgentUserRequestResponse } from '../../chat/chatTypes';
 import { useStableCallback } from '../../chat/hooks/useStableCallback';
 import type { FailedSendByMessageId } from '../messageTypes';
 import { MessageBubble, getMessageCopyText } from './MessageBubble';
 import { ChatWelcome } from './ChatWelcome';
+import { MESSAGE_WINDOW_STEP, resolveMessageWindowStart } from '../messageWindow';
 
 export function MessageList({
   messages,
@@ -74,6 +76,70 @@ export function MessageList({
   }, [messages]);
 
   const chatMessages = useMemo(() => messages.filter((message) => message.type !== 'system'), [messages]);
+
+  // Long chats mount only the newest messages first; older ones are added when the reader
+  // scrolls near the top or asks for them. The window start is a message id, so new replies
+  // extend the window instead of pushing rendered messages out, and it belongs to the chat
+  // whose first message is `firstId`, so switching chats resets it.
+  const [messageWindow, setMessageWindow] = useState<{ firstId: string; startId: string | null } | null>(null);
+  const firstId = chatMessages[0]?.id ?? '';
+  const startIndex = resolveMessageWindowStart(chatMessages, messageWindow?.firstId === firstId ? messageWindow.startId : undefined);
+  const resolvedStartId = startIndex > 0 ? chatMessages[startIndex].id : null;
+  if (firstId && (messageWindow?.firstId !== firstId || messageWindow.startId !== resolvedStartId)) {
+    setMessageWindow({ firstId, startId: resolvedStartId });
+  }
+  const visibleMessages = useMemo(
+    () => startIndex > 0 ? chatMessages.slice(startIndex) : chatMessages,
+    [chatMessages, startIndex],
+  );
+  const olderBarRef = useRef<HTMLDivElement | null>(null);
+  const prependRef = useRef<{ container: HTMLElement; top: number; height: number } | null>(null);
+  const startIndexRef = useRef(startIndex);
+  startIndexRef.current = startIndex;
+  const chatMessagesRef = useRef(chatMessages);
+  chatMessagesRef.current = chatMessages;
+
+  const showEarlier = useStableCallback((all: boolean) => {
+    const current = startIndexRef.current;
+    if (current <= 0) return;
+    const container = olderBarRef.current?.closest<HTMLElement>('.chatContainer');
+    if (container) prependRef.current = { container, top: container.scrollTop, height: container.scrollHeight };
+    const next = all ? 0 : Math.max(0, current - MESSAGE_WINDOW_STEP);
+    const list = chatMessagesRef.current;
+    setMessageWindow({ firstId: list[0]?.id ?? '', startId: next > 0 ? list[next].id : null });
+  });
+
+  // Keep what the reader is looking at in place when older messages are inserted above it.
+  useLayoutEffect(() => {
+    const prepend = prependRef.current;
+    prependRef.current = null;
+    if (prepend) prepend.container.scrollTop = prepend.top + prepend.container.scrollHeight - prepend.height;
+  }, [startIndex]);
+
+  useEffect(() => {
+    const bar = olderBarRef.current;
+    const root = bar?.closest<HTMLElement>('.chatContainer');
+    if (!bar || !root || typeof IntersectionObserver === 'undefined') return;
+    // Re-created after every load so a bar that is still near the top keeps loading.
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) showEarlier(false);
+    }, { root, rootMargin: '400px 0px 0px 0px' });
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, [startIndex, showEarlier]);
+
+  // Browser find only searches rendered text, so render everything when it is opened.
+  const hasHiddenMessages = startIndex > 0;
+  useEffect(() => {
+    if (!hasHiddenMessages) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'f') {
+        flushSync(() => showEarlier(true));
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [hasHiddenMessages, showEarlier]);
 
   const messagesById = useMemo(() => {
     const map = new Map<string, ChatMessage>();
@@ -143,7 +209,14 @@ export function MessageList({
         </div>
       ) : null}
       {isEmptyChat ? <ChatWelcome /> : null}
-      {chatMessages.map((message) => (
+      {startIndex > 0 ? (
+        <div className="olderMessagesBar" ref={olderBarRef}>
+          <span>{startIndex.toLocaleString('en-US')} earlier {startIndex === 1 ? 'message' : 'messages'} not shown</span>
+          <button type="button" onClick={() => showEarlier(false)}>Show earlier</button>
+          <button type="button" onClick={() => showEarlier(true)}>Show all</button>
+        </div>
+      ) : null}
+      {visibleMessages.map((message) => (
         <MessageBubble
           key={message.id}
           message={message}
