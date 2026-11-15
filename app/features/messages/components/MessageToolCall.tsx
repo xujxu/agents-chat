@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import type { ContentPart } from '../../chat/chatTypes';
 import { isToolResultTruncated, TOOL_RESULT_MAX_CHARS } from '@/lib/acp/toolOutput';
 
@@ -35,28 +35,17 @@ function prettifyToolPayload(raw: string | undefined | null): { text: string; sh
 }
 
 export function MessageToolCall({ part, displayName, stopped }: { part: ToolPart; displayName?: string; stopped?: boolean }) {
+  const args = useMemo(() => prettifyToolPayload(part.args), [part.args]);
+  const result = useMemo(() => prettifyToolPayload(part.result), [part.result]);
+  const resultCut = isToolResultTruncated(part);
   // A tool that never finished in a reply that is no longer running must not look like it is still working.
   const state = part.done ? 'complete' : stopped ? 'stopped' : 'running';
-  const running = state === 'running';
-  // `open` follows the running state exactly as before; the body only renders while the element is actually open.
-  const [open, setOpen] = useState(running);
   return (
-    <details className="toolCallItem" open={running} onToggle={(event) => setOpen(event.currentTarget.open)}>
+    <details className="toolCallItem" open={state === 'running'}>
       <summary className={`toolCallSummary ${state}`} title={state === 'stopped' ? 'Did not finish' : undefined}>
         <span className="toolCallIcon">{state === 'complete' ? '✅' : state === 'stopped' ? '⏹' : '⏳'}</span>
         <span className="toolCallName">{displayName || part.toolName}</span>
       </summary>
-      {(open || running) && <ToolCallBody part={part} />}
-    </details>
-  );
-}
-
-function ToolCallBody({ part }: { part: ToolPart }) {
-  const args = useMemo(() => prettifyToolPayload(part.args), [part.args]);
-  const result = useMemo(() => prettifyToolPayload(part.result), [part.result]);
-  const resultCut = isToolResultTruncated(part);
-  return (
-    <>
       {args.text && <pre className="toolCallDetail">{args.text}</pre>}
       {args.shortened && <div className="toolCallTruncated">Input shortened: showing the first {MAX_DISPLAY_CHARS.toLocaleString('en-US')} characters.</div>}
       {result.text && <pre className="toolCallDetail toolCallResult">{result.text}</pre>}
@@ -67,6 +56,6 @@ function ToolCallBody({ part }: { part: ToolPart }) {
             : `Output shortened: showing the first ${MAX_DISPLAY_CHARS.toLocaleString('en-US')} characters.`}
         </div>
       )}
-    </>
+    </details>
   );
 }

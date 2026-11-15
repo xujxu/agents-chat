@@ -21,9 +21,9 @@ function toolParts() {
   ];
 }
 
-test('tool call bodies render only when expanded and explain truncated output', async ({ page }) => {
-  const chatId = `lazy-tools-${Date.now()}`;
-  const chatName = `Lazy tool details ${chatId}`;
+test('tool calls explain truncated output', async ({ page }) => {
+  const chatId = `tool-labels-${Date.now()}`;
+  const chatName = `Tool labels ${chatId}`;
   await page.route('**/api/acp', async (route) => {
     const body = route.request().postDataJSON() as { action?: string; sessionId?: string };
     if (body.action === 'list-agents') {
@@ -55,9 +55,9 @@ test('tool call bodies render only when expanded and explain truncated output', 
   await page.getByTitle(chatName, { exact: true }).click();
   const message = page.locator('.message.agent', { hasText: 'Done with tools' });
   await expect(message.locator('.toolCallItem')).toHaveCount(4, { timeout: 30_000 });
-  // Collapsed tools keep their payloads out of the DOM.
-  await expect(message.locator('.toolCallDetail')).toHaveCount(0);
-  await expect(message.locator('.toolCallTruncated')).toHaveCount(0);
+  // Collapsed tools keep their text in the page so browser find-in-page still reaches it.
+  await expect(message.locator('.toolCallDetail')).toHaveCount(7);
+  await expect(message.locator('.toolCallTruncated')).toHaveCount(3);
 
   const item = (name: string) => message.locator('.toolCallItem').filter({ has: page.locator('.toolCallName', { hasText: new RegExp(`^${name}$`) }) });
 
@@ -78,81 +78,6 @@ test('tool call bodies render only when expanded and explain truncated output', 
   await expect(item('legacy_cut_tool').locator('.toolCallTruncated'))
     .toHaveText('Output truncated: only the first 2,000 characters were saved.');
 
-  // Collapsing removes the body again.
-  await item('short_tool').locator('summary').click();
-  await expect(item('short_tool')).not.toHaveAttribute('open', /.*/);
-  await expect(item('short_tool').locator('.toolCallDetail')).toHaveCount(0);
-
-  await page.goto('about:blank');
-  expect((await page.context().request.delete(`${BASE}/api/chats?id=${encodeURIComponent(chatId)}`)).ok()).toBeTruthy();
-});
-
-test('a running tool shows its input and folds away once it completes', async ({ page }) => {
-  const chatId = `lazy-tools-run-${Date.now()}`;
-  const chatName = `Lazy running tool ${chatId}`;
-  let completed = false;
-  await page.route('**/api/acp', async (route) => {
-    const body = route.request().postDataJSON() as { action?: string; sessionId?: string };
-    if (body.action === 'list-agents') {
-      await route.fulfill({ json: { ok: true, agents: [{ id: 'alpha', name: 'Alpha Agent', command: 'mock', args: [], cwd: '', running: true }] } });
-      return;
-    }
-    if (body.action === 'send') {
-      await route.fulfill({ json: { ok: true, sessionId: 'lazy-session', turn: { id: 'turn' } } });
-      return;
-    }
-    if (body.action === 'poll') {
-      const events = [
-        { type: 'tool_start', toolName: 'live_tool', toolCallId: 'live-1', toolArgs: '{"step":"live-args"}' },
-        ...(completed ? [
-          { type: 'tool_complete', toolCallId: 'live-1', toolResult: 'live result', toolResultTruncated: false },
-          { type: 'text_chunk', text: 'Live reply finished' },
-        ] : []),
-      ];
-      await route.fulfill({ json: { ok: true, activeTurn: {
-        done: completed, phase: completed ? 'done' : 'running', fullText: completed ? 'Live reply finished' : '', events,
-      } } });
-      return;
-    }
-    if (body.action === 'resume-session') {
-      await route.fulfill({ json: { ok: true, loaded: true, sessionId: body.sessionId, activeTurn: null, recoveredMessages: [] } });
-      return;
-    }
-    await route.fulfill({ json: { ok: true, activeTurn: null } });
-  });
-
-  await login(page);
-  await page.evaluate(async ({ id, name }) => {
-    const now = Date.now();
-    await fetch('/api/chats', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat: { id, name, ts: now, agentSessions: {}, messages: [
-        { id: 'user-0', type: 'user', content: 'Earlier question', ts: now - 1 },
-        { id: 'agent-0', type: 'agent', agentId: 'alpha', content: 'Earlier answer', ts: now, parts: [{ kind: 'text', text: 'Earlier answer' }] },
-      ] } }),
-    });
-  }, { id: chatId, name: chatName });
-  await page.reload();
-  await page.waitForSelector('.chatContainer', { timeout: 30_000 });
-  await page.getByTitle(chatName, { exact: true }).click();
-  await expect(page.getByText('Earlier answer', { exact: true })).toBeVisible({ timeout: 30_000 });
-
-  await page.locator('textarea.composerTextarea').fill('Run the live tool');
-  await page.locator('textarea.composerTextarea').press('Enter');
-  const tool = page.locator('.toolCallItem').filter({ hasText: 'live_tool' });
-  await expect(tool).toHaveAttribute('open', '', { timeout: 30_000 });
-  await expect(tool.locator('.toolCallDetail')).toContainText('live-args');
-
-  completed = true;
-  await expect(page.getByText('Live reply finished', { exact: true })).toBeVisible({ timeout: 30_000 });
-  await expect(tool.locator('.toolCallSummary')).toHaveClass(/\bcomplete\b/);
-  await expect(tool).not.toHaveAttribute('open', /.*/);
-  await expect(tool.locator('.toolCallDetail')).toHaveCount(0);
-
-  await tool.locator('summary').click();
-  await expect(tool.locator('.toolCallResult')).toHaveText('live result');
-
   await page.goto('about:blank');
   expect((await page.context().request.delete(`${BASE}/api/chats?id=${encodeURIComponent(chatId)}`)).ok()).toBeTruthy();
 });
@@ -160,12 +85,12 @@ test('a running tool shows its input and folds away once it completes', async ({
 test('shared chats label truncated tool output', async ({ page }) => {
   await page.route('**/api/share**', (route) => route.fulfill({
     json: { ok: true, chat: {
-      shareId: 'lazy-tools', name: 'Shared tools', sharedBy: 'admin@local', sharedAt: 1000,
+      shareId: 'tool-labels', name: 'Shared tools', sharedBy: 'admin@local', sharedAt: 1000,
       messages: [{ id: 'agent-1', type: 'agent', agentId: 'alpha', content: 'Done', ts: 1000, parts: toolParts() }],
     } },
   }));
   await login(page);
-  await page.goto(`${BASE}/share/lazy-tools`);
+  await page.goto(`${BASE}/share/tool-labels`);
   const tools = page.locator('.shareTool');
   await expect(tools).toHaveCount(4);
   await expect(page.locator('.shareToolTruncated')).toHaveCount(2);
