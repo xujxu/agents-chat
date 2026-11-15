@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Agent } from '../../agents/agentTypes';
 import { warmLocalAgentsOnce } from '../chatApi';
 import { SCHEDULER_AGENT_ID } from '../chatHelpers';
@@ -90,7 +90,10 @@ export function useAgentRegistry({ acp }: UseAgentRegistryParams) {
     void acp({ action: 'set-user-setting', key: LAST_USED_AGENT_SCOPE_KEY, value: scope }).catch(() => { /* ignore */ });
   }
 
+  const modelAttemptsRef = useRef(new Set<string>());
+
   async function reloadAgents() {
+    modelAttemptsRef.current.clear();
     setAgentsLoading(true);
     try {
       const [agentsData, prefsData, lastUsedData, chatLastUsedData, settingsData] = await Promise.all([
@@ -136,12 +139,17 @@ export function useAgentRegistry({ acp }: UseAgentRegistryParams) {
     if (ensuringAgentModels[agentId]) return;
     const currentModels = agents.find((a) => a.id === agentId)?.models;
     if (currentModels && currentModels.length > 0) return;
+    // An agent that reports no models would otherwise be re-queried on every render that changes `agents`.
+    const attemptKey = `${currentChatId}:${agentId}`;
+    if (modelAttemptsRef.current.has(attemptKey)) return;
+    modelAttemptsRef.current.add(attemptKey);
     setEnsuringAgentModels((prev) => ({ ...prev, [agentId]: true }));
     try {
       const data = await acp({ action: 'ensure-agent-models', agentId, chatId: currentChatId });
+      if (!data.ok || data.stopped) modelAttemptsRef.current.delete(attemptKey);
       if (data.ok && !data.stopped) {
         const models = Array.isArray(data.models) ? data.models : [];
-        setAgents((current) => current.map((agent) => agent.id === agentId ? { ...agent, models } : agent));
+        if (models.length > 0) setAgents((current) => current.map((agent) => agent.id === agentId ? { ...agent, models } : agent));
         const storedPref = selectedAgentModels[agentId];
         if (storedPref && models.length > 0 && !models.some((m: { modelId: string }) => m.modelId === storedPref)) {
           setSelectedAgentModels((prev) => { const next = { ...prev }; delete next[agentId]; return next; });
@@ -155,6 +163,7 @@ export function useAgentRegistry({ acp }: UseAgentRegistryParams) {
         }
       }
     } catch (err) {
+      modelAttemptsRef.current.delete(attemptKey);
       console.error('Failed to ensure agent models', err);
     } finally {
       setEnsuringAgentModels((prev) => ({ ...prev, [agentId]: false }));

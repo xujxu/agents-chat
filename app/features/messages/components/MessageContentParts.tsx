@@ -1,11 +1,19 @@
 'use client';
 
+import { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { mdComponents } from '../markdownHelpers';
 import type { ContentPart } from '../../chat/chatTypes';
-import { MessageToolCall } from './MessageToolCall';
+import { MessageToolCall as ToolCall } from './MessageToolCall';
 import { getStatusDisplayText } from '../messageDisplayHelpers';
+
+// Streaming polls reuse unchanged part objects, so memoizing lets only new or growing parts re-render.
+const MessageToolCall = memo(ToolCall);
+const MarkdownPart = memo(function MarkdownPart({ text }: { text: string }) {
+  return <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{text}</ReactMarkdown>;
+});
+
 export function MessageContentParts({
   parts,
   pending,
@@ -36,14 +44,14 @@ export function MessageContentParts({
         if (part.kind === 'user_answer') {
           return (
             <div key={pi} className="userAnswerPart">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{part.text}</ReactMarkdown>
+              <MarkdownPart text={part.text} />
             </div>
           );
         }
         if (part.kind === 'text') {
           return (
             <div key={pi} className={`messageContent markdownBody ${pending ? 'pending' : ''}`}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{part.text}</ReactMarkdown>
+              <MarkdownPart text={part.text} />
             </div>
           );
         }
