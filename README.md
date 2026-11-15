@@ -354,6 +354,7 @@ cp .env.example .env.local
 |----------|----------|-------------|
 | `NEXTAUTH_SECRET` | ✅ | Random secret for signing JWTs |
 | `NEXTAUTH_URL` | ✅ | Public URL of the app, for example `https://localhost:3010` |
+| `NEXTAUTH_DEBUG` | Optional | `true` enables NextAuth debug logging, which includes token and session details. Off by default; enable only while troubleshooting sign-in |
 | `AZURE_AD_CLIENT_ID` | Optional | Azure AD / Microsoft Entra app client ID; enables SSO login when set |
 | `AZURE_AD_CLIENT_SECRET` | Optional | Azure AD client secret |
 | `AZURE_AD_TENANT_ID` | Optional | Tenant ID, default `common`. Pin your tenant GUID to use `MEMBER_EMAILS=*` |
