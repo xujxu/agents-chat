@@ -278,6 +278,19 @@ export async function getChat(userId: string, chatId: string): Promise<StoredCha
   return getChatWithDb(db, userId, chatId);
 }
 
+export type StoredChatSummary = Omit<StoredChat, 'messages'>;
+
+/** A chat without its messages, for callers that only need metadata (avoids parsing multi-MB histories). */
+export async function getChatSummary(userId: string, chatId: string): Promise<StoredChatSummary | null> {
+  const row = getDb().prepare(`
+    SELECT chat_id, name, ts, agent_id, agent_sessions, git_context, '[]' AS messages
+    FROM chats WHERE user_id = ? AND chat_id = ?
+  `).get(userId, chatId);
+  if (!row) return null;
+  const { messages: _messages, ...summary } = mapStoredChatRow(row); // eslint-disable-line @typescript-eslint/no-unused-vars
+  return summary;
+}
+
 /** Search chats by name or message content for a user. Returns metadata only. */
 export async function searchChats(
   userId: string,

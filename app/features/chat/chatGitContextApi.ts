@@ -2,7 +2,7 @@ import { hasPersistedAgentSession } from './chatHelpers';
 import type { ChatGitContext, ChatGitContextOptions } from './chatGitContextTypes';
 
 export async function fetchChatGitContext(chatId: string, signal?: AbortSignal): Promise<{ options: ChatGitContextOptions | null; selected: ChatGitContext | null; locked: boolean; error: string | null }> {
-  const res = await fetch(`/api/chats?id=${encodeURIComponent(chatId)}`, { signal });
+  const res = await fetch(`/api/chats?id=${encodeURIComponent(chatId)}&view=git-context`, { signal });
   const data = await res.json();
   if (!res.ok || !data?.ok) {
     return { options: null, selected: null, locked: false, error: data?.error || 'Failed to load git context' };
