@@ -33,13 +33,15 @@ function prettifyToolPayload(raw: string | undefined | null): string {
   return text;
 }
 
-export function MessageToolCall({ part, displayName }: { part: ToolPart; displayName?: string }) {
+export function MessageToolCall({ part, displayName, stopped }: { part: ToolPart; displayName?: string; stopped?: boolean }) {
   const argsText = useMemo(() => prettifyToolPayload(part.args), [part.args]);
   const resultText = useMemo(() => prettifyToolPayload(part.result), [part.result]);
+  // A tool that never finished in a reply that is no longer running must not look like it is still working.
+  const state = part.done ? 'complete' : stopped ? 'stopped' : 'running';
   return (
-    <details className="toolCallItem" open={!part.done}>
-      <summary className={`toolCallSummary ${part.done ? 'complete' : 'running'}`}>
-        <span className="toolCallIcon">{part.done ? '✅' : '⏳'}</span>
+    <details className="toolCallItem" open={state === 'running'}>
+      <summary className={`toolCallSummary ${state}`} title={state === 'stopped' ? 'Did not finish' : undefined}>
+        <span className="toolCallIcon">{state === 'complete' ? '✅' : state === 'stopped' ? '⏹' : '⏳'}</span>
         <span className="toolCallName">{displayName || part.toolName}</span>
       </summary>
       {argsText && (

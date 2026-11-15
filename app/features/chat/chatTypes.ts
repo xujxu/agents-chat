@@ -68,6 +68,8 @@ export type ChatMessage = {
   relation?: string;
   summary?: boolean;
   statusText?: string;
+  /** The reply was still running when its agent or the server went away, so it never finished. */
+  cutOff?: boolean;
   ptyPhase?: 'booting' | 'loading-environment' | 'idle-ready' | 'thinking' | 'replying';
   parts?: ContentPart[];
   userRequest?: AgentUserRequest;

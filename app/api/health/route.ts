@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { NextResponse } from 'next/server';
+import { countActiveTurns } from '@/lib/acp/runtimeState';
 import { getDb } from '@/lib/chatStore';
 
 export const dynamic = 'force-dynamic';
@@ -17,7 +18,7 @@ function readRevision(): string | null {
 export async function GET() {
   try {
     getDb().prepare('SELECT 1').get();
-    return NextResponse.json({ ok: true, version: readRevision() });
+    return NextResponse.json({ ok: true, version: readRevision(), activeReplies: countActiveTurns() });
   } catch {
     return NextResponse.json({ ok: false }, { status: 500 });
   }

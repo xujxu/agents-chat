@@ -54,6 +54,7 @@ assert.deepEqual(result.messages[0], {
   ...messages[0],
   pending: false,
   statusText: 'Interrupted',
+  cutOff: true,
   ptyPhase: undefined,
   userRequest: undefined,
 });

@@ -44,6 +44,15 @@ export function getUserSessions(): Map<string, UserSession> {
   return globalStore.__acpUserSessions;
 }
 
+/** Agent replies still running in this server process; deploys wait for these before restarting. */
+export function countActiveTurns(): number {
+  let count = 0;
+  for (const sess of getUserSessions().values()) {
+    for (const turn of sess.activeTurns?.values() ?? []) if (!turn.done) count++;
+  }
+  return count;
+}
+
 // Periodically clean up stale user sessions (inactive > 30 min)
 export const STALE_SESSION_MS = 30 * 60_000;
 export const PENDING_USER_REQUEST_TIMEOUT_MS = 10 * 60_000;

@@ -25,6 +25,16 @@ function getMessageCopyText(message: ChatMessage): string {
   return message.content || '';
 }
 
+function CutOffNotice({ message }: { message: ChatMessage }) {
+  if (!message.cutOff || message.pending) return null;
+  return (
+    <div className="cutOffNotice" role="status">
+      This reply was cut off: the agent stopped before finishing, usually because the server restarted.
+      No more output will arrive. Send a message to ask it to continue.
+    </div>
+  );
+}
+
 export const MessageBubble = memo(function MessageBubble({
   message,
   agents,
@@ -121,6 +131,7 @@ export const MessageBubble = memo(function MessageBubble({
                   />
                 </div>
                 <AttachmentList attachments={message.attachments} mode="message" onPreview={onOpenImage} />
+                <CutOffNotice message={message} />
                 {message.userRequest && (
                   <AgentUserRequestCard
                     request={message.userRequest}
@@ -169,6 +180,7 @@ export const MessageBubble = memo(function MessageBubble({
                 <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{message.content}</ReactMarkdown>
               </div>
               <AttachmentList attachments={message.attachments} mode="message" onPreview={onOpenImage} />
+              <CutOffNotice message={message} />
               {message.pending && message.content && (
                 <div className="streamingIndicator">
                   <span className="streamingPulse" />

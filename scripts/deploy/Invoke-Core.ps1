@@ -9,7 +9,7 @@ function Invoke-DeployCore {
     if (-not $node) { Write-Error 'Node.js 24 was not found on PATH.'; exit 2 }
 
     $map = [ordered]@{
-        ProjectDir = '--project-dir'; Revision = '--revision'; Port = '--port'; TaskName = '--service-name'
+        ProjectDir = '--project-dir'; Revision = '--revision'; Port = '--port'; TaskName = '--service-name'; DrainSeconds = '--drain'
         NoInstall = '--no-install'; DryRun = '--dry-run'; Json = '--json'
     }
     $cliArgs = @($Command)

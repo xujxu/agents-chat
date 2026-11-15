@@ -123,6 +123,17 @@ export function getLatestUserWithoutSavedResponseIndex(chatMessages: ChatMessage
   return -1;
 }
 
+const UNCONFIRMED_SEND_ERROR = 'Sending was interrupted before confirmation. Check existing replies before using Retry.';
+
+function hasAgentOutputAfter(chatMessages: ChatMessage[], userIndex: number): boolean {
+  for (const message of chatMessages.slice(userIndex + 1)) {
+    if (message.type === 'user') return false;
+    if (message.type === 'agent' && !isSendFailureMessage(message)
+      && ((message.parts?.length ?? 0) > 0 || (message.content.trim() && message.content.trim() !== '⏹ Interrupted'))) return true;
+  }
+  return false;
+}
+
 export function migrateFailedSendWarnings(
   chatMessages: ChatMessage[],
   agentSessions?: Record<string, string>,
@@ -131,11 +142,19 @@ export function migrateFailedSendWarnings(
   const inferLatestUserFailure = options?.inferLatestUserFailure !== false;
   const migrated: ChatMessage[] = [];
   let changed = false;
-  for (const message of chatMessages) {
+  for (const [index, message] of chatMessages.entries()) {
+    const unconfirmed = message.type === 'user' && (message.sendStatus === 'pending'
+      || (message.sendStatus === 'failed' && message.sendError === UNCONFIRMED_SEND_ERROR));
+    // The page or server went away before the send was confirmed. If the agent already replied, it got the message.
+    if (unconfirmed && hasAgentOutputAfter(chatMessages, index)) {
+      migrated.push({ ...message, sendStatus: undefined, sendError: undefined, resendAgentIds: undefined, resendMessage: undefined });
+      changed = true;
+      continue;
+    }
     if (message.type === 'user' && message.sendStatus === 'pending') {
       migrated.push({
         ...message, sendStatus: 'failed',
-        sendError: 'Sending was interrupted before confirmation. Check existing replies before using Retry.',
+        sendError: UNCONFIRMED_SEND_ERROR,
       });
       changed = true;
       continue;

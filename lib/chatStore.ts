@@ -42,6 +42,7 @@ export type StoredMessage = {
   resendMessage?: string;
   pending?: boolean;
   statusText?: string;
+  cutOff?: boolean;
   ptyPhase?: string;
 };
 
@@ -416,6 +417,7 @@ export async function reconcileStalePendingMessagesForAgent(
         serverManaged: true,
         pending: false,
         statusText: 'Interrupted',
+        cutOff: true,
         ptyPhase: undefined,
         userRequest: undefined,
       };

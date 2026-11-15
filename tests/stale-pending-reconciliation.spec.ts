@@ -34,7 +34,7 @@ test('reconciles stale pending output after a successful session resume', async 
         const request = page.context().request;
         const data: { chat: StoredChat } = await (await request.get(`/api/chats?id=${chatId}`)).json();
         const messages = data.chat.messages.filter(message => message.type === 'agent' && message.pending)
-          .map(message => ({ ...message, content: message.content || '⏹ Interrupted', pending: false, statusText: 'Interrupted' }));
+          .map(message => ({ ...message, content: message.content || '⏹ Interrupted', pending: false, statusText: 'Interrupted', cutOff: true }));
         // The real resume endpoint reconciles server-owned output before responding.
         if (messages.length) expect((await request.post('/api/chats', {
           data: { action: 'save-delta', chat: { ...data.chat, messages } },
@@ -134,6 +134,14 @@ test('reconciles stale pending output after a successful session resume', async 
   await expect(page.getByText('Reading shell output')).toHaveCount(0);
   await expect(agentMessage.locator('.toolCallName').filter({ hasText: /^Interrupted shell output$/ }))
     .toHaveText('Interrupted shell output');
+  // The unfinished tool must not look like it is still running, and the cut-off is explained at the end.
+  const unfinishedTool = agentMessage.locator('.toolCallItem').filter({ hasText: 'Interrupted shell output' });
+  await expect(unfinishedTool.locator('.toolCallSummary')).toHaveClass(/\bstopped\b/);
+  await expect(unfinishedTool.locator('.toolCallIcon')).toHaveText('⏹');
+  await expect(unfinishedTool).not.toHaveAttribute('open', /.*/);
+  await expect(agentMessage.locator('.toolCallIcon', { hasText: '⏳' })).toHaveCount(0);
+  await expect(agentMessage.locator('.cutOffNotice')).toBeVisible();
+  await expect(agentMessage.locator('.cutOffNotice')).toContainText('cut off');
   await expect.poll(() => reconciliationSaves).toBe(1);
 
   const persisted = await page.evaluate(async (id) => {
@@ -145,6 +153,7 @@ test('reconciles stale pending output after a successful session resume', async 
     pending: false,
     statusText: 'Interrupted',
     content: '⏹ Interrupted',
+    cutOff: true,
   });
   expect(reconciledMessage.parts).toHaveLength(1_734);
   expect(reconciledMessage.parts.at(-1)).toEqual({
@@ -156,6 +165,7 @@ test('reconciles stale pending output after a successful session resume', async 
 
   await page.reload();
   await expect(page.locator('.message.agent .ptyStatusBadge')).toHaveText('Interrupted');
+  await expect(page.locator('.message.agent .cutOffNotice')).toBeVisible();
   await expect.poll(() => reconciliationSaves).toBe(1);
 
   await page.goto('about:blank');
