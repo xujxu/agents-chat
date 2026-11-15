@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { ContentPart } from '../../chat/chatTypes';
+import { isToolResultTruncated, TOOL_RESULT_MAX_CHARS } from '@/lib/acp/toolOutput';
 
 type ToolPart = ContentPart & { kind: 'tool' };
 
@@ -13,8 +14,8 @@ const MAX_DISPLAY_CHARS = 2000;
  * sequences. Pretty-print the JSON when possible and convert those escapes back
  * to real whitespace so the content reads naturally in a <pre> block.
  */
-function prettifyToolPayload(raw: string | undefined | null): string {
-  if (!raw) return '';
+function prettifyToolPayload(raw: string | undefined | null): { text: string; shortened: boolean } {
+  if (!raw) return { text: '', shortened: false };
   let text = raw;
   try {
     const parsed = JSON.parse(raw);
@@ -29,27 +30,43 @@ function prettifyToolPayload(raw: string | undefined | null): string {
     .replace(/\\n/g, '\n')
     .replace(/\\r/g, '\n')
     .replace(/\\t/g, '\t');
-  if (text.length > MAX_DISPLAY_CHARS) text = text.slice(0, MAX_DISPLAY_CHARS) + '…';
-  return text;
+  if (text.length > MAX_DISPLAY_CHARS) return { text: text.slice(0, MAX_DISPLAY_CHARS) + '…', shortened: true };
+  return { text, shortened: false };
 }
 
 export function MessageToolCall({ part, displayName, stopped }: { part: ToolPart; displayName?: string; stopped?: boolean }) {
-  const argsText = useMemo(() => prettifyToolPayload(part.args), [part.args]);
-  const resultText = useMemo(() => prettifyToolPayload(part.result), [part.result]);
   // A tool that never finished in a reply that is no longer running must not look like it is still working.
   const state = part.done ? 'complete' : stopped ? 'stopped' : 'running';
+  const running = state === 'running';
+  // `open` follows the running state exactly as before; the body only renders while the element is actually open.
+  const [open, setOpen] = useState(running);
   return (
-    <details className="toolCallItem" open={state === 'running'}>
+    <details className="toolCallItem" open={running} onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary className={`toolCallSummary ${state}`} title={state === 'stopped' ? 'Did not finish' : undefined}>
         <span className="toolCallIcon">{state === 'complete' ? '✅' : state === 'stopped' ? '⏹' : '⏳'}</span>
         <span className="toolCallName">{displayName || part.toolName}</span>
       </summary>
-      {argsText && (
-        <pre className="toolCallDetail">{argsText}</pre>
-      )}
-      {resultText && (
-        <pre className="toolCallDetail toolCallResult">{resultText}</pre>
-      )}
+      {(open || running) && <ToolCallBody part={part} />}
     </details>
+  );
+}
+
+function ToolCallBody({ part }: { part: ToolPart }) {
+  const args = useMemo(() => prettifyToolPayload(part.args), [part.args]);
+  const result = useMemo(() => prettifyToolPayload(part.result), [part.result]);
+  const resultCut = isToolResultTruncated(part);
+  return (
+    <>
+      {args.text && <pre className="toolCallDetail">{args.text}</pre>}
+      {args.shortened && <div className="toolCallTruncated">Input shortened: showing the first {MAX_DISPLAY_CHARS.toLocaleString('en-US')} characters.</div>}
+      {result.text && <pre className="toolCallDetail toolCallResult">{result.text}</pre>}
+      {(resultCut || result.shortened) && (
+        <div className="toolCallTruncated">
+          {resultCut
+            ? `Output truncated: only the first ${TOOL_RESULT_MAX_CHARS.toLocaleString('en-US')} characters were saved.`
+            : `Output shortened: showing the first ${MAX_DISPLAY_CHARS.toLocaleString('en-US')} characters.`}
+        </div>
+      )}
+    </>
   );
 }

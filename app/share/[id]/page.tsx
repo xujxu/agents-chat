@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { isToolResultTruncated, TOOL_RESULT_MAX_CHARS } from '@/lib/acp/toolOutput';
 
 type SharedMessage = {
   id: string;
@@ -11,7 +12,7 @@ type SharedMessage = {
   content: string;
   agentId?: string;
   ts: number;
-  parts?: { kind: string; text?: string; toolName?: string; args?: string; result?: string; done?: boolean }[];
+  parts?: { kind: string; text?: string; toolName?: string; args?: string; result?: string; resultTruncated?: boolean; done?: boolean }[];
 };
 
 type SharedChat = {
@@ -110,6 +111,9 @@ export default function SharedChatPage() {
                         <summary>🔧 {part.toolName}{part.done ? ' ✓' : ' …'}</summary>
                         {part.args && <pre className="shareToolArgs">{part.args}</pre>}
                         {part.result && <pre className="shareToolResult">{part.result}</pre>}
+                        {isToolResultTruncated(part) && (
+                          <div className="shareToolTruncated">Output truncated: only the first {TOOL_RESULT_MAX_CHARS.toLocaleString('en-US')} characters were saved.</div>
+                        )}
                       </details>
                     );
                   }
@@ -280,6 +284,12 @@ export default function SharedChatPage() {
           overflow-y: auto;
           white-space: pre-wrap;
           word-break: break-all;
+        }
+        .shareToolTruncated {
+          font-size: 11px;
+          font-style: italic;
+          color: #9fb4d9;
+          margin: 0 0 4px;
         }
         .shareFooter {
           padding: 20px 32px;

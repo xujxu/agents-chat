@@ -376,6 +376,7 @@
 .toolCallName { font-family: 'Fira Code', 'Cascadia Code', monospace; font-weight: 500; }
 .toolCallDetail { margin: 0; padding: 6px 10px 8px; font-size: 0.75rem; color: var(--text-soft); white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; border-top: 1px solid var(--border); background: rgba(127,127,127,0.04); }
 .toolCallResult { color: var(--success); }
+.toolCallTruncated { padding: 4px 10px 6px; font-size: 0.72rem; font-style: italic; color: var(--text-soft); background: rgba(127,127,127,0.04); }
 
 /* ── Status badges & streaming ── */
 .cutOffNotice {

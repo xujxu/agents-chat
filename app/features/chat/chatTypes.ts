@@ -3,7 +3,7 @@ import type { ChatAttachment } from '../composer/attachmentTypes';
 
 export type ContentPart =
   | { kind: 'thinking'; text: string }
-  | { kind: 'tool'; toolName: string; args?: string; result?: string; done: boolean }
+  | { kind: 'tool'; toolName: string; args?: string; result?: string; resultTruncated?: boolean; done: boolean }
   | { kind: 'user_answer'; text: string }
   | { kind: 'text'; text: string };
 
