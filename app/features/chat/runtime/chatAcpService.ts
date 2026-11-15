@@ -3,7 +3,7 @@ import type { Agent } from '../../agents/agentTypes';
 import type { ChatAttachment } from '../../composer/attachmentTypes';
 import type { AgentUserRequest, ChatMessage, OrchestrationState, SessionRunContext } from '../chatTypes';
 import { mapTurnPhase, makeId, PromptSendFailedError } from './chatRunLoop';
-import { buildTurnParts, type TurnEvent } from './turnParts';
+import { buildTurnParts, isNoopMessagePatch, type TurnEvent } from './turnParts';
 import { looksLikeQuestion } from '../../orchestration/workflowFollowUp';
 
 export type FileCommentCallbacks = {
@@ -243,9 +243,8 @@ export function createAcpHandlers(ctx: AcpServiceContext) {
         lastSeenTurnAt = Date.now();
         const phaseStatusMap: Record<string, string> = { thinking: 'Thinking', tool_exec: 'Executing tool', replying: 'Generating response', booting: 'Starting environment' };
         const statusText = turn.statusText || phaseStatusMap[turn.phase || ''] || '';
-        const shownParts = (ctx.chatMessagesRef.current[effectiveChatId] || [])
-          .find((m) => m.id === current.pendingId)?.parts;
-        const parts = buildTurnParts(turn.events, shownParts);
+        const shown = (ctx.chatMessagesRef.current[effectiveChatId] || []).find((m) => m.id === current.pendingId);
+        const parts = buildTurnParts(turn.events, shown?.parts);
         const serverText = (turn.fullText || '').trim();
         if (turn.done) {
           current.currentText = serverText;
@@ -292,7 +291,8 @@ export function createAcpHandlers(ctx: AcpServiceContext) {
             userRequest: turn.userRequest,
           };
           if (serverText) { patch.content = serverText; current.currentText = serverText; }
-          ctx.updateMessage(current.pendingId, patch, effectiveChatId);
+          // Most polls bring nothing new; skipping them avoids re-rendering the whole chat every 800ms.
+          if (!shown || !isNoopMessagePatch(shown, patch)) ctx.updateMessage(current.pendingId, patch, effectiveChatId);
         }
       } else if (Date.now() - lastSeenTurnAt > MISSING_TURN_TIMEOUT) {
         ctx.updateMessage(current.pendingId, {
