@@ -60,6 +60,7 @@ async function main() {
       version: 5,
       serverManaged: true,
       statusText: 'Interrupted',
+      cutOff: true,
       parts: [{ kind: 'tool', toolName: 'read_shell', done: true }],
     });
     assert.equal(reconciled?.messages[1].pending, true);

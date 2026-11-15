@@ -99,3 +99,22 @@ test('pending dispatch state survives validation and becomes retryable with an e
   assert.equal(recovered.messages[0].sendStatus, 'failed');
   assert.match(recovered.messages[0].sendError || '', /confirm|interrupt/i);
 });
+
+test('an unconfirmed send that the agent already replied to is shown as delivered, not failed', () => {
+  const legacyError = 'Sending was interrupted before confirmation. Check existing replies before using Retry.';
+  const messages = [
+    { id: 'q1', type: 'user', ts: 1, content: 'Answered before restart', sendStatus: 'pending' },
+    { id: 'a1', type: 'agent', ts: 2, content: 'Working on it', statusText: 'Interrupted', cutOff: true },
+    { id: 'q2', type: 'user', ts: 3, content: 'Already marked failed', sendStatus: 'failed', sendError: legacyError },
+    { id: 'a2', type: 'agent', ts: 4, content: '', parts: [{ kind: 'tool', id: 't', title: 'Read file', done: false }] },
+    { id: 'q3', type: 'user', ts: 5, content: 'Never answered', sendStatus: 'pending' },
+    { id: 'a3', type: 'agent', ts: 6, content: '⏹ Interrupted', statusText: 'Interrupted' },
+  ] as Parameters<typeof migrateFailedSendWarnings>[0];
+  const { messages: recovered, changed } = migrateFailedSendWarnings(messages, { alpha: 'existing-session' });
+  assert.equal(changed, true);
+  assert.equal(recovered[0].sendStatus, undefined);
+  assert.equal(recovered[2].sendStatus, undefined);
+  assert.equal(recovered[2].sendError, undefined);
+  assert.equal(recovered[4].sendStatus, 'failed');
+  assert.equal(recovered[4].sendError, legacyError);
+});

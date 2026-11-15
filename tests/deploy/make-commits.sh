@@ -23,7 +23,7 @@ commit() { # name, then a command that edits the tree
 }
 commit v2 true
 commit broken sed -i 's/export async function GET() {/export async function GET() { const = ;/' "$health"
-commit unhealthy sed -i 's/return NextResponse.json({ ok: true, version: readRevision() });/return NextResponse.json({ ok: false }, { status: 500 });/' "$health"
+commit unhealthy sed -i 's/return NextResponse.json({ ok: true, version: readRevision(), activeReplies: countActiveTurns() });/return NextResponse.json({ ok: false }, { status: 500 });/' "$health"
 commit v3 true
 commit lockchange sed -i 's/"lockfileVersion"/"lockfileVersion" /' package-lock.json
 commit v4 true

@@ -371,12 +371,24 @@
 .toolCallSummary { cursor: pointer; padding: 6px 10px; display: flex; align-items: center; gap: 6px; font-size: 0.82rem; color: var(--text); user-select: none; }
 .toolCallSummary.running { color: var(--accent); }
 .toolCallSummary.complete { color: var(--success); }
+.toolCallSummary.stopped { color: var(--text-soft); }
 .toolCallIcon { font-size: 0.9rem; }
 .toolCallName { font-family: 'Fira Code', 'Cascadia Code', monospace; font-weight: 500; }
 .toolCallDetail { margin: 0; padding: 6px 10px 8px; font-size: 0.75rem; color: var(--text-soft); white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; border-top: 1px solid var(--border); background: rgba(127,127,127,0.04); }
 .toolCallResult { color: var(--success); }
 
 /* ── Status badges & streaming ── */
+.cutOffNotice {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-left: 3px solid #f59e0b;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.08);
+  color: var(--text);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
 .ptyStatusBadge {
   display: inline-flex;
   align-items: center;

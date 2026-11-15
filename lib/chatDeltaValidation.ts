@@ -11,7 +11,7 @@ function isMessage(value: unknown): value is StoredMessage {
   for (const key of ['agentId', 'relation', 'sendError', 'resendMessage', 'statusText', 'ptyPhase']) {
     if (value[key] !== undefined && typeof value[key] !== 'string') return false;
   }
-  for (const key of ['pending', 'summary']) {
+  for (const key of ['pending', 'summary', 'cutOff']) {
     if (value[key] !== undefined && typeof value[key] !== 'boolean') return false;
   }
   if (value.round !== undefined && (typeof value.round !== 'number' || !Number.isFinite(value.round))) return false;

@@ -68,6 +68,7 @@ export function reconcileStalePendingMessages(
       content: message.content.trim() ? message.content : '⏹ Interrupted',
       pending: false,
       statusText: 'Interrupted',
+      cutOff: true,
       ptyPhase: undefined,
       userRequest: undefined,
     };

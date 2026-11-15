@@ -31,7 +31,7 @@ export function MessageContentParts({
             && part.toolName === 'Reading shell output'
             ? 'Interrupted shell output'
             : undefined;
-          return <MessageToolCall key={pi} part={part} displayName={displayName} />;
+          return <MessageToolCall key={pi} part={part} displayName={displayName} stopped={!pending} />;
         }
         if (part.kind === 'user_answer') {
           return (

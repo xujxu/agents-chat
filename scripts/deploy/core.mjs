@@ -12,7 +12,7 @@ import {
 import {
   SHARED_DIRS, SHARED_FILES, acquireLock, copyDir, dirBytes, ensureShared, exists, freeBytes, git,
   hasCommand, inlineOutsideLinks, inspectLock, isWin, linkShared, listDirs, log, npm, readJson, readLink, removeLink, rename,
-  replaceContents, replaceLink, run, sha256File, waitHealthy, waitPortFree, writeJson,
+  replaceContents, replaceLink, run, sha256File, waitForIdle, waitHealthy, waitPortFree, writeJson,
 } from './fsops.mjs';
 import { createLinuxService } from './service-linux.mjs';
 import { createWindowsService } from './service-windows.mjs';
@@ -30,6 +30,7 @@ const { values: o, positionals } = parseArgs({
     'no-pull': { type: 'boolean', default: false },
     'no-install': { type: 'boolean', default: false },
     wait: { type: 'string', default: '120' },
+    drain: { type: 'string', default: '600' },
     port: { type: 'string' },
     'dry-run': { type: 'boolean', default: false },
     status: { type: 'boolean', default: false },
@@ -47,6 +48,7 @@ const { values: o, positionals } = parseArgs({
 const command = positionals[0];
 const rootArg = o['project-dir'] ?? process.env.AGENTS_CHAT_PROJECT_DIR;
 const waitSeconds = Number(o.wait);
+const drainSeconds = Number(o.drain);
 const P = rootArg && paths(path.resolve(rootArg));
 let state = P ? readJson(P.state, emptyState()) : emptyState();
 let svc;
@@ -78,7 +80,8 @@ function port() {
 }
 
 function resolveOp() {
-  if (!['deploy', 'update', 'restore'].includes(command) || !P || !Number.isInteger(waitSeconds) || waitSeconds < 0) {
+  if (!['deploy', 'update', 'restore'].includes(command) || !P || !Number.isInteger(waitSeconds) || waitSeconds < 0
+    || !Number.isInteger(drainSeconds) || drainSeconds < 0) {
     throw new DeployError('Usage: core.mjs <deploy|update|restore> --project-dir <dir> [options]', 2, 'usage');
   }
   if (command === 'restore') return 'restore';
@@ -221,6 +224,11 @@ async function startAndCheck(id) {
   return true;
 }
 
+// Runs before the switch is recorded, so cancelling during the wait leaves nothing to recover.
+async function drainReplies() {
+  if (drainSeconds > 0) await waitForIdle(port(), drainSeconds);
+}
+
 async function stopService() {
   svc.stop();
   await waitPortFree(port());
@@ -228,6 +236,7 @@ async function stopService() {
 
 async function switchTo(op, to, { restoreData } = {}) {
   const from = state.current;
+  await drainReplies();
   state = beginSwitch(state, { op, from, to, now: Date.now() });
   save();
   try {
@@ -363,6 +372,7 @@ async function importFrom() {
   const id = buildOrFail({ fallback: oldHead });
   if (typeof id !== 'string') return id;
 
+  await drainReplies();
   state = beginSwitch(state, { op: 'import', from: null, to: id, now: Date.now() });
   const serviceBackup = `migration-${backupName('service', Date.now()).split('--')[1]}`;
   svc.backup(path.join(P.backups, serviceBackup));

@@ -274,6 +274,33 @@ export async function waitHealthy(port, seconds) {
   throw new DeployError(`Health check ${url} did not pass within ${seconds}s (${last}).`, 1, 'health');
 }
 
+/** Waits until the running server reports no agent replies in progress, so a restart doesn't cut them off. */
+export async function waitForIdle(port, seconds, { pollMs = 3000 } = {}) {
+  const url = `http://127.0.0.1:${port}/api/health`;
+  const deadline = Date.now() + seconds * 1000;
+  let announced = -1;
+  for (;;) {
+    let active;
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      active = res.ok ? (await res.json()).activeReplies : undefined;
+    } catch {
+      active = undefined;
+    }
+    // Not running, or an older release without the field: nothing to wait for.
+    if (typeof active !== 'number' || active <= 0) return 0;
+    if (Date.now() >= deadline) {
+      log(`Proceeding; ${active} running agent ${active === 1 ? 'reply' : 'replies'} will be interrupted.`);
+      return active;
+    }
+    if (active !== announced) {
+      log(`Waiting for ${active} running agent ${active === 1 ? 'reply' : 'replies'} to finish (up to ${Math.ceil((deadline - Date.now()) / 1000)}s; -DrainSeconds 0 skips)...`);
+      announced = active;
+    }
+    await sleep(Math.min(pollMs, Math.max(0, deadline - Date.now())));
+  }
+}
+
 function portOpen(port) {
   return new Promise((resolve) => {
     const socket = net.connect({ host: '127.0.0.1', port });

@@ -165,6 +165,7 @@ C:\agents-chat\current\scripts\restart.ps1
 | `-Port <n>` | all | App port (default 3000) |
 | `-NoInstall` | install, update | Skip `npm ci`; refused if `package-lock.json` changed |
 | `-NoWait` / `-WaitSeconds <n>` | update, restore | Skip the health wait (the release is marked unverified and not rolled back automatically) / change the timeout |
+| `-DrainSeconds <n>` / `--drain <n>` | deploy, update, restore | Before restarting, wait up to n seconds (default 600) for running agent replies to finish so they are not cut off; `0` restarts immediately |
 
 With `-ImportFrom`, the task keeps its account, logon type, trigger and tunnel mode. The task runs `current\scripts\service-watchdog.ps1`, which runs `start.ps1 -NoBuild`. Logs are in `shared\logs\` (`service-watchdog.log`, `start-service-child*.log`, `server*.log`).
 

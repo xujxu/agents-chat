@@ -8,6 +8,7 @@ param(
     [int]$Port,
     [switch]$NoWait,
     [int]$WaitSeconds = 120,
+    [int]$DrainSeconds = 600,
     [switch]$DryRun,
     [switch]$Json
 )
