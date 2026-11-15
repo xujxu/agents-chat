@@ -11,6 +11,8 @@ const initDelayMs = Number(process.env.SLOW_AGENT_INIT_DELAY_MS || 0);
 const cancelDelayMs = Number(process.env.SLOW_AGENT_CANCEL_DELAY_MS || 0);
 const queueOverlap = process.env.SLOW_AGENT_QUEUE_OVERLAP === '1';
 const held = [];
+// Like Copilot CLI, never answer session/cancel when it is (wrongly) sent as a request.
+const silentCancel = process.env.SLOW_AGENT_SILENT_CANCEL === '1';
 const input = createInterface({ input: process.stdin });
 const write = message => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`);
 const busy = new Map();
@@ -40,7 +42,7 @@ function startPrompt(request) {
 input.on('line', line => {
   const request = JSON.parse(line);
   if (request.method === 'session/cancel') {
-    if (request.id !== undefined) write({ id: request.id, result: {} });
+    if (request.id !== undefined && !silentCancel) write({ id: request.id, result: {} });
     const sessionId = request.params?.sessionId;
     const pending = busy.get(sessionId);
     if (pending && !pending.cancelling) {
@@ -52,6 +54,8 @@ input.on('line', line => {
   if (request.id === undefined) return;
   if (request.method === 'initialize') {
     setTimeout(() => write({ id: request.id, result: { protocolVersion: 1, agentCapabilities: {}, authMethods: [] } }), initDelayMs);
+  } else if (request.method === 'authenticate') {
+    write({ id: request.id, result: {} });
   } else if (request.method === 'session/new') {
     write({ id: request.id, result: { sessionId: randomUUID() } });
   } else if (request.method === 'session/prompt') {
