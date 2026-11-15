@@ -1,4 +1,4 @@
-import { execFileSync } from 'child_process';
+import { execFile } from 'child_process';
 import * as path from 'path';
 import { existsSync } from 'fs';
 import type { StoredGitContext } from './chatStore';
@@ -32,15 +32,20 @@ function resolveGitBin(): string {
   return 'git';
 }
 
-function runGit(repoRoot: string, args: string[]): string {
+function execGit(gitBin: string, args: string[], cwd: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(gitBin, args, { cwd, encoding: 'utf8', windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
+      if (error) reject(Object.assign(error, { stdout, stderr }));
+      else resolve(stdout);
+    });
+  });
+}
+
+async function runGit(repoRoot: string, args: string[]): Promise<string> {
   const gitBin = resolveGitBin();
   const normalizedRepoRoot = normalizePath(repoRoot);
   try {
-    return execFileSync(gitBin, ['-c', `safe.directory=${normalizedRepoRoot}`, ...args], {
-      cwd: repoRoot,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }).trim();
+    return (await execGit(gitBin, ['-c', `safe.directory=${normalizedRepoRoot}`, ...args], repoRoot)).trim();
   } catch (error) {
     logger.warn({
       repoRoot,
@@ -107,19 +112,46 @@ export function isValidStoredGitContext(value: unknown): value is StoredGitConte
     && typeof candidate.branchName === 'string';
 }
 
-export function getGitContextOptions(savedContext?: StoredGitContext | null, repoRootHint?: string): GitContextOptions {
+type GitRepoSnapshot = { repoRoot: string; branches: string[]; worktrees: GitWorktree[] };
+
+// Branch/worktree listings only feed the picker, so a short cache keeps chat loads from
+// spawning git each time. Writes validate against a fresh read (see `fresh`).
+const GIT_SNAPSHOT_TTL_MS = 15_000;
+const gitSnapshots = new Map<string, { at: number; snapshot: Promise<GitRepoSnapshot> }>();
+
+async function readGitRepo(initialRoot: string): Promise<GitRepoSnapshot> {
+  const repoRoot = normalizePath(await runGit(initialRoot, ['rev-parse', '--show-toplevel']));
+  const [branchesOutput, worktreesOutput] = await Promise.all([
+    runGit(repoRoot, ['for-each-ref', '--format=%(refname:short)', 'refs/heads']),
+    runGit(repoRoot, ['worktree', 'list', '--porcelain']),
+  ]);
+  const branches = branchesOutput
+    .split(/\r?\n/)
+    .map((branch) => branch.trim())
+    .filter(Boolean);
+  return { repoRoot, branches, worktrees: parseWorktreePorcelain(worktreesOutput) };
+}
+
+function loadGitRepo(initialRoot: string, fresh: boolean): Promise<GitRepoSnapshot> {
+  const cached = gitSnapshots.get(initialRoot);
+  if (!fresh && cached && Date.now() - cached.at < GIT_SNAPSHOT_TTL_MS) return cached.snapshot;
+  const snapshot = readGitRepo(initialRoot);
+  gitSnapshots.set(initialRoot, { at: Date.now(), snapshot });
+  return snapshot;
+}
+
+export function clearGitContextCache(): void {
+  gitSnapshots.clear();
+}
+
+export async function getGitContextOptions(
+  savedContext?: StoredGitContext | null,
+  repoRootHint?: string,
+  { fresh = false }: { fresh?: boolean } = {},
+): Promise<GitContextOptions> {
   try {
     const initialRoot = normalizePath(repoRootHint || savedContext?.repoRoot || process.cwd());
-    const repoRoot = normalizePath(runGit(initialRoot, ['rev-parse', '--show-toplevel']));
-    const branchesOutput = runGit(repoRoot, ['for-each-ref', '--format=%(refname:short)', 'refs/heads']);
-    const branches = branchesOutput
-      .split(/\r?\n/)
-      .map((branch) => branch.trim())
-      .filter(Boolean);
-
-    const worktreesOutput = runGit(repoRoot, ['worktree', 'list', '--porcelain']);
-    const worktrees = parseWorktreePorcelain(worktreesOutput);
-
+    const { repoRoot, branches, worktrees } = await loadGitRepo(initialRoot, fresh);
     const validSaved = savedContext
       && normalizePath(savedContext.repoRoot) === repoRoot
       && worktrees.some((worktree) => worktree.worktreePath === normalizePath(savedContext.worktreePath));
@@ -142,7 +174,7 @@ export function getGitContextOptions(savedContext?: StoredGitContext | null, rep
       };
     }
 
-    return { available: true, repoRoot, branches, worktrees, effective };
+    return { available: true, repoRoot, branches: [...branches], worktrees: worktrees.map((worktree) => ({ ...worktree })), effective };
   } catch (error) {
     logger.warn({
       repoRootHint: repoRootHint || null,
