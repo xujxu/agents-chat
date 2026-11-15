@@ -14,6 +14,7 @@ import { detectWorkflowFollowUp } from '../../orchestration/workflowFollowUp';
 import { persistOrchestrationDiff, loadPersistedOrchestrations } from '../../orchestration/orchestrationPersistence';
 import { recoverInterruptedOrchestration } from '@/lib/workflow/recoverInterrupted.mjs';
 import { STORAGE_INPUT_HISTORY } from './sessionPersistence';
+import { isNoopMessagePatch } from './turnParts';
 import {
   collectInterruptedAgentIds,
   reconcileStalePendingMessages,
@@ -162,6 +163,9 @@ export function useChatRuntime({
 
   function updateMessage(id: string, patch: Partial<ChatMessage>, chatId = currentChatIdRef.current) {
     const base = chatMessagesRef.current[chatId] || (chatId === currentChatIdRef.current ? messagesRef.current : []);
+    const existing = base.find((m) => m.id === id);
+    // Streaming polls repeat identical patches; skipping them avoids re-rendering the whole chat.
+    if (existing && isNoopMessagePatch(existing, patch)) return;
     setMessagesForChat(chatId, base.map((m) => (m.id === id ? { ...m, ...patch } : m)));
   }
 

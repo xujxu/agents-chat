@@ -1,8 +1,9 @@
 import type { MutableRefObject } from 'react';
 import type { Agent } from '../../agents/agentTypes';
 import type { ChatAttachment } from '../../composer/attachmentTypes';
-import type { AgentUserRequest, ChatMessage, ContentPart, OrchestrationState, SessionRunContext } from '../chatTypes';
+import type { AgentUserRequest, ChatMessage, OrchestrationState, SessionRunContext } from '../chatTypes';
 import { mapTurnPhase, makeId, PromptSendFailedError } from './chatRunLoop';
+import { buildTurnParts, type TurnEvent } from './turnParts';
 import { looksLikeQuestion } from '../../orchestration/workflowFollowUp';
 
 export type FileCommentCallbacks = {
@@ -229,10 +230,7 @@ export function createAcpHandlers(ctx: AcpServiceContext) {
       const turn = result?.activeTurn as {
         messageId?: string; fullText?: string; done?: boolean; phase?: string; statusText?: string; error?: string;
         userRequest?: AgentUserRequest;
-        events?: {
-          type: string; ts: number; toolName?: string; toolCallId?: string;
-          toolArgs?: string; toolResult?: string; text?: string;
-        }[];
+        events?: TurnEvent[];
       } | null;
 
       if (turn?.messageId && turn.messageId !== current.pendingId) {
@@ -245,29 +243,9 @@ export function createAcpHandlers(ctx: AcpServiceContext) {
         lastSeenTurnAt = Date.now();
         const phaseStatusMap: Record<string, string> = { thinking: 'Thinking', tool_exec: 'Executing tool', replying: 'Generating response', booting: 'Starting environment' };
         const statusText = turn.statusText || phaseStatusMap[turn.phase || ''] || '';
-        const parts: ContentPart[] = [];
-        const toolMap = new Map<string, ContentPart & { kind: 'tool' }>();
-        if (turn.events) {
-          for (const evt of turn.events) {
-            if (evt.type === 'thinking' && evt.text) {
-              const last = parts[parts.length - 1];
-              if (last && last.kind === 'thinking') { last.text += evt.text; } else { parts.push({ kind: 'thinking', text: evt.text }); }
-            } else if (evt.type === 'tool_start' && evt.toolName) {
-              const tp: ContentPart & { kind: 'tool' } = { kind: 'tool', toolName: evt.toolName, args: evt.toolArgs, done: false };
-              if (evt.toolCallId) toolMap.set(evt.toolCallId, tp);
-              parts.push(tp);
-            } else if (evt.type === 'tool_complete') {
-              const existingTool = evt.toolCallId ? toolMap.get(evt.toolCallId) : null;
-              if (existingTool) { existingTool.result = evt.toolResult; existingTool.done = true; }
-              else { parts.push({ kind: 'tool', toolName: evt.toolName || 'tool', result: evt.toolResult, done: true }); }
-            } else if (evt.type === 'user_response' && evt.text) {
-              parts.push({ kind: 'user_answer', text: evt.text });
-            } else if (evt.type === 'text_chunk' && evt.text) {
-              const last = parts[parts.length - 1];
-              if (last && last.kind === 'text') { last.text += evt.text; } else { parts.push({ kind: 'text', text: evt.text }); }
-            }
-          }
-        }
+        const shownParts = (ctx.chatMessagesRef.current[effectiveChatId] || [])
+          .find((m) => m.id === current.pendingId)?.parts;
+        const parts = buildTurnParts(turn.events, shownParts);
         const serverText = (turn.fullText || '').trim();
         if (turn.done) {
           current.currentText = serverText;

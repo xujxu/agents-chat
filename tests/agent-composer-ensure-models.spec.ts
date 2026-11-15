@@ -104,3 +104,33 @@ test('composer creates a chat-bound session to populate empty agent models', asy
   await expectModelPickerSelection(page, 'alpha', 'Claude Sonnet 4.6');
   await expectModelOptions(page, 'alpha', ['Claude Sonnet 4.6', 'GPT-5.2']);
 });
+
+test('an agent that reports no models is queried once per chat, not in a loop', async ({ page }) => {
+  const ensureRequests: any[] = [];
+  await page.addInitScript(() => { window.localStorage.setItem('acp_chat_orchestration_mode', 'discussion'); });
+  await page.route('**/api/acp', async (route) => {
+    const body = route.request().postDataJSON() as any;
+    if (body?.action === 'list-agents') {
+      await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, agents: [
+        { id: 'alpha', name: 'Alpha Agent', command: 'mock', args: [], cwd: '', running: true, canTalk: true, public: true, models: [] },
+      ] }) });
+      return;
+    }
+    if (body?.action === 'ensure-agent-models') {
+      ensureRequests.push(body);
+      await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, models: [], unsupported: true }) });
+      return;
+    }
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true }) });
+  });
+
+  await login(page);
+  await resetChats(page);
+  await ensureActiveChat(page);
+  await page.locator('textarea.composerTextarea').fill('@alpha hello');
+  await expect.poll(() => ensureRequests.length).toBeGreaterThan(0);
+  await page.waitForTimeout(1500);
+  const perChat = new Map<string, number>();
+  for (const request of ensureRequests) perChat.set(request.chatId, (perChat.get(request.chatId) || 0) + 1);
+  expect([...perChat.values()]).toEqual([...perChat.values()].map(() => 1));
+});
