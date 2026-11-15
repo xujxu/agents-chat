@@ -90,7 +90,10 @@ export function useAgentRegistry({ acp }: UseAgentRegistryParams) {
     void acp({ action: 'set-user-setting', key: LAST_USED_AGENT_SCOPE_KEY, value: scope }).catch(() => { /* ignore */ });
   }
 
+  const modelAttemptsRef = useRef(new Set<string>());
+
   async function reloadAgents() {
+    modelAttemptsRef.current.clear();
     setAgentsLoading(true);
     try {
       const [agentsData, prefsData, lastUsedData, chatLastUsedData, settingsData] = await Promise.all([
@@ -129,8 +132,6 @@ export function useAgentRegistry({ acp }: UseAgentRegistryParams) {
     void reloadAgents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const modelAttemptsRef = useRef(new Set<string>());
 
   async function ensureAgentModels(agentId: string, opts: EnsureAgentModelsOptions) {
     const { currentChatId, currentAgentSessionsRef, setChatHistory } = opts;
