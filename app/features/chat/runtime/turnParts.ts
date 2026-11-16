@@ -2,13 +2,14 @@ import type { ChatMessage, ContentPart } from '../chatTypes';
 
 export type TurnEvent = {
   type: string; ts?: number; toolName?: string; toolCallId?: string;
-  toolArgs?: string; toolResult?: string; text?: string;
+  toolArgs?: string; toolResult?: string; toolResultTruncated?: boolean; text?: string;
 };
 
 function samePart(a: ContentPart, b: ContentPart): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === 'tool' && b.kind === 'tool') {
-    return a.toolName === b.toolName && a.args === b.args && a.result === b.result && a.done === b.done;
+    return a.toolName === b.toolName && a.args === b.args && a.result === b.result
+      && a.resultTruncated === b.resultTruncated && a.done === b.done;
   }
   return (a as { text: string }).text === (b as { text: string }).text;
 }
@@ -30,8 +31,9 @@ export function buildTurnParts(events: TurnEvent[] | undefined, previous?: Conte
       parts.push(tp);
     } else if (evt.type === 'tool_complete') {
       const existingTool = evt.toolCallId ? toolMap.get(evt.toolCallId) : null;
-      if (existingTool) { existingTool.result = evt.toolResult; existingTool.done = true; }
-      else { parts.push({ kind: 'tool', toolName: evt.toolName || 'tool', result: evt.toolResult, done: true }); }
+      const truncated = evt.toolResultTruncated === undefined ? {} : { resultTruncated: evt.toolResultTruncated };
+      if (existingTool) { Object.assign(existingTool, { result: evt.toolResult, done: true }, truncated); }
+      else { parts.push({ kind: 'tool', toolName: evt.toolName || 'tool', result: evt.toolResult, ...truncated, done: true }); }
     } else if (evt.type === 'user_response' && evt.text) {
       parts.push({ kind: 'user_answer', text: evt.text });
     } else if (evt.type === 'text_chunk' && evt.text) {

@@ -11,6 +11,7 @@ export type TurnEvent = {
   toolCallId?: string;
   toolArgs?: string;
   toolResult?: string;
+  toolResultTruncated?: boolean;
   text?: string;
 };
 
@@ -82,7 +83,7 @@ export type TurnState = {
 
 export type StoredContentPart =
   | { kind: 'thinking'; text: string }
-  | { kind: 'tool'; toolName: string; args?: string; result?: string; done: boolean }
+  | { kind: 'tool'; toolName: string; args?: string; result?: string; resultTruncated?: boolean; done: boolean }
   | { kind: 'user_answer'; text: string }
   | { kind: 'text'; text: string };
 

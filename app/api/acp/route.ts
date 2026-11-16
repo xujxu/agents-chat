@@ -21,6 +21,7 @@ import * as configStore from '@/lib/configStore';
 import { pruneGitHubBindings } from '@/lib/githubIdentity';
 import type { AcpPromptPart, AgentConfig, AgentModel, AgentProcess, PromptAttachment, StoredContentPart, TurnEvent, TurnPhase, TurnState, UserSession, WarmLocalAgentResult } from '@/lib/acp/types';
 import { AttachmentValidationError, buildPromptParts, normalizePromptAttachments } from '@/lib/acp/attachments';
+import { capToolResult } from '@/lib/acp/toolOutput';
 import { withReplyGuidelinesOnce } from '@/lib/acp/replyGuidelines';
 import { createNdjsonRpc, createRelayNdjsonRpc } from '@/lib/acp/rpc';
 import { getTerminals, handleTerminalCreate, handleTerminalKill, handleTerminalOutput, handleTerminalRelease, handleTerminalWaitForExit } from '@/lib/acp/terminalTools';
@@ -478,12 +479,12 @@ async function doBootAgent(agentId: string): Promise<void> {
           toolArgs: typeof update.rawInput === 'string' ? update.rawInput : JSON.stringify(update.rawInput ?? ''),
         });
       } else if (kind === 'tool_call_update' && update.status === 'completed') {
+        const result = capToolResult(update.rawOutput);
         turn.events.push({
           type: 'tool_complete', ts: Date.now(),
           toolCallId: update.toolCallId,
           toolName: update.toolCallId || 'unknown',
-          toolResult: typeof update.rawOutput === 'string' ? update.rawOutput?.slice(0, 2000) :
-            JSON.stringify(update.rawOutput ?? '').slice(0, 2000),
+          toolResult: result.text, toolResultTruncated: result.truncated,
         });
       } else if (kind === 'agent_turn_start') {
         turn.phase = 'thinking';
@@ -837,9 +838,10 @@ function buildStoredParts(events: TurnEvent[]): StoredContentPart[] {
       const existing = evt.toolCallId ? toolMap.get(evt.toolCallId) : null;
       if (existing) {
         existing.result = evt.toolResult;
+        existing.resultTruncated = evt.toolResultTruncated;
         existing.done = true;
       } else {
-        parts.push({ kind: 'tool', toolName: evt.toolName || 'tool', result: evt.toolResult, done: true });
+        parts.push({ kind: 'tool', toolName: evt.toolName || 'tool', result: evt.toolResult, resultTruncated: evt.toolResultTruncated, done: true });
       }
     } else if (evt.type === 'text_chunk' && evt.text) {
       const last = parts[parts.length - 1];
