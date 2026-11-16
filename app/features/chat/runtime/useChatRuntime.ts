@@ -200,7 +200,7 @@ export function useChatRuntime({
     updateMessage, addMessage, removeMessage, notifyRunStateChanged,
     maybeAdvanceOrchestration: (id) => maybeAdvanceOrchestrationRef.current(id),
     onRunFinalized: (chatId) => { void saveChatToHistoryRef.current(chatId); },
-    fileCommentCallbacksRef,
+    fileCommentCallbacksRef, chatSaver,
   });
 
   /* ── Orchestration service ── */

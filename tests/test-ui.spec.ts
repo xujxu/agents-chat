@@ -3753,12 +3753,12 @@ test.describe('Chat UI', () => {
     await expect(sendButton).toBeEnabled();
   });
 
-  test('removes stale inline request cards after polling bails out on repeated errors', async ({ page }) => {
+  test('keeps inline request cards while polling reconnects and removes them when the turn ends', async ({ page }) => {
     await page.addInitScript(() => {
       const realSetTimeout = window.setTimeout.bind(window);
       window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: any[]) => {
         const delay = Number(timeout) || 0;
-        const pollDelay = delay === 800 || (delay >= 1000 && delay <= 9000 && delay % 1000 === 0);
+        const pollDelay = delay === 800 || (delay >= 1000 && delay <= 15000 && delay % 1000 === 0);
         return realSetTimeout(handler, pollDelay ? 20 : timeout, ...args);
       }) as typeof window.setTimeout;
     });
@@ -3766,6 +3766,7 @@ test.describe('Chat UI', () => {
     const chatArea = page.locator('.chatContainer');
     const textarea = page.locator('textarea.composerTextarea');
     let pollCount = 0;
+    let connected = false;
     let respondCallCount = 0;
 
     await page.route('**/api/acp', async (route) => {
@@ -3817,6 +3818,16 @@ test.describe('Chat UI', () => {
           });
           return;
         }
+        if (connected) {
+          await route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify({
+              ok: true,
+              activeTurn: { id: 'turn-user-request-timeout', fullText: 'Checked without more detail.', done: true, phase: 'done', events: [] },
+            }),
+          });
+          return;
+        }
         await route.abort('failed');
         return;
       }
@@ -3839,7 +3850,13 @@ test.describe('Chat UI', () => {
     const requestCard = chatArea.locator('.agentUserRequestCard', { hasText: 'Describe what the agent should check before polling fails.' });
     await expect(requestCard).toBeVisible({ timeout: 10000 });
 
-    await expect(chatArea.locator('.message.agent', { hasText: 'Lost connection to agent' })).toBeVisible({ timeout: 10000 });
+    // More failures than the old give-up limit: the turn may still be alive on the server.
+    await expect.poll(() => pollCount, { timeout: 10000 }).toBeGreaterThan(12);
+    await expect(chatArea.locator('.message.agent', { hasText: 'Reconnecting' })).toBeVisible();
+    await expect(requestCard).toBeVisible();
+
+    connected = true;
+    await expect(chatArea.locator('.message.agent', { hasText: 'Checked without more detail.' })).toBeVisible({ timeout: 10000 });
     await expect(requestCard).toHaveCount(0);
     await expect.poll(() => respondCallCount).toBe(0);
   });
