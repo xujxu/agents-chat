@@ -580,3 +580,29 @@
     font-size: 11px;
   }
 }
+
+.olderMessagesBar {
+  align-self: center;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 4px 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.olderMessagesBar button {
+  min-height: 30px;
+  border: 1px solid var(--border);
+  background: var(--panel-soft);
+  color: var(--accent);
+  border-radius: 10px;
+  padding: 0 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.olderMessagesBar button:hover {
+  border-color: var(--border-strong);
+  background: var(--accent-soft);
+}
