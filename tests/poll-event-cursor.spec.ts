@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { deleteAgent, login, startBusyChat } from './followupQueueHelpers';
+import { deleteAgent, login, startBusyChat, waitForSignedIn } from './followupQueueHelpers';
 
 type PolledTurn = { id: string; events: unknown[]; eventsFrom: number; totalEvents: number; done: boolean };
 
@@ -68,6 +68,52 @@ test('streaming polls fetch only new turn events and keep the full reply', async
       const chat = (await (await api.get(`/api/chats?id=${chatId}`)).json()).chat;
       const saved = chat.messages.filter((message: { type: string }) => message.type === 'agent').at(-1);
       return { pending: saved.pending, tools: saved.parts.filter((part: { kind: string }) => part.kind === 'tool').length, content: saved.content };
+    }, { timeout: 15_000 }).toEqual({ pending: false, tools: 12, content: expect.stringContaining('Step 12 ok. Stream done') });
+  } finally {
+    await deleteAgent(api, agentId);
+    if (chatId) await api.delete(`/api/chats?id=${chatId}`);
+  }
+});
+
+// The saved partial reply (a draft while it streams) is what a reload shows; the reply then finishes once.
+test('reloading mid-reply restores the saved partial reply and finishes it once', async ({ page }) => {
+  await login(page);
+  const api = page.request;
+  const agentId = `stream-agent-${randomUUID().slice(0, 8)}`;
+  expect((await api.post('/api/acp', { data: { action: 'create-agent', agent: {
+    id: agentId, command: 'node', args: [path.resolve('tests/fixtures/streaming-acp-agent.mjs')],
+    cwd: process.cwd(), yolo: false, env: { STREAM_AGENT_TOOLS: '12', STREAM_AGENT_GAP_MS: '400' },
+  } } })).ok()).toBeTruthy();
+
+  let chatId = '';
+  page.on('request', request => {
+    if (request.url().endsWith('/api/acp') && request.method() === 'POST' && request.postDataJSON()?.action === 'send') chatId = request.postDataJSON().chatId;
+  });
+  const savedReply = async () => {
+    const chat = (await (await api.get(`/api/chats?id=${chatId}`)).json()).chat;
+    return chat?.messages.filter((message: { type: string }) => message.type === 'agent').at(-1) as { pending?: boolean; content: string; parts?: { kind: string }[] } | undefined;
+  };
+
+  try {
+    await startBusyChat(page, agentId);
+    await expect.poll(async () => {
+      const saved = chatId ? await savedReply() : undefined;
+      return saved?.pending === true && saved.content.includes('Step 2 ok.');
+    }, { timeout: 20_000 }).toBe(true);
+    const partial = (await savedReply())!;
+    expect(partial.content).not.toContain('Stream done');
+
+    await page.reload();
+    await waitForSignedIn(page);
+    const reply = page.locator('.message.agent');
+    await expect(reply.last()).toContainText('Step 2 ok.', { timeout: 15_000 });
+    await expect(reply.last()).toContainText('Step 12 ok. Stream done', { timeout: 30_000 });
+    await expect(reply).toHaveCount(1);
+    await expect(reply.locator('.toolCallItem')).toHaveCount(12);
+
+    await expect.poll(async () => {
+      const saved = await savedReply();
+      return { pending: saved?.pending, tools: saved?.parts?.filter(part => part.kind === 'tool').length, content: saved?.content };
     }, { timeout: 15_000 }).toEqual({ pending: false, tools: 12, content: expect.stringContaining('Step 12 ok. Stream done') });
   } finally {
     await deleteAgent(api, agentId);

@@ -77,6 +77,29 @@ async function main() {
     assert.equal(await reply('a3')('chat'), undefined);
     assert.equal(draftCount(), 0);
 
+    // Two agents streaming in one chat: one finishing leaves the other streaming, then it finishes too.
+    await store.saveChat('u1', { id: 'multi', name: 'Multi', ts: 1, messages: [user], agentSessions: {} });
+    const b1 = reply('b1'), b2 = reply('b2');
+    await store.saveStreamingReply('u1', 'multi', { ...snapshot, id: 'b1', ts: 2, content: 'Alpha part' });
+    await store.saveStreamingReply('u1', 'multi', { ...snapshot, id: 'b2', agentId: 'beta', ts: 3, content: 'Beta part' });
+    const betaVersion = (await b2('multi'))!.version;
+    await store.updateChatMessage('u1', 'multi', { ...snapshot, id: 'b1', ts: 2, content: 'Alpha done', pending: false, statusText: undefined, userRequest: undefined });
+    assert.equal((await b1('multi'))?.content, 'Alpha done');
+    assert.deepEqual(
+      { content: (await b2('multi'))?.content, pending: (await b2('multi'))?.pending, version: (await b2('multi'))?.version },
+      { content: 'Beta part', pending: true, version: betaVersion },
+      'the other reply keeps streaming with the same version',
+    );
+    assert.equal(draftCount(), 1);
+    await store.saveStreamingReply('u1', 'multi', { ...snapshot, id: 'b2', agentId: 'beta', ts: 3, content: 'Beta more' });
+    assert.equal((await b2('multi'))?.content, 'Beta more');
+    assert.ok((await b2('multi'))!.version! > betaVersion!);
+    await store.updateChatMessage('u1', 'multi', { ...snapshot, id: 'b2', agentId: 'beta', ts: 3, content: 'Beta done', pending: false, statusText: undefined, userRequest: undefined });
+    const multi = (await store.getChat('u1', 'multi'))!.messages;
+    assert.deepEqual(multi.map(m => [m.id, m.content, m.pending]), [['q1', 'Question', undefined], ['b1', 'Alpha done', false], ['b2', 'Beta done', false]]);
+    assert.equal(draftCount(), 0);
+    await store.deleteChat('u1', 'multi');
+
     // Deleted or missing chats keep no drafts.
     await store.saveStreamingReply('u1', 'chat', { ...snapshot, id: 'a4', ts: 5 });
     await store.deleteChat('u1', 'chat');
