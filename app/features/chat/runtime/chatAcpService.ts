@@ -5,6 +5,8 @@ import type { AgentUserRequest, ChatMessage, OrchestrationState, SessionRunConte
 import { mapTurnPhase, makeId, PromptSendFailedError } from './chatRunLoop';
 import { applyPolledTurnEvents, buildTurnParts, isNoopMessagePatch, type TurnEvent, type TurnEventLog } from './turnParts';
 import { looksLikeQuestion } from '../../orchestration/workflowFollowUp';
+import { fetchSavedChatMessage } from '../chatApi';
+import type { IncrementalChatSaver } from './incrementalChatSaver';
 
 export type FileCommentCallbacks = {
   extractFileComments: (text: string, agentId: string) => { cleanText: string; comments: any[] };
@@ -31,10 +33,10 @@ export type AcpServiceContext = {
   maybeAdvanceOrchestration: (orchestrationId: string) => Promise<void>;
   onRunFinalized?: (chatId: string) => void;
   fileCommentCallbacksRef: MutableRefObject<FileCommentCallbacks | null>;
-  /** Loads the server's saved copy of a message; null when unavailable. */
+  /** Loads the server's saved copy of a message; defaults to reading the chat from /api/chats. */
   fetchServerMessage?: (chatId: string, messageId: string) => Promise<ChatMessage | null>;
-  /** Records a message applied from the server as already saved. */
-  onServerMessageApplied?: (chatId: string, message: ChatMessage) => void;
+  /** Records server copies applied locally as saved so autosave has nothing to re-send. */
+  chatSaver?: Pick<IncrementalChatSaver, 'refreshFromServer'>;
 };
 
 const RECONNECTING_STATUS = 'Reconnecting…';
@@ -250,10 +252,10 @@ export function createAcpHandlers(ctx: AcpServiceContext) {
    */
   async function recoverServerReply(runKey: string, chatId: string): Promise<boolean> {
     const current = ctx.sessionRunsRef.current[runKey];
-    if (!current || !ctx.fetchServerMessage) return false;
+    if (!current) return false;
     let saved: ChatMessage | null = null;
     try {
-      saved = await ctx.fetchServerMessage(chatId, current.pendingId);
+      saved = await (ctx.fetchServerMessage || fetchSavedChatMessage)(chatId, current.pendingId);
     } catch {
       return false;
     }
@@ -266,7 +268,7 @@ export function createAcpHandlers(ctx: AcpServiceContext) {
     };
     if (saved.parts?.length) patch.parts = saved.parts;
     ctx.updateMessage(current.pendingId, patch, chatId);
-    ctx.onServerMessageApplied?.(chatId, saved);
+    void ctx.chatSaver?.refreshFromServer(chatId, [saved]).catch((err) => console.error('Failed to record recovered reply', err));
     // A reply cut off by a server restart never answered the file comment it was working on.
     if (saved.cutOff) finalizeRun(runKey, saved.statusText);
     else completeRun(runKey, chatId, saved.statusText);

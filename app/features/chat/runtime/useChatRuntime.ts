@@ -200,17 +200,7 @@ export function useChatRuntime({
     updateMessage, addMessage, removeMessage, notifyRunStateChanged,
     maybeAdvanceOrchestration: (id) => maybeAdvanceOrchestrationRef.current(id),
     onRunFinalized: (chatId) => { void saveChatToHistoryRef.current(chatId); },
-    fileCommentCallbacksRef,
-    fetchServerMessage: async (chatId, messageId) => {
-      const res = await fetch(`/api/chats?id=${encodeURIComponent(chatId)}`);
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data?.ok) return null;
-      return ((data.chat?.messages || []) as ChatMessage[]).find((m) => m.id === messageId) || null;
-    },
-    // Record the server copy as saved so autosave has nothing to re-send for this reply.
-    onServerMessageApplied: (chatId, message) => {
-      void chatSaver.refreshFromServer(chatId, [message]).catch((err) => console.error('Failed to record recovered reply', err));
-    },
+    fileCommentCallbacksRef, chatSaver,
   });
 
   /* ── Orchestration service ── */

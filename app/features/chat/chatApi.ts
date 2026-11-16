@@ -1,7 +1,16 @@
 import type { Agent } from '../agents/agentTypes';
+import type { ChatMessage } from './chatTypes';
 import { isAcpFailureResult } from './chatHelpers';
 import { requestJson, uploadJson } from './runtime/chatTransferClient';
 import { newOperationId } from '@/lib/chatSyncProtocol';
+
+/** Loads the server's saved copy of one chat message; null when the chat or message is unavailable. */
+export async function fetchSavedChatMessage(chatId: string, messageId: string): Promise<ChatMessage | null> {
+  const res = await fetch(`/api/chats?id=${encodeURIComponent(chatId)}`);
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data?.ok) return null;
+  return ((data.chat?.messages || []) as ChatMessage[]).find((m) => m.id === messageId) || null;
+}
 
 export async function acpApi(body: Record<string, unknown>) {
   if (body.action === 'send' && new TextEncoder().encode(JSON.stringify(body)).length > 512 * 1024) {
