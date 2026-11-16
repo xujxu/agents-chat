@@ -30,6 +30,8 @@ async function main() {
     await deleteChat('alice', 'already-deleted');
     assert.equal(await getLastChatId('alice'), null, 'repeated deletion also clears an orphaned preference');
   } finally {
+    // Windows cannot delete the temp dir while the SQLite file is still open.
+    try { (await import('../lib/chatStore')).getDb().close(); } catch { /* not opened */ }
     process.chdir(originalCwd);
     await rm(testDir, { recursive: true });
   }

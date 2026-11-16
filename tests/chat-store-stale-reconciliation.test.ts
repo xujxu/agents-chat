@@ -79,6 +79,8 @@ async function main() {
       false,
     );
   } finally {
+    // Windows cannot delete the temp dir while the SQLite file is still open.
+    try { (await import('../lib/chatStore')).getDb().close(); } catch { /* not opened */ }
     process.chdir(originalCwd);
     await rm(testDir, { recursive: true });
   }
