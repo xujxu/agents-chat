@@ -478,7 +478,7 @@ async function doBootAgent(agentId: string): Promise<void> {
           toolCallId: update.toolCallId,
           toolArgs: typeof update.rawInput === 'string' ? update.rawInput : JSON.stringify(update.rawInput ?? ''),
         });
-      } else if (kind === 'tool_call_update' && update.status === 'completed') {
+      } else if (kind === 'tool_call_update' && (update.status === 'completed' || update.status === 'failed')) {
         const result = capToolResult(update.rawOutput);
         turn.events.push({
           type: 'tool_complete', ts: Date.now(),

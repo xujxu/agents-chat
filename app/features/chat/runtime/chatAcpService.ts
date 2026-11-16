@@ -31,17 +31,40 @@ export type AcpServiceContext = {
   maybeAdvanceOrchestration: (orchestrationId: string) => Promise<void>;
   onRunFinalized?: (chatId: string) => void;
   fileCommentCallbacksRef: MutableRefObject<FileCommentCallbacks | null>;
+  /** Loads the server's saved copy of a message; null when unavailable. */
+  fetchServerMessage?: (chatId: string, messageId: string) => Promise<ChatMessage | null>;
+  /** Records a message applied from the server as already saved. */
+  onServerMessageApplied?: (chatId: string, message: ChatMessage) => void;
 };
+
+const RECONNECTING_STATUS = 'Reconnecting…';
+
+/** Sleeps for `ms`, waking early when the browser comes back online or the tab becomes visible. */
+function waitForRetry(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window === 'undefined') { setTimeout(resolve, ms); return; }
+    const onVisible = () => { if (document.visibilityState === 'visible') done(); };
+    const done = () => {
+      clearTimeout(timer);
+      window.removeEventListener('online', done);
+      document.removeEventListener('visibilitychange', onVisible);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    window.addEventListener('online', done);
+    document.addEventListener('visibilitychange', onVisible);
+  });
+}
 
 export function createAcpHandlers(ctx: AcpServiceContext) {
   function isChatRunning(chatId: string) {
     return Object.values(ctx.sessionRunsRef.current).some((run) => run.chatId === chatId);
   }
 
-  function finalizeRun(runKey: string) {
+  function finalizeRun(runKey: string, finalStatusText?: string) {
     const run = ctx.sessionRunsRef.current[runKey];
     if (!run) return;
-    ctx.updateMessage(run.pendingId, { pending: false, statusText: undefined, ptyPhase: undefined }, run.chatId);
+    ctx.updateMessage(run.pendingId, { pending: false, statusText: finalStatusText, ptyPhase: undefined }, run.chatId);
     const orchestration = ctx.orchestrationsRef.current[run.orchestrationId];
     if (orchestration && run.kind === 'worker') {
       orchestration.results[run.agentId] = run.currentText || '';
@@ -196,17 +219,78 @@ export function createAcpHandlers(ctx: AcpServiceContext) {
     }
   }
 
+  /** Saves file comments the agent embedded in a finished reply and returns the reply without them. */
+  function takeFileComments(text: string, agentId: string): string {
+    const fcCbs = ctx.fileCommentCallbacksRef.current;
+    if (!fcCbs) return text;
+    const { cleanText, comments: agentComments } = fcCbs.extractFileComments(text, agentId);
+    if (agentComments.length === 0) return text;
+    const agentName = ctx.agentsRef.current.find((a) => a.id === agentId)?.name;
+    void fcCbs.saveAgentComments(agentId, agentComments, agentName);
+    return cleanText;
+  }
+
+  /** Finalizes a run whose reply completed and resolves the file comment it was answering. */
+  function completeRun(runKey: string, chatId: string, finalStatusText?: string) {
+    const completedCommentId = ctx.sessionRunsRef.current[runKey]?.commentId;
+    finalizeRun(runKey, finalStatusText);
+    const fcCbs = ctx.fileCommentCallbacksRef.current;
+    if (chatId && fcCbs) {
+      const fallbackCommentId = fcCbs.fileCommentsRef.current.find(
+        (c: any) => c.linkedChatId === chatId && c.status === 'processing',
+      )?.id;
+      const commentIdToResolve = completedCommentId || fallbackCommentId;
+      if (commentIdToResolve) void fcCbs.resolveProcessingCommentForChat(chatId, commentIdToResolve);
+    }
+  }
+
+  /**
+   * Finishes the run from the server's saved reply once the server has finished it. The server
+   * keeps writing the reply while this tab is offline or asleep, so its copy is the complete one.
+   */
+  async function recoverServerReply(runKey: string, chatId: string): Promise<boolean> {
+    const current = ctx.sessionRunsRef.current[runKey];
+    if (!current || !ctx.fetchServerMessage) return false;
+    let saved: ChatMessage | null = null;
+    try {
+      saved = await ctx.fetchServerMessage(chatId, current.pendingId);
+    } catch {
+      return false;
+    }
+    if (!saved || saved.type !== 'agent' || saved.pending !== false) return false;
+    if (ctx.sessionRunsRef.current[runKey] !== current) return false;
+    current.currentText = takeFileComments((saved.content || '').trim(), current.agentId);
+    const patch: Partial<ChatMessage> = {
+      content: current.currentText, pending: false, userRequest: undefined,
+      version: saved.version, serverManaged: saved.serverManaged, cutOff: saved.cutOff,
+    };
+    if (saved.parts?.length) patch.parts = saved.parts;
+    ctx.updateMessage(current.pendingId, patch, chatId);
+    ctx.onServerMessageApplied?.(chatId, saved);
+    // A reply cut off by a server restart never answered the file comment it was working on.
+    if (saved.cutOff) finalizeRun(runKey, saved.statusText);
+    else completeRun(runKey, chatId, saved.statusText);
+    return true;
+  }
+
   async function pollAcpAgent(agentId: string, chatId?: string) {
     const effectiveChatId = chatId || ctx.currentChatIdRef.current;
     const runKey = `acp:${agentId}:${effectiveChatId}`;
     let consecutiveErrors = 0;
-    const MAX_ERRORS = 10;
+    const RECONNECTING_AFTER_ERRORS = 3;
+    const MAX_RETRY_DELAY = 15_000;
     // Only a turn the server no longer reports can time out; a live turn may legitimately stay
     // silent for a long time (e.g. while the agent waits on a long-running shell command).
     const MISSING_TURN_TIMEOUT = 10 * 60_000;
+    const SERVER_COPY_CHECK_INTERVAL = 15_000;
     let lastSeenTurnAt = Date.now();
     // Events already received for the current turn; later polls ask only for what follows.
     let eventLog: TurnEventLog = { events: [] };
+    let lastServerCopyCheckAt = 0;
+    // A missing turn is only suspicious once this run has seen one or lost the connection.
+    let expectTurn = false;
+    let statusBeforeReconnect: string | undefined;
+    const shownMessage = (id: string) => (ctx.chatMessagesRef.current[effectiveChatId] || []).find((m) => m.id === id);
 
     while (ctx.sessionRunsRef.current[runKey]) {
       const current = ctx.sessionRunsRef.current[runKey];
@@ -217,20 +301,25 @@ export function createAcpHandlers(ctx: AcpServiceContext) {
           action: 'poll', agentId, chatId: effectiveChatId,
           ...(eventLog.turnId ? { turnId: eventLog.turnId, sinceEvent: eventLog.events.length } : {}),
         });
-      } catch (err) {
+      } catch {
+        // Keep retrying: the server finishes the turn without us, so giving up would only hide its reply.
         consecutiveErrors++;
-        if (consecutiveErrors >= MAX_ERRORS) {
-          ctx.updateMessage(current.pendingId, {
-            content: current.currentText || `⚠️ Lost connection to agent (${err instanceof Error ? err.message : 'network error'})`,
-            pending: false, userRequest: undefined,
-          }, effectiveChatId);
-          finalizeRun(runKey);
-          return;
+        if (consecutiveErrors === RECONNECTING_AFTER_ERRORS) {
+          statusBeforeReconnect = shownMessage(current.pendingId)?.statusText;
+          ctx.updateMessage(current.pendingId, { statusText: RECONNECTING_STATUS }, effectiveChatId);
         }
-        await new Promise((r) => setTimeout(r, 1000 * consecutiveErrors));
+        await waitForRetry(Math.min(1000 * consecutiveErrors, MAX_RETRY_DELAY));
         continue;
       }
-      consecutiveErrors = 0;
+      if (consecutiveErrors > 0) {
+        // Time spent offline says nothing about whether the server still has the turn.
+        lastSeenTurnAt = Date.now();
+        expectTurn = true;
+        if (consecutiveErrors >= RECONNECTING_AFTER_ERRORS && shownMessage(current.pendingId)?.statusText === RECONNECTING_STATUS) {
+          ctx.updateMessage(current.pendingId, { statusText: statusBeforeReconnect }, effectiveChatId);
+        }
+        consecutiveErrors = 0;
+      }
 
       const turn = result?.activeTurn as {
         id?: string; messageId?: string; fullText?: string; done?: boolean; phase?: string; statusText?: string; error?: string;
@@ -240,6 +329,8 @@ export function createAcpHandlers(ctx: AcpServiceContext) {
 
       if (turn?.messageId && turn.messageId !== current.pendingId) {
         // The server already moved on (e.g. queued follow-ups); its persisted copy of this reply is authoritative.
+        if (await recoverServerReply(runKey, effectiveChatId)) return;
+        if (ctx.sessionRunsRef.current[runKey] !== current) return;
         ctx.updateMessage(current.pendingId, { content: current.currentText || '', pending: false, userRequest: undefined }, effectiveChatId);
         finalizeRun(runKey);
         return;
@@ -251,22 +342,14 @@ export function createAcpHandlers(ctx: AcpServiceContext) {
           continue;
         }
         lastSeenTurnAt = Date.now();
+        expectTurn = true;
         const phaseStatusMap: Record<string, string> = { thinking: 'Thinking', tool_exec: 'Executing tool', replying: 'Generating response', booting: 'Starting environment' };
         const statusText = turn.statusText || phaseStatusMap[turn.phase || ''] || '';
-        const shown = (ctx.chatMessagesRef.current[effectiveChatId] || []).find((m) => m.id === current.pendingId);
+        const shown = shownMessage(current.pendingId);
         const parts = buildTurnParts(eventLog.events, shown?.parts);
         const serverText = (turn.fullText || '').trim();
         if (turn.done) {
-          current.currentText = serverText;
-          const fcCbs = ctx.fileCommentCallbacksRef.current;
-          if (fcCbs) {
-            const { cleanText, comments: agentComments } = fcCbs.extractFileComments(serverText, agentId);
-            if (agentComments.length > 0) {
-              const agentName = ctx.agentsRef.current.find((a) => a.id === agentId)?.name;
-              void fcCbs.saveAgentComments(agentId, agentComments, agentName);
-              current.currentText = cleanText;
-            }
-          }
+          current.currentText = takeFileComments(serverText, agentId);
           const finalContent = current.currentText || (turn.error ? `⚠️ ${turn.error}` : '');
           ctx.updateMessage(current.pendingId, {
             content: finalContent, pending: false,
@@ -284,15 +367,7 @@ export function createAcpHandlers(ctx: AcpServiceContext) {
               content: `Could not confirm agent reply was saved: ${error}. Keep this tab open and retry loading the chat when the connection recovers.`,
             }, effectiveChatId);
           }
-          const completedCommentId = current.commentId;
-          finalizeRun(runKey);
-          if (effectiveChatId && fcCbs) {
-            const fallbackCommentId = fcCbs.fileCommentsRef.current.find(
-              (c: any) => c.linkedChatId === effectiveChatId && c.status === 'processing',
-            )?.id;
-            const commentIdToResolve = completedCommentId || fallbackCommentId;
-            if (commentIdToResolve) void fcCbs.resolveProcessingCommentForChat(effectiveChatId, commentIdToResolve);
-          }
+          completeRun(runKey, effectiveChatId);
           return;
         } else {
           const patch: Partial<ChatMessage> = {
@@ -304,12 +379,22 @@ export function createAcpHandlers(ctx: AcpServiceContext) {
           // Most polls bring nothing new; skipping them avoids re-rendering the whole chat every 800ms.
           if (!shown || !isNoopMessagePatch(shown, patch)) ctx.updateMessage(current.pendingId, patch, effectiveChatId);
         }
-      } else if (Date.now() - lastSeenTurnAt > MISSING_TURN_TIMEOUT) {
-        ctx.updateMessage(current.pendingId, {
-          content: current.currentText || '⚠️ Response timed out', pending: false, userRequest: undefined,
-        }, effectiveChatId);
-        finalizeRun(runKey);
-        return;
+      } else {
+        // The server releases a finished turn shortly after it ends, so a tab that missed the final
+        // poll (offline, asleep or throttled in the background) must read the reply from the chat.
+        const timedOut = Date.now() - lastSeenTurnAt > MISSING_TURN_TIMEOUT;
+        if ((expectTurn || timedOut) && Date.now() - lastServerCopyCheckAt >= SERVER_COPY_CHECK_INTERVAL) {
+          lastServerCopyCheckAt = Date.now();
+          if (await recoverServerReply(runKey, effectiveChatId)) return;
+          if (ctx.sessionRunsRef.current[runKey] !== current) return;
+        }
+        if (timedOut) {
+          ctx.updateMessage(current.pendingId, {
+            content: current.currentText || '⚠️ Response timed out', pending: false, userRequest: undefined,
+          }, effectiveChatId);
+          finalizeRun(runKey);
+          return;
+        }
       }
       await new Promise((r) => setTimeout(r, 800));
     }
