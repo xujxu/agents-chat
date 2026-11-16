@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
-import { listChats, getChat, mergeChat, saveChatDelta, deleteChat, renameChat, migrateFromJson, getLastChatId, setLastChatId, StoredChat, deleteOrchestrationsForChat, searchChats, updateChatGitContext } from '@/lib/chatStore';
+import { listChats, getChat, getChatSummary, mergeChat, saveChatDelta, deleteChat, renameChat, migrateFromJson, getLastChatId, setLastChatId, StoredChat, type StoredChatSummary, deleteOrchestrationsForChat, searchChats, updateChatGitContext } from '@/lib/chatStore';
 import { isStoredChatDelta } from '@/lib/chatDeltaValidation';
 import { commitChatOperation, isChatOperation } from '@/lib/chatSyncStore';
 import { readTransfer } from '@/lib/chatTransferStore';
@@ -37,7 +37,7 @@ function guestGitRoots(token: any): string[] { // eslint-disable-line @typescrip
   return usableAgents(token).filter((agent) => !agent.relay && agent.cwd).map((agent) => agent.cwd as string);
 }
 
-async function resolveGuestChatGitContextOptions(token: any, chat: StoredChat): Promise<GitContextOptions> { // eslint-disable-line @typescript-eslint/no-explicit-any
+async function resolveGuestChatGitContextOptions(token: any, chat: StoredChatSummary): Promise<GitContextOptions> { // eslint-disable-line @typescript-eslint/no-explicit-any
   for (const root of guestGitRoots(token)) {
     const options = await getGitContextOptions(chat.gitContext || null, root);
     if (options.available && (!chat.gitContext || options.repoRoot === chat.gitContext.repoRoot)) return options;
@@ -45,7 +45,7 @@ async function resolveGuestChatGitContextOptions(token: any, chat: StoredChat): 
   return unavailableGitContext();
 }
 
-async function resolveChatGitContextOptions(userId: string, chat: StoredChat, token?: any): Promise<GitContextOptions> { // eslint-disable-line @typescript-eslint/no-explicit-any
+async function resolveChatGitContextOptions(userId: string, chat: StoredChatSummary, token?: any): Promise<GitContextOptions> { // eslint-disable-line @typescript-eslint/no-explicit-any
   if (token && getUserRole(token) === 'guest') return resolveGuestChatGitContextOptions(token, chat);
   const candidateRoots = new Set<string>();
   if (chat.gitContext?.repoRoot) candidateRoots.add(chat.gitContext.repoRoot);
@@ -114,7 +114,9 @@ export async function GET(req: NextRequest) {
   const chatId = req.nextUrl.searchParams.get('id');
 
   if (chatId) {
-    const chat = await getChat(userId, chatId);
+    // The git picker only needs metadata; skip loading (possibly multi-MB) message history for it.
+    const gitContextOnly = req.nextUrl.searchParams.get('view') === 'git-context';
+    const chat = gitContextOnly ? await getChatSummary(userId, chatId) : await getChat(userId, chatId);
     if (!chat) return NextResponse.json({ ok: false, error: 'not_found' }, { status: 404 });
     const gitContextOptions = await resolveChatGitContextOptions(userId, chat, token);
     if (!chat.gitContext && gitContextOptions.effective) {

@@ -9,7 +9,7 @@ async function main() {
   const dir = await mkdtemp(path.join(tmpdir(), 'agents-chat-delta-'));
   try {
     process.chdir(dir);
-    const { saveChat, saveChatDelta, updateChatMessage, getChat, getDb } = await import('../lib/chatStore');
+    const { saveChat, saveChatDelta, updateChatMessage, getChat, getChatSummary, updateChatGitContext, getDb } = await import('../lib/chatStore');
     const { commitChatOperation } = await import('../lib/chatSyncStore');
     const parts = [{ kind: 'tool', toolName: 'read', result: 'x'.repeat(5 * 1024 * 1024), done: true }];
     const user = { id: 'u1', type: 'user' as const, content: 'Question', ts: 1 };
@@ -49,6 +49,12 @@ async function main() {
     });
     assert.deepEqual((await getChat('owner', 'chat'))?.messages.map(message => message.id), ['u1', 'u2', 'u3']);
     assert.equal(await getChat('other-user', 'chat'), null);
+    await updateChatGitContext('owner', 'chat', { repoRoot: '/r', worktreePath: '/r', branchName: 'main' });
+    assert.deepEqual(await getChatSummary('owner', 'chat'), {
+      id: 'chat', name: 'Large chat', ts: (await getChat('owner', 'chat'))?.ts, agentId: undefined, agentSessions: {},
+      gitContext: { repoRoot: '/r', worktreePath: '/r', branchName: 'main', isFallback: false },
+    });
+    assert.equal(await getChatSummary('other-user', 'chat'), null);
     getDb().close();
   } finally {
     process.chdir(originalCwd);
