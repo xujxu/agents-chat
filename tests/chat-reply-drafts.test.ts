@@ -33,11 +33,12 @@ async function main() {
     assert.equal(shown?.version, 1);
 
     // A client save of presentation metadata keeps the draft on top and its own fields.
-    commitChatOperation('u1', {
+    const meta = commitChatOperation('u1', {
       operationId: 'client-meta',
       chat: { id: 'chat', name: 'Chat', ts: 1, agentSessions: {}, messages: [{ ...shown!, content: 'client text', round: 3 }] },
       expectedVersions: {},
     });
+    assert.equal((await a1('chat'))?.version, meta.versions.a1, 'the version a save reports stays current until the next snapshot');
     await store.saveStreamingReply('u1', 'chat', { ...snapshot, content: 'Hello', userRequest: undefined, statusText: 'Generating response' });
     shown = await a1('chat');
     assert.equal(shown?.content, 'Hello');

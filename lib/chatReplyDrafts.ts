@@ -69,17 +69,23 @@ export function overlayReplyDrafts(db: Database.Database, userId: string, chatId
   return next.sort((a, b) => a.ts - b.ts);
 }
 
-/** Drops drafts once their content is in the chat row (all of the chat's when `keepIds` is omitted). */
+/**
+ * Called after the chat row is written (all of the chat's drafts are dropped when `keepIds` is omitted).
+ * Drafts not in `keepIds` are dropped. Kept drafts were just written into the row with their version,
+ * so their seq restarts at 0 to keep that version stable until the next snapshot.
+ */
 export function deleteReplyDraftsWithDb(db: Database.Database, userId: string, chatId: string, keepIds?: Set<string>): void {
   if (!keepIds) {
     db.prepare('DELETE FROM chat_reply_drafts WHERE user_id = ? AND chat_id = ?').run(userId, chatId);
     return;
   }
-  const drafts = db.prepare('SELECT message_id FROM chat_reply_drafts WHERE user_id = ? AND chat_id = ?')
-    .all(userId, chatId) as { message_id: string }[];
-  for (const { message_id: messageId } of drafts) {
+  const drafts = db.prepare('SELECT message_id, seq FROM chat_reply_drafts WHERE user_id = ? AND chat_id = ?')
+    .all(userId, chatId) as { message_id: string; seq: number }[];
+  for (const { message_id: messageId, seq } of drafts) {
     if (!keepIds.has(messageId)) {
       db.prepare('DELETE FROM chat_reply_drafts WHERE user_id = ? AND chat_id = ? AND message_id = ?').run(userId, chatId, messageId);
+    } else if (seq !== 0) {
+      db.prepare('UPDATE chat_reply_drafts SET seq = 0 WHERE user_id = ? AND chat_id = ? AND message_id = ?').run(userId, chatId, messageId);
     }
   }
 }
