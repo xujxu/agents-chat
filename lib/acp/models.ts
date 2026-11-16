@@ -16,6 +16,10 @@ const log = (...args: unknown[]) => {
   logger.info(parts.join(' '));
 };
 
+const MODEL_REFRESH_MS = 10 * 60_000;
+const modelsCheckedAt = new Map<string, number>();
+const modelRefreshes = new Map<string, Promise<AgentModel[]>>();
+
 export function normalizeSessionModels(input: unknown): AgentModel[] {
   if (!Array.isArray(input)) return [];
   const seen = new Set<string>();
@@ -51,8 +55,34 @@ export function syncAgentModelsFromSessionResult(agentId: string, sessionResult:
   if (proc) {
     proc.config = { ...proc.config, models: availableModels, defaultModelId };
   }
+  modelsCheckedAt.set(agentId, Date.now());
   log(`[ACP:${agentId}] Synced ${availableModels.length} model(s) from session/new; default=${defaultModelId}`);
   return { models: availableModels, defaultModelId };
+}
+
+/**
+ * The agent's model list as it reports it now. The saved list is only updated when a session is
+ * created, so it goes stale while chats keep resuming old sessions; past MODEL_REFRESH_MS this asks
+ * the running agent again with a throwaway session. Never boots a stopped agent.
+ */
+export function refreshAgentModels(proc: AgentProcess, agentId: string): Promise<AgentModel[]> {
+  const saved = () => configStore.getAgentById(agentId)?.models || proc.config.models || [];
+  const rpc = proc.rpc;
+  if (!proc.ready || !rpc || Date.now() - (modelsCheckedAt.get(agentId) || 0) < MODEL_REFRESH_MS) {
+    return modelRefreshes.get(agentId) || Promise.resolve(saved());
+  }
+  modelsCheckedAt.set(agentId, Date.now());
+  const refresh = (async () => {
+    const probe = await rpc.send('session/new', { cwd: proc.cachedCwd, mcpServers: [] });
+    if (probe?.sessionId) rpc.send('session/close', { sessionId: probe.sessionId }).catch(() => { /* ignore if unsupported */ });
+    syncAgentModelsFromSessionResult(agentId, probe);
+    return saved();
+  })().catch((err) => {
+    log(`[ACP:${agentId}] Model list refresh failed: ${err instanceof Error ? err.message : String(err)}`);
+    return saved();
+  }).finally(() => modelRefreshes.delete(agentId));
+  modelRefreshes.set(agentId, refresh);
+  return refresh;
 }
 
 export function validateRequestedModel(config: AgentConfig, requested: unknown): string | undefined {
