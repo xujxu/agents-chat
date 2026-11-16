@@ -62,10 +62,13 @@ test('renders the newest messages first and keeps the reading position when olde
 
   // Read the oldest rendered message, then load more with the button: it must not move.
   const anchor = page.locator('[data-message-id="m-95"]');
-  await anchor.evaluate((element) => {
+  // Wait until the scroll has been delivered: WebKit can fire it late, and until then the
+  // chat still counts as following the bottom, which re-pins it there when messages are added.
+  await anchor.evaluate((element) => new Promise<void>((resolve) => {
     const container = element.closest('.chatContainer') as HTMLElement;
+    container.addEventListener('scroll', () => requestAnimationFrame(() => requestAnimationFrame(() => resolve())), { once: true });
     container.scrollTop += element.getBoundingClientRect().top - container.getBoundingClientRect().top - 200;
-  });
+  }));
   const before = await anchor.evaluate((element) => element.getBoundingClientRect().top);
   // DOM click: Playwright's click would first scroll the bar into view and move the anchor.
   await bar.getByRole('button', { name: 'Show earlier' }).evaluate((button: HTMLElement) => button.click());
