@@ -108,7 +108,8 @@ const secureAuthCookies = shouldUseSecureAuthCookies(
 );
 
 export const authOptions: AuthOptions = {
-  debug: true,
+  // Debug logs token and session details, so it stays off unless explicitly enabled.
+  debug: process.env.NEXTAUTH_DEBUG === 'true',
   providers,
   pages: { signIn: '/login' },
   session: { strategy: 'jwt' },

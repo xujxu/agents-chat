@@ -156,7 +156,10 @@ async function testGitHubPrivateEmailJwt(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  delete process.env.NEXTAUTH_DEBUG;
   ({ authOptions } = await import('../app/api/auth/[...nextauth]/route'));
+  // Debug logs tokens and sessions, so a deployment without NEXTAUTH_DEBUG=true must not enable it.
+  expectEqual(authOptions.debug, false, 'NextAuth debug is off by default');
   await testSignInCallback();
   await testGitHubPrivateEmailJwt();
 }
