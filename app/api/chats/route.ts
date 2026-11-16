@@ -37,15 +37,15 @@ function guestGitRoots(token: any): string[] { // eslint-disable-line @typescrip
   return usableAgents(token).filter((agent) => !agent.relay && agent.cwd).map((agent) => agent.cwd as string);
 }
 
-function resolveGuestChatGitContextOptions(token: any, chat: StoredChat): GitContextOptions { // eslint-disable-line @typescript-eslint/no-explicit-any
+async function resolveGuestChatGitContextOptions(token: any, chat: StoredChat): Promise<GitContextOptions> { // eslint-disable-line @typescript-eslint/no-explicit-any
   for (const root of guestGitRoots(token)) {
-    const options = getGitContextOptions(chat.gitContext || null, root);
+    const options = await getGitContextOptions(chat.gitContext || null, root);
     if (options.available && (!chat.gitContext || options.repoRoot === chat.gitContext.repoRoot)) return options;
   }
   return unavailableGitContext();
 }
 
-function resolveChatGitContextOptions(userId: string, chat: StoredChat, token?: any): GitContextOptions { // eslint-disable-line @typescript-eslint/no-explicit-any
+async function resolveChatGitContextOptions(userId: string, chat: StoredChat, token?: any): Promise<GitContextOptions> { // eslint-disable-line @typescript-eslint/no-explicit-any
   if (token && getUserRole(token) === 'guest') return resolveGuestChatGitContextOptions(token, chat);
   const candidateRoots = new Set<string>();
   if (chat.gitContext?.repoRoot) candidateRoots.add(chat.gitContext.repoRoot);
@@ -79,7 +79,7 @@ function resolveChatGitContextOptions(userId: string, chat: StoredChat, token?: 
   }, 'Resolving chat git context');
 
   for (const candidateRoot of candidateRoots) {
-    const options = getGitContextOptions(chat.gitContext || null, candidateRoot);
+    const options = await getGitContextOptions(chat.gitContext || null, candidateRoot);
     logger.info({
       chatId: chat.id,
       candidateRoot,
@@ -91,7 +91,7 @@ function resolveChatGitContextOptions(userId: string, chat: StoredChat, token?: 
     }, 'Tried git context candidate root');
     if (options.available) return options;
   }
-  const fallbackOptions = getGitContextOptions(chat.gitContext || null);
+  const fallbackOptions = await getGitContextOptions(chat.gitContext || null);
   logger.warn({
     chatId: chat.id,
     available: fallbackOptions.available,
@@ -116,7 +116,7 @@ export async function GET(req: NextRequest) {
   if (chatId) {
     const chat = await getChat(userId, chatId);
     if (!chat) return NextResponse.json({ ok: false, error: 'not_found' }, { status: 404 });
-    const gitContextOptions = resolveChatGitContextOptions(userId, chat, token);
+    const gitContextOptions = await resolveChatGitContextOptions(userId, chat, token);
     if (!chat.gitContext && gitContextOptions.effective) {
       logger.info({
         chatId,
@@ -219,9 +219,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'git_context_locked' }, { status: 409 });
     }
 
-    const options = role === 'guest'
-      ? guestGitRoots(token).map((root) => getGitContextOptions(gitContext, root)).find((candidate) => candidate.available && candidate.repoRoot === gitContext.repoRoot)
-      : getGitContextOptions(gitContext);
+    let options: GitContextOptions | undefined;
+    if (role === 'guest') {
+      for (const root of guestGitRoots(token)) {
+        const candidate = await getGitContextOptions(gitContext, root, { fresh: true });
+        if (candidate.available && candidate.repoRoot === gitContext.repoRoot) { options = candidate; break; }
+      }
+    } else {
+      options = await getGitContextOptions(gitContext, undefined, { fresh: true });
+    }
     if (!options) return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 });
     const validated = validateGitContext(gitContext, options);
     if (!validated.ok) {
