@@ -3,7 +3,7 @@ import type { Agent } from '../../agents/agentTypes';
 import type { ChatAttachment } from '../../composer/attachmentTypes';
 import type { AgentUserRequest, ChatMessage, OrchestrationState, SessionRunContext } from '../chatTypes';
 import { mapTurnPhase, makeId, PromptSendFailedError } from './chatRunLoop';
-import { buildTurnParts, isNoopMessagePatch, type TurnEvent } from './turnParts';
+import { applyPolledTurnEvents, buildTurnParts, isNoopMessagePatch, type TurnEvent, type TurnEventLog } from './turnParts';
 import { looksLikeQuestion } from '../../orchestration/workflowFollowUp';
 
 export type FileCommentCallbacks = {
@@ -205,13 +205,18 @@ export function createAcpHandlers(ctx: AcpServiceContext) {
     // silent for a long time (e.g. while the agent waits on a long-running shell command).
     const MISSING_TURN_TIMEOUT = 10 * 60_000;
     let lastSeenTurnAt = Date.now();
+    // Events already received for the current turn; later polls ask only for what follows.
+    let eventLog: TurnEventLog = { events: [] };
 
     while (ctx.sessionRunsRef.current[runKey]) {
       const current = ctx.sessionRunsRef.current[runKey];
       if (!current) break;
       let result: any;
       try {
-        result = await ctx.acp({ action: 'poll', agentId, chatId: effectiveChatId });
+        result = await ctx.acp({
+          action: 'poll', agentId, chatId: effectiveChatId,
+          ...(eventLog.turnId ? { turnId: eventLog.turnId, sinceEvent: eventLog.events.length } : {}),
+        });
       } catch (err) {
         consecutiveErrors++;
         if (consecutiveErrors >= MAX_ERRORS) {
@@ -228,9 +233,9 @@ export function createAcpHandlers(ctx: AcpServiceContext) {
       consecutiveErrors = 0;
 
       const turn = result?.activeTurn as {
-        messageId?: string; fullText?: string; done?: boolean; phase?: string; statusText?: string; error?: string;
+        id?: string; messageId?: string; fullText?: string; done?: boolean; phase?: string; statusText?: string; error?: string;
         userRequest?: AgentUserRequest;
-        events?: TurnEvent[];
+        events?: TurnEvent[]; eventsFrom?: number; totalEvents?: number;
       } | null;
 
       if (turn?.messageId && turn.messageId !== current.pendingId) {
@@ -240,11 +245,16 @@ export function createAcpHandlers(ctx: AcpServiceContext) {
         return;
       }
       if (turn) {
+        if (!applyPolledTurnEvents(eventLog, turn)) {
+          // Lost track of the event log; start over with a full poll.
+          eventLog = { events: [] };
+          continue;
+        }
         lastSeenTurnAt = Date.now();
         const phaseStatusMap: Record<string, string> = { thinking: 'Thinking', tool_exec: 'Executing tool', replying: 'Generating response', booting: 'Starting environment' };
         const statusText = turn.statusText || phaseStatusMap[turn.phase || ''] || '';
         const shown = (ctx.chatMessagesRef.current[effectiveChatId] || []).find((m) => m.id === current.pendingId);
-        const parts = buildTurnParts(turn.events, shown?.parts);
+        const parts = buildTurnParts(eventLog.events, shown?.parts);
         const serverText = (turn.fullText || '').trim();
         if (turn.done) {
           current.currentText = serverText;

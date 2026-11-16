@@ -48,6 +48,26 @@ export function buildTurnParts(events: TurnEvent[] | undefined, previous?: Conte
   return unchanged ? previous : parts;
 }
 
+/** A poll's view of a turn's event log: all events, or only those after `eventsFrom`. */
+export type PolledTurnEvents = { id?: string; events?: TurnEvent[]; eventsFrom?: number; totalEvents?: number };
+
+export type TurnEventLog = { turnId?: string; events: TurnEvent[] };
+
+/**
+ * Applies a poll to the events already held for a turn. Returns false when the poll can't be
+ * applied (a gap or a different turn); the caller should drop its cursor and poll in full.
+ */
+export function applyPolledTurnEvents(log: TurnEventLog, turn: PolledTurnEvents): boolean {
+  const incoming = turn.events || [];
+  const from = turn.eventsFrom || 0;
+  if (from === 0) log.events = [...incoming];
+  else if (turn.id === log.turnId && from === log.events.length) log.events.push(...incoming);
+  else return false;
+  if (from > 0 && typeof turn.totalEvents === 'number' && turn.totalEvents !== log.events.length) return false;
+  log.turnId = turn.id;
+  return true;
+}
+
 /** True when applying `patch` would not change `message` (parts compared by identity, userRequest by value). */
 export function isNoopMessagePatch(message: ChatMessage, patch: Partial<ChatMessage>): boolean {
   for (const key of Object.keys(patch) as (keyof ChatMessage)[]) {

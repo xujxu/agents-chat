@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildTurnParts, isNoopMessagePatch } from '../app/features/chat/runtime/turnParts';
+import { applyPolledTurnEvents, buildTurnParts, isNoopMessagePatch, type TurnEventLog } from '../app/features/chat/runtime/turnParts';
 import type { ChatMessage } from '../app/features/chat/chatTypes';
 
 const events = [
@@ -39,6 +39,24 @@ test('buildTurnParts treats a completed tool as changed', () => {
   const done = buildTurnParts(events.slice(0, 3), running);
   assert.notEqual(done[1], running[1]);
   assert.equal(done[0], running[0]);
+});
+
+test('applyPolledTurnEvents appends cursor polls and replaces on full polls', () => {
+  const log: TurnEventLog = { events: [] };
+  assert.equal(applyPolledTurnEvents(log, { id: 't1', events: events.slice(0, 2), eventsFrom: 0, totalEvents: 2 }), true);
+  assert.equal(applyPolledTurnEvents(log, { id: 't1', events: events.slice(2), eventsFrom: 2, totalEvents: 5 }), true);
+  assert.deepEqual(log, { turnId: 't1', events });
+  assert.deepEqual(buildTurnParts(log.events), buildTurnParts(events));
+  // A full poll (older servers, a new turn, or mocks without eventsFrom) replaces what was held.
+  assert.equal(applyPolledTurnEvents(log, { id: 't2', events: events.slice(0, 1) }), true);
+  assert.deepEqual(log, { turnId: 't2', events: events.slice(0, 1) });
+});
+
+test('applyPolledTurnEvents rejects polls it cannot line up', () => {
+  const held = () => ({ turnId: 't1', events: events.slice(0, 2) });
+  assert.equal(applyPolledTurnEvents(held(), { id: 't1', events: events.slice(3), eventsFrom: 3, totalEvents: 5 }), false);
+  assert.equal(applyPolledTurnEvents(held(), { id: 't2', events: events.slice(2), eventsFrom: 2, totalEvents: 5 }), false);
+  assert.equal(applyPolledTurnEvents(held(), { id: 't1', events: events.slice(2, 3), eventsFrom: 2, totalEvents: 5 }), false);
 });
 
 test('isNoopMessagePatch detects identical streaming patches', () => {
