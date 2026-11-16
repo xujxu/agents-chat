@@ -4,6 +4,7 @@ import * as crypto from 'crypto';
 import Database from 'better-sqlite3';
 import { ChatSyncError } from './chatSyncProtocol';
 import { isDeepStrictEqual } from 'node:util';
+import { deleteReplyDraftsWithDb, overlayReplyDrafts, REPLY_DRAFTS_SCHEMA, saveReplyDraftWithDb } from './chatReplyDrafts';
 
 /**
  * Server-side chat history storage — SQLite backend.
@@ -145,6 +146,7 @@ export function getDb(): Database.Database {
     );
 
     CREATE INDEX IF NOT EXISTS idx_chats_user_ts ON chats (user_id, ts DESC);
+${REPLY_DRAFTS_SCHEMA}
 
     CREATE TABLE IF NOT EXISTS chat_tombstones (
       user_id TEXT NOT NULL,
@@ -407,6 +409,14 @@ export async function updateChatMessage(userId: string, chatId: string, message:
   })();
 }
 
+/**
+ * Saves a snapshot of a reply that is still streaming without rewriting the chat's history;
+ * the reply is written into the chat once it finishes (updateChatMessage).
+ */
+export async function saveStreamingReply(userId: string, chatId: string, message: StoredMessage): Promise<boolean> {
+  return saveReplyDraftWithDb(getDb(), userId, chatId, message);
+}
+
 export async function reconcileStalePendingMessagesForAgent(
   userId: string,
   chatId: string,
@@ -468,7 +478,10 @@ function mapStoredChatRow(row: any): StoredChat {
 
 export function getChatWithDb(db: Database.Database, userId: string, chatId: string): StoredChat | null {
   const row = db.prepare('SELECT * FROM chats WHERE user_id = ? AND chat_id = ?').get(userId, chatId) as any;
-  return row ? mapStoredChatRow(row) : null;
+  if (!row) return null;
+  const chat = mapStoredChatRow(row);
+  chat.messages = overlayReplyDrafts(db, userId, chatId, chat.messages);
+  return chat;
 }
 
 export function saveChatWithDb(db: Database.Database, userId: string, chat: StoredChat): void {
@@ -496,6 +509,8 @@ export function saveChatWithDb(db: Database.Database, userId: string, chat: Stor
     chat.agentId || '',
     JSON.stringify(chat.gitContext || {}),
   );
+  // A reply that is no longer streaming here (finished, interrupted or removed) must not be overlaid again.
+  deleteReplyDraftsWithDb(db, userId, chat.id, new Set(chat.messages.filter(m => m.pending === true).map(m => m.id)));
 }
 
 function appendMessageToChatWithDb(db: Database.Database, userId: string, chat: Pick<StoredChat, 'id' | 'name'>, message: StoredMessage): StoredChat {
@@ -588,6 +603,7 @@ export async function deleteChat(userId: string, chatId: string): Promise<void> 
     db.prepare('INSERT OR IGNORE INTO chat_tombstones (user_id, chat_id, deleted_at) VALUES (?, ?, ?)')
       .run(userId, chatId, Date.now());
     db.prepare('DELETE FROM chats WHERE user_id = ? AND chat_id = ?').run(userId, chatId);
+    deleteReplyDraftsWithDb(db, userId, chatId);
     db.prepare('DELETE FROM chat_followups WHERE user_id = ? AND chat_id = ?').run(userId, chatId);
     db.prepare(`
       UPDATE user_prefs SET last_chat_id = NULL, updated_at = ?

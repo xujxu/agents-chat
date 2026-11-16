@@ -9,6 +9,7 @@ import {
   getChat,
   reconcileStalePendingMessagesForAgent,
   updateChatMessage,
+  saveStreamingReply,
   StoredMessage,
   updateChatAgentSession,
   isAgentSessionOwnedByOtherUser,
@@ -876,7 +877,8 @@ async function persistTurnSnapshot(turn: TurnState): Promise<void> {
     parts: parts.length ? parts : undefined,
     userRequest: turn.done ? undefined : turn.userRequest,
   };
-  await updateChatMessage(turn.userId, turn.chatId, message);
+  // Streaming snapshots go to a small draft row; only the finished reply rewrites the chat.
+  await (turn.done ? updateChatMessage : saveStreamingReply)(turn.userId, turn.chatId, message);
   turn.lastPersistedAt = Date.now();
 }
 
