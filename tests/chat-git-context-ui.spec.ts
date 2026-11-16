@@ -53,7 +53,7 @@ async function openChatWithGitContext(page: Page, { available = true, savedConte
           await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'not_found' }) });
           return;
         }
-        gitContextLoadedChatIds.add(id);
+        if (url.searchParams.get('view') === 'git-context') gitContextLoadedChatIds.add(id);
         await route.fulfill({
           contentType: 'application/json',
           body: JSON.stringify({ ok: true, chat, gitContextOptions: buildGitContextOptions(chat) }),
