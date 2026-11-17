@@ -134,3 +134,36 @@ test('an agent that reports no models is queried once per chat, not in a loop', 
   for (const request of ensureRequests) perChat.set(request.chatId, (perChat.get(request.chatId) || 0) + 1);
   expect([...perChat.values()]).toEqual([...perChat.values()].map(() => 1));
 });
+
+test('opening the model picker refreshes a list that changed since the page loaded', async ({ page }) => {
+  const refreshes: any[] = [];
+  let models = [{ modelId: 'old-a', name: 'Old A' }, { modelId: 'retired-b', name: 'Retired B' }];
+  await page.addInitScript(() => { window.localStorage.setItem('acp_chat_orchestration_mode', 'discussion'); });
+  await page.route('**/api/acp', async (route) => {
+    const body = route.request().postDataJSON() as any;
+    if (body?.action === 'list-agents') {
+      await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, agents: [
+        { id: 'alpha', name: 'Alpha Agent', command: 'mock', args: [], cwd: '', running: true, canTalk: true, public: true, models, defaultModelId: 'old-a' },
+      ] }) });
+      return;
+    }
+    if (body?.action === 'ensure-agent-models' && body.refresh) {
+      refreshes.push(body);
+      await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, models, cached: true }) });
+      return;
+    }
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true }) });
+  });
+
+  await login(page);
+  await resetChats(page);
+  await ensureActiveChat(page);
+  await page.locator('textarea.composerTextarea').fill('@alpha hello');
+  await expectModelOptions(page, 'alpha', ['Old A', 'Retired B']);
+  await page.keyboard.press('Escape');
+
+  // The agent's list changes (e.g. the CLI gained a model); the next time the picker opens it shows the new list.
+  models = [{ modelId: 'old-a', name: 'Old A' }, { modelId: 'new-c', name: 'New C' }];
+  await expectModelOptions(page, 'alpha', ['Old A', 'New C']);
+  expect(refreshes.map((request) => request.agentId)).toEqual(['alpha', 'alpha']);
+});

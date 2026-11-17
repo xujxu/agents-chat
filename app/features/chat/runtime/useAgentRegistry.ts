@@ -170,6 +170,23 @@ export function useAgentRegistry({ acp }: UseAgentRegistryParams) {
     }
   }
 
+  /** Opening a model menu re-reads the agent's list, which may have changed since the page loaded. */
+  async function refreshAgentModels(agentId: string) {
+    if (agentId === SCHEDULER_AGENT_ID || !agents.find((a) => a.id === agentId)?.models?.length) return;
+    const data = await acp({ action: 'ensure-agent-models', agentId, refresh: true }).catch(() => null);
+    const models: Agent['models'] = Array.isArray(data?.models) ? data.models : [];
+    if (!data?.ok || !models?.length) return;
+    setAgents((current) => current.some((a) => a.id === agentId && JSON.stringify(a.models) !== JSON.stringify(models))
+      ? current.map((a) => (a.id === agentId ? { ...a, models } : a))
+      : current);
+    setSelectedAgentModels((prev) => {
+      if (!prev[agentId] || models.some((m) => m.modelId === prev[agentId])) return prev;
+      const next = { ...prev };
+      delete next[agentId];
+      return next;
+    });
+  }
+
   return {
     agents,
     setAgents,
@@ -191,5 +208,6 @@ export function useAgentRegistry({ acp }: UseAgentRegistryParams) {
     clearLastUsedAgent,
     reloadAgents,
     ensureAgentModels,
+    refreshAgentModels,
   };
 }

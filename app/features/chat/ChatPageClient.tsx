@@ -110,7 +110,7 @@ export function ChatPageClient() {
   const showFollowUpHint = !!workflowFollowUp && workflowFollowUp.orchestrationId !== dismissedFollowUpOrchId;
   const nodePanelState = useNodePanelState({ acp, loadAgents: reloadAgents, addMessage });
   const { showNodesPanel, setShowNodesPanel, loadNodes, nodesData } = nodePanelState;
-  const agentPanelState = useAgentPanelState({ acp, loadAgents: reloadAgents, addMessage, loadNodes });
+  const agentPanelState = useAgentPanelState({ acp, loadAgents: reloadAgents, addMessage, loadNodes, refreshAgentModels: registry.refreshAgentModels });
   const { showAgentsPanel, setShowAgentsPanel } = agentPanelState;
   const [showSchedulesPanel, setShowSchedulesPanel] = useState(false);
 

@@ -29,7 +29,7 @@ import { getTerminals, handleTerminalCreate, handleTerminalKill, handleTerminalO
 import { handleReadTextFile, handleWriteTextFile } from '@/lib/acp/fsTools';
 import { cleanupStaleSessions, getAgentProcess, getAgentProcesses, getBootPromises, getPendingUserRequestResponders, getReplayBuffers, getStoppedAgents, getUserSession, getUserSessions, loadSessionOnce, pendingUserRequestResponders, PENDING_USER_REQUEST_TIMEOUT_MS, sendPromptAfterPrior, userSessionKey, type PendingUserRequestResponder } from '@/lib/acp/runtimeState';
 import { getAgentProcessState, isHeldStopped, settlesWithin, stopAgentRuntime as stopAgentRuntimeWith } from '@/lib/acp/processControl';
-import { applySessionModelIfRequested, normalizeSessionModels, syncAgentModelsFromSessionResult, validateRequestedModel } from '@/lib/acp/models';
+import { applySessionModelIfRequested, normalizeSessionModels, refreshAgentModels, syncAgentModelsFromSessionResult, validateRequestedModel } from '@/lib/acp/models';
 import { createLogger } from '@/lib/logger';
 import { resolvePreparedPrompt } from '@/lib/acp/preparedPrompt';
 import { ChatSyncError } from '@/lib/chatSyncProtocol';
@@ -2261,7 +2261,7 @@ export async function POST(req: NextRequest) {
 
     if (action === 'ensure-agent-models') {
       if ((config.models || []).length > 0) {
-        return NextResponse.json({ ok: true, models: config.models, cached: true });
+        return NextResponse.json({ ok: true, models: body?.refresh ? await refreshAgentModels(proc, agentId) : config.models, cached: true });
       }
       const chatId = body?.chatId as string | undefined;
       if (!chatId) return NextResponse.json({ ok: false, error: 'missing_chatId' }, { status: 400 });

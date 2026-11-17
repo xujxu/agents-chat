@@ -39,7 +39,7 @@ export type UseAgentPanelStateParams = {
   acp: (body: Record<string, unknown>) => Promise<any>;
   loadAgents: () => Promise<void>;
   addMessage: (msg: Omit<ChatMessage, 'id' | 'ts'> & { id?: string; ts?: number }) => void;
-  loadNodes: () => Promise<void>;
+  loadNodes: () => Promise<void>; refreshAgentModels?: (agentId: string) => Promise<unknown>;
 };
 
 function mutationError(error: unknown, fallback: string): string {
@@ -56,7 +56,7 @@ export function useAgentPanelState({
   acp,
   loadAgents,
   addMessage,
-  loadNodes,
+  loadNodes, refreshAgentModels,
 }: UseAgentPanelStateParams) {
   const [showAgentsPanel, setShowAgentsPanel] = useState(false);
 
@@ -390,6 +390,8 @@ export function useAgentPanelState({
 
   function openModelSettings(menuKey: string) { setOpenModelMenuKey(menuKey); }
   function closeModelSettings() { setOpenModelMenuKey(null); }
+  // Opening a model menu re-checks that agent's list so it matches what the agent reports now.
+  useEffect(() => { const agentId = openModelMenuKey?.replace(/^(composer|panel):/, ''); if (agentId) void refreshAgentModels?.(agentId); }, [openModelMenuKey]);
 
   useEffect(() => {
     const anyOpen = openModelMenuKey || showAgentSettings || showAddAgent || showAddRemoteAgent || showAgentAddMenu;
@@ -397,9 +399,7 @@ export function useAgentPanelState({
     function handlePointerDown(event: MouseEvent) {
       if (!openModelMenuKey) return;
       const wrap = modelMenuRefs.current.get(openModelMenuKey);
-      if (wrap && !wrap.contains(event.target as Node)) {
-        setOpenModelMenuKey(null);
-      }
+      if (wrap && !wrap.contains(event.target as Node)) setOpenModelMenuKey(null);
     }
     function handleKey(event: globalThis.KeyboardEvent) {
       if (event.key !== 'Escape') return;
