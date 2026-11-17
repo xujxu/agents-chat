@@ -25,6 +25,7 @@ async function stream(request) {
         update(sessionId, { sessionUpdate, content: { type: 'text', text: `SUBAGENT ${i} ` }, _meta: { 'github.com/copilot': { agentId: 'sub-1' } } });
       }
     }
+    if (subagent) update(sessionId, { sessionUpdate: 'tool_call', toolCallId: `sub-call-${i}`, status: 'pending', title: `SUBAGENT tool ${i}`, rawInput: {}, _meta: { 'github.com/copilot': { agentId: 'sub-1' } } });
   }
   update(sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Stream done' } });
   write({ id: request.id, result: { stopReason: 'end_turn' } });

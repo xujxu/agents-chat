@@ -120,8 +120,8 @@ test('reloading mid-reply restores the saved partial reply and finishes it once'
     if (chatId) await api.delete(`/api/chats?id=${chatId}`);
   }
 });
-// Copilot CLI streams a background sub-agent's thoughts and reply on the parent session, tagged
-// with _meta agentId; they must not be spliced into the parent's reply.
+// Copilot CLI streams a background sub-agent's thoughts, reply and tool calls on the parent session,
+// tagged with _meta agentId; they must not be spliced into the parent's reply.
 test('a sub-agent streamed on the same session stays out of the reply', async ({ page }) => {
   await login(page);
   const api = page.request;
@@ -140,6 +140,7 @@ test('a sub-agent streamed on the same session stays out of the reply', async ({
     const reply = page.locator('.message.agent').last();
     await expect(reply).toContainText('Step 3 ok. Stream done', { timeout: 30_000 });
     await expect(reply).not.toContainText('SUBAGENT');
+    await expect(reply.locator('.toolCallItem')).toHaveCount(3);
     await expect.poll(async () => {
       const chat = (await (await api.get(`/api/chats?id=${chatId}`)).json()).chat;
       const saved = chat?.messages.filter((message: { type: string }) => message.type === 'agent').at(-1);
