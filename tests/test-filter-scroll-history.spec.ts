@@ -122,6 +122,17 @@ test.describe('Agent Filter Persistence', () => {
     await page.waitForSelector('.emptyHomepage', { timeout: 10000 });
   });
 
+  test('selecting an agent lists a chat created on another device without a reload', async ({ page }) => {
+    // Saved through the API after this page loaded, as another browser would.
+    const chat = { id: `other-device-${Date.now()}`, name: 'Created elsewhere', ts: Date.now(), agentId: 'beta', agentSessions: {},
+      messages: [{ id: 'u1', type: 'user', content: '@beta hi', ts: Date.now() }] };
+    expect((await page.context().request.post(`${BASE}/api/chats`, { data: { chat } })).ok()).toBeTruthy();
+    await expect(page.locator('.chatHistoryName', { hasText: 'Created elsewhere' })).toHaveCount(0);
+
+    await selectChatAgentFilter(page, 'beta');
+    await expect(page.locator('.chatHistoryName', { hasText: 'Created elsewhere' })).toBeVisible({ timeout: 10000 });
+  });
+
   test('should preserve agent filter when creating new chat', async ({ page }) => {
     const select = chatAgentFilterTrigger(page);
     await selectChatAgentFilter(page, 'alpha');
