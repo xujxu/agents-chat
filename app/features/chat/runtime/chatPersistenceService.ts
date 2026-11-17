@@ -419,8 +419,22 @@ export function createPersistenceHandlers(ctx: PersistenceContext) {
     onDone?.();
   }
 
+  /** Re-reads the chat list so chats created on another device show up. Keeps the newer local
+   * timestamp (a streaming reply bumps it before the server's) and an open chat not saved yet. */
+  async function refreshChatList() {
+    const data = await fetch('/api/chats').then(r => r.json()).catch(() => null);
+    if (!data?.ok || !Array.isArray(data.chats)) return;
+    const server = normalizeChatHistory(data.chats as ChatHistoryEntry[]);
+    ctx.setChatHistory(prev => {
+      const local = new Map(prev.map(c => [c.id, c]));
+      const merged = server.map(c => ({ ...local.get(c.id), ...c, ts: Math.max(c.ts || 0, local.get(c.id)?.ts || 0) }));
+      const unsaved = prev.filter(c => c.id === ctx.currentChatIdRef.current && !server.some(s => s.id === c.id));
+      return normalizeChatHistory([...unsaved, ...merged]);
+    });
+  }
+
   return {
     loadChatIntoCache, persistLoadedChatMigration, saveChatToHistory, saveCurrentChatToHistory,
-    clearChatMessages, loadChat, createNewChat, shareCurrentChat, renameChatById, deleteChatById,
+    clearChatMessages, loadChat, createNewChat, shareCurrentChat, renameChatById, deleteChatById, refreshChatList,
   };
 }
