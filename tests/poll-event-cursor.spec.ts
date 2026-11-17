@@ -120,3 +120,34 @@ test('reloading mid-reply restores the saved partial reply and finishes it once'
     if (chatId) await api.delete(`/api/chats?id=${chatId}`);
   }
 });
+// Copilot CLI streams a background sub-agent's thoughts, reply and tool calls on the parent session,
+// tagged with _meta agentId; they must not be spliced into the parent's reply.
+test('a sub-agent streamed on the same session stays out of the reply', async ({ page }) => {
+  await login(page);
+  const api = page.request;
+  const agentId = `stream-agent-${randomUUID().slice(0, 8)}`;
+  expect((await api.post('/api/acp', { data: { action: 'create-agent', agent: {
+    id: agentId, command: 'node', args: [path.resolve('tests/fixtures/streaming-acp-agent.mjs')],
+    cwd: process.cwd(), yolo: false, env: { STREAM_AGENT_TOOLS: '3', STREAM_AGENT_GAP_MS: '50', STREAM_AGENT_SUBAGENT: '1' },
+  } } })).ok()).toBeTruthy();
+
+  let chatId = '';
+  page.on('request', request => {
+    if (request.url().endsWith('/api/acp') && request.method() === 'POST' && request.postDataJSON()?.action === 'send') chatId = request.postDataJSON().chatId;
+  });
+  try {
+    await startBusyChat(page, agentId);
+    const reply = page.locator('.message.agent').last();
+    await expect(reply).toContainText('Step 3 ok. Stream done', { timeout: 30_000 });
+    await expect(reply).not.toContainText('SUBAGENT');
+    await expect(reply.locator('.toolCallItem')).toHaveCount(3);
+    await expect.poll(async () => {
+      const chat = (await (await api.get(`/api/chats?id=${chatId}`)).json()).chat;
+      const saved = chat?.messages.filter((message: { type: string }) => message.type === 'agent').at(-1);
+      return { pending: saved?.pending, content: saved?.content, leaked: JSON.stringify(saved?.parts ?? []).includes('SUBAGENT') };
+    }, { timeout: 15_000 }).toEqual({ pending: false, content: 'Step 1 ok. Step 2 ok. Step 3 ok. Stream done', leaked: false });
+  } finally {
+    await deleteAgent(api, agentId);
+    if (chatId) await api.delete(`/api/chats?id=${chatId}`);
+  }
+});

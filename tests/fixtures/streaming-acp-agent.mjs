@@ -5,6 +5,7 @@ import { createInterface } from 'node:readline';
 // followed by a few word-sized text chunks, every STREAM_AGENT_GAP_MS. Ends with "Stream done".
 const tools = Number(process.env.STREAM_AGENT_TOOLS || 12);
 const gapMs = Number(process.env.STREAM_AGENT_GAP_MS || 100);
+const subagent = process.env.STREAM_AGENT_SUBAGENT === '1';
 const write = message => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`);
 const update = (sessionId, body) => write({ method: 'session/update', params: { sessionId, update: body } });
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -19,7 +20,12 @@ async function stream(request) {
     update(sessionId, { sessionUpdate: 'tool_call_update', toolCallId: `call-${i}`, status: 'completed', rawOutput: `result ${i}` });
     for (const word of ['Step ', `${i} `, 'ok. ']) {
       update(sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: word } });
+      // A background sub-agent's own stream, tagged the way Copilot CLI tags it.
+      if (subagent) for (const sessionUpdate of ['agent_thought_chunk', 'agent_message_chunk']) {
+        update(sessionId, { sessionUpdate, content: { type: 'text', text: `SUBAGENT ${i} ` }, _meta: { 'github.com/copilot': { agentId: 'sub-1' } } });
+      }
     }
+    if (subagent) update(sessionId, { sessionUpdate: 'tool_call', toolCallId: `sub-call-${i}`, status: 'pending', title: `SUBAGENT tool ${i}`, rawInput: {}, _meta: { 'github.com/copilot': { agentId: 'sub-1' } } });
   }
   update(sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Stream done' } });
   write({ id: request.id, result: { stopReason: 'end_turn' } });
