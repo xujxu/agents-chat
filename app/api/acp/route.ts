@@ -30,6 +30,7 @@ import { handleReadTextFile, handleWriteTextFile } from '@/lib/acp/fsTools';
 import { cleanupStaleSessions, getAgentProcess, getAgentProcesses, getBootPromises, getPendingUserRequestResponders, getReplayBuffers, getStoppedAgents, getUserSession, getUserSessions, loadSessionOnce, pendingUserRequestResponders, PENDING_USER_REQUEST_TIMEOUT_MS, sendPromptAfterPrior, userSessionKey, type PendingUserRequestResponder } from '@/lib/acp/runtimeState';
 import { getAgentProcessState, isHeldStopped, settlesWithin, stopAgentRuntime as stopAgentRuntimeWith } from '@/lib/acp/processControl';
 import { applySessionModelIfRequested, normalizeSessionModels, refreshAgentModels, syncAgentModelsFromSessionResult, validateRequestedModel } from '@/lib/acp/models';
+import { isSubagentUpdate } from '@/lib/acp/subagentUpdates';
 import { createLogger } from '@/lib/logger';
 import { resolvePreparedPrompt } from '@/lib/acp/preparedPrompt';
 import { ChatSyncError } from '@/lib/chatSyncProtocol';
@@ -405,9 +406,7 @@ async function doBootAgent(agentId: string): Promise<void> {
         notifCount = 0;
         lastNotifLog = now;
       }
-      if (method !== 'session/update') {
-        return;
-      }
+      if (method !== 'session/update' || isSubagentUpdate(params?.update)) return;
       const update = params?.update;
       const kind = update?.sessionUpdate;
       // Route notification to correct user session by sessionId

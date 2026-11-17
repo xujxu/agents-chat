@@ -6,6 +6,7 @@ import { canUseAgent } from "../rbac.ts";
 import type { CronJob } from "../../app/features/scheduler/scheduleTypes.ts";
 import { createNdjsonRpc } from "../acp/rpc.ts";
 import { withReplyGuidelines } from "../acp/replyGuidelines.ts";
+import { isSubagentUpdate } from "../acp/subagentUpdates.ts";
 
 export type RunResult = {
   replyText: string;
@@ -138,8 +139,8 @@ async function runViaAcpPrimitives(
 
   // Collect text chunks from session/update notifications.
   rpc.onNotification = (method: string, params: Record<string, unknown>) => {
-    if (method !== 'session/update') return;
     const update = (params as Record<string, unknown>)?.update as Record<string, unknown> | undefined;
+    if (method !== 'session/update' || isSubagentUpdate(update)) return;
     const kind = update?.sessionUpdate;
     if (kind === 'agent_message_chunk') {
       const content = update?.content as Record<string, unknown> | undefined;
