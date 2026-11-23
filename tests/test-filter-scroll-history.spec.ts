@@ -133,6 +133,33 @@ test.describe('Agent Filter Persistence', () => {
     await expect(page.locator('.chatHistoryName', { hasText: 'Created elsewhere' })).toBeVisible({ timeout: 10000 });
   });
 
+  test('reopening a cached chat shows and keeps replies added on another device', async ({ page }) => {
+    const request = page.context().request;
+    const msg = (id: string, type: 'user' | 'agent', content: string, ts: number) => ({ id, type, content, ts, ...(type === 'agent' ? { agentId: 'beta' } : {}) });
+    const chatA = { id: `reopen-a-${Date.now()}`, name: 'Reopen A', ts: Date.now(), agentId: 'beta', agentSessions: {},
+      messages: [msg('a-u1', 'user', '@beta first question', 1), msg('a-r1', 'agent', 'first answer', 2)] };
+    const chatB = { id: `reopen-b-${Date.now()}`, name: 'Reopen B', ts: Date.now() - 1000, agentId: 'beta', agentSessions: {},
+      messages: [msg('b-u1', 'user', '@beta other', 1), msg('b-r1', 'agent', 'other answer', 2)] };
+    for (const chat of [chatA, chatB]) expect((await request.post(`${BASE}/api/chats`, { data: { chat } })).ok()).toBeTruthy();
+
+    await selectChatAgentFilter(page, 'beta');
+    const open = async (name: string, text: string) => {
+      await page.locator('.chatHistoryName', { hasText: name }).click();
+      await expect(page.locator('.message', { hasText: text }).first()).toBeVisible({ timeout: 10000 });
+    };
+    await open('Reopen A', 'first answer');
+    await open('Reopen B', 'other answer');
+
+    // Another device continues chat A while this browser holds it in memory.
+    const continued = { ...chatA, ts: Date.now(), messages: [...chatA.messages, msg('a-u2', 'user', '@beta second question', 3), msg('a-r2', 'agent', 'second answer from laptop', 4)] };
+    expect((await request.post(`${BASE}/api/chats`, { data: { chat: continued } })).ok()).toBeTruthy();
+
+    await open('Reopen A', 'second answer from laptop');
+    await open('Reopen B', 'other answer');
+    const saved = (await (await request.get(`${BASE}/api/chats?id=${chatA.id}`)).json()).chat;
+    expect(saved.messages.map((m: { id: string }) => m.id)).toEqual(['a-u1', 'a-r1', 'a-u2', 'a-r2']);
+  });
+
   test('should preserve agent filter when creating new chat', async ({ page }) => {
     const select = chatAgentFilterTrigger(page);
     await selectChatAgentFilter(page, 'alpha');
