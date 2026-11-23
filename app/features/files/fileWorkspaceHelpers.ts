@@ -21,6 +21,16 @@ export function getFileIcon(name: string): string {
   return icons[ext] || '📄';
 }
 
+/** Splits a file opened from the agent's folder into breadcrumb parts and its full path, using the root's separator. */
+export function getAgentFilePathParts(root: string, relativePath: string) {
+  const separator = root.includes('\\') && !root.includes('/') ? '\\' : '/';
+  const segments = relativePath.split(/[\\/]+/).filter(Boolean);
+  const name = segments.pop() || relativePath;
+  const trimmedRoot = root.replace(/[\\/]+$/, '');
+  const relative = [...segments, name].join(separator);
+  return { root, folders: segments, name, fullPath: root ? `${trimmedRoot}${separator}${relative}` : relative };
+}
+
 export function isLeftSidebarTab(value: unknown): value is LeftSidebarTab {
   return value === 'chats' || value === 'files';
 }

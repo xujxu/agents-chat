@@ -24,8 +24,20 @@
 .mdEditorInline{display:flex;flex-direction:row;height:100%;overflow:hidden;position:relative;}
 .mdEditorContent{display:flex;flex-direction:column;flex:1;min-width:0;overflow:hidden;}
 .mdEditorToolbar{display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--border);background:var(--header-bg);backdrop-filter:blur(18px);flex-shrink:0;}
-.mdEditorToolbarLeft{display:flex;align-items:center;gap:10px;min-width:0;}
-.mdEditorFilePath{font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mdEditorToolbarLeft{display:flex;align-items:center;gap:10px;min-width:0;flex:1 1 auto;}
+.mdEditorFilePath{display:flex;align-items:center;min-width:0;font-size:14px;color:var(--text);white-space:nowrap;}
+.mdPathIcon{flex-shrink:0;margin-right:6px;}
+/* Folders shrink first, so the file name stays readable and the middle of a long path is cut. */
+.mdPathFolders{min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--text-soft);font-weight:400;}
+.mdPathSep{flex-shrink:0;color:var(--text-soft);opacity:.7;white-space:pre;}
+.mdPathName{flex-shrink:0;font-weight:600;}
+.mdPathCopy{flex-shrink:0;margin-left:6px;width:24px;height:24px;display:inline-grid;place-items:center;padding:0;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--text-soft);font-size:13px;line-height:1;cursor:pointer;}
+.mdPathCopy:hover{background:var(--hover-bg);border-color:var(--border);color:var(--text);}
+.mdPathCopy.copied{color:var(--accent);}
+.mdPathCopy.failed{color:var(--danger);}
+.mdFilesRoot{display:flex;align-items:center;gap:6px;min-width:0;padding:0 2px;color:var(--text-soft);font-size:11px;}
+.mdFilesRoot > span:first-child{flex-shrink:0;}
+.mdFilesRootPath{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;direction:rtl;text-align:left;}
 .mdEditorToolbarRight{display:flex;gap:8px;flex-shrink:0;}
 .mdEditorBtn{padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:var(--accent);color:#fff;font-size:13px;cursor:pointer;white-space:nowrap;}
 .mdEditorBtn:hover:not(:disabled){opacity:0.85;}

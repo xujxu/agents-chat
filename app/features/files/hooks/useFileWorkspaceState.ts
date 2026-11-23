@@ -364,6 +364,7 @@ export function useFileWorkspaceState({
     mdFilesError,
     mdFileError,
     mdSelectedAgentId,
+    mdAgentRoot: agents.find(agent => agent.id === mdSelectedAgentId)?.cwd || '',
     setMdSelectedAgentId,
     mdSelectedFile,
     setMdSelectedFile,

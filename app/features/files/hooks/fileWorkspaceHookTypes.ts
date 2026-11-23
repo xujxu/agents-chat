@@ -29,6 +29,7 @@ export type UseFileWorkspaceStateResult = FileWorkspaceController & {
   mdFilesError: string | null;
   mdFileError: string | null;
   mdSelectedAgentId: string | null;
+  mdAgentRoot: string;
   setMdSelectedAgentId: (agentId: string | null) => void;
   mdSelectedFile: string | null;
   setMdSelectedFile: (path: string | null) => void;
