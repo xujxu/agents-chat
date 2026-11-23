@@ -2764,6 +2764,38 @@ test.describe('File Comments UI', () => {
     expect(await page.evaluate(() => (window as unknown as { __copied: string[] }).__copied)).toEqual([fullPath]);
   });
 
+  test('file path names the machine hosting a remote agent', async ({ page }) => {
+    const agentId = 'path-host-agent';
+    await page.route('**/api/acp', async route => {
+      const body = route.request().postDataJSON() as { action?: string } | null;
+      if (body?.action === 'list-agents') {
+        await route.fulfill({ json: { ok: true, agents: [{ id: agentId, name: 'Remote Agent', relay: true, relayConnectionName: 'node-7', hostName: 'DevBox', cwd: '/srv/repo' }] } });
+        return;
+      }
+      await route.fulfill({ json: { ok: true } });
+    });
+    await page.route('**/api/markdown?**', async route => {
+      const requestedPath = new URL(route.request().url()).searchParams.get('path');
+      if (requestedPath) {
+        await route.fulfill({ json: { path: requestedPath, content: '# Notes', kind: 'markdown', mtime: new Date().toISOString() } });
+        return;
+      }
+      await route.fulfill({ json: { files: [{ path: 'notes.md', name: 'notes.md', mtime: new Date().toISOString() }] } });
+    });
+    await page.route('**/api/comments**', route => route.fulfill({ json: { ok: true, comments: [] } }));
+
+    await login(page);
+    await page.click('button.leftSidebarTab:has-text("Files")');
+    await selectFilesAgent(page, agentId);
+    await expect(page.locator('.mdFilesRoot .mdFilesHost')).toHaveText('🌐 DevBox');
+    await expect(page.locator('.mdFilesRoot')).toHaveAttribute('title', 'Remote node: DevBox\n/srv/repo');
+
+    await page.locator('.mdTreeFile', { hasText: 'notes.md' }).click();
+    const breadcrumb = page.locator('.mdEditorFilePath');
+    await expect(breadcrumb.locator('.mdPathHost')).toHaveText('🌐 DevBox');
+    await expect(breadcrumb).toHaveAttribute('title', 'DevBox: /srv/repo/notes.md');
+  });
+
   test('html files use preview only without review mode', async ({ page }) => {
     await page.route('**/api/acp', async route => {
       const body = route.request().postDataJSON() as { action?: string } | null;

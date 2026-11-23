@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useEffect, useState } from 'react';
-import { getAgentFilePathParts, getFileIcon } from '../fileWorkspaceHelpers';
+import { getAgentFilePathParts, getFileIcon, type AgentHostLabel } from '../fileWorkspaceHelpers';
 
 async function copyText(text: string) {
   if (navigator.clipboard?.writeText) {
@@ -17,7 +17,7 @@ async function copyText(text: string) {
   try { return document.execCommand('copy'); } catch { return false; } finally { area.remove(); }
 }
 
-export function FilePathBreadcrumb({ root, filePath }: { root: string; filePath: string }) {
+export function FilePathBreadcrumb({ host, root, filePath }: { host?: AgentHostLabel | null; root: string; filePath: string }) {
   const { folders, name, fullPath } = getAgentFilePathParts(root, filePath);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   useEffect(() => {
@@ -30,7 +30,13 @@ export function FilePathBreadcrumb({ root, filePath }: { root: string; filePath:
   const parents = root ? [root, ...folders] : folders;
   const copyLabel = copyState === 'copied' ? 'Copied path' : copyState === 'failed' ? 'Copy failed' : 'Copy full path';
   return (
-    <span className="mdEditorFilePath" title={fullPath}>
+    <span className="mdEditorFilePath" title={host ? `${host.name}: ${fullPath}` : fullPath}>
+      {host ? (
+        <>
+          <span className="mdPathHost" title={host.title}><span aria-hidden="true">{host.icon} </span>{host.name}</span>
+          <span className="mdPathSep" aria-hidden="true"> › </span>
+        </>
+      ) : null}
       <span className="mdPathIcon" aria-hidden="true">{getFileIcon(name)}</span>
       {parents.length ? (
         <span className="mdPathFolders">

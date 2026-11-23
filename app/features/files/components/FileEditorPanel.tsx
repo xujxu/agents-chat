@@ -157,7 +157,7 @@ export function FileEditorPanel({ workspace, comments, selection, mobileReadOnly
       )}
       <div className="mdEditorToolbar">
         <div className="mdEditorToolbarLeft">
-          <FilePathBreadcrumb root={workspace.mdAgentRoot} filePath={filePath} />
+          <FilePathBreadcrumb host={workspace.mdAgentHost} root={workspace.mdAgentRoot} filePath={filePath} />
           {workspace.mdDirty && <span className="mdDirtyBadge">● Unsaved</span>}
         </div>
         <div className="mdEditorToolbarRight">

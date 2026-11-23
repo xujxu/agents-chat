@@ -36,7 +36,10 @@
 .mdPathCopy.copied{color:var(--accent);}
 .mdPathCopy.failed{color:var(--danger);}
 .mdFilesRoot{display:flex;align-items:center;gap:6px;min-width:0;padding:0 2px;color:var(--text-soft);font-size:11px;}
-.mdFilesRoot > span:first-child{flex-shrink:0;}
+.mdFilesRoot > span[aria-hidden]{flex-shrink:0;}
+.mdPathHost,.mdFilesHost{flex-shrink:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 6px;border:1px solid var(--border);border-radius:999px;color:var(--text-soft);font-size:12px;}
+.mdPathHost{max-width:180px;}
+.mdFilesHost{max-width:50%;font-size:11px;padding:0 6px;}
 .mdFilesRootPath{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;direction:rtl;text-align:left;}
 .mdEditorToolbarRight{display:flex;gap:8px;flex-shrink:0;}
 .mdEditorBtn{padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:var(--accent);color:#fff;font-size:13px;cursor:pointer;white-space:nowrap;}

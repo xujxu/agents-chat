@@ -1,6 +1,7 @@
 import type { MutableRefObject } from 'react';
 import type TurndownService from 'turndown';
 import type { Agent } from '../../agents/agentTypes';
+import type { AgentHostLabel } from '../fileWorkspaceHelpers';
 import type { FilePreviewKind, FileTreeNode, FileWorkspaceController, LeftSidebarTab, MdConflictState, MdEditorMode } from '../fileWorkspaceTypes';
 
 export type MarkdownFileEntry = { path: string; name: string; mtime: string };
@@ -30,6 +31,7 @@ export type UseFileWorkspaceStateResult = FileWorkspaceController & {
   mdFileError: string | null;
   mdSelectedAgentId: string | null;
   mdAgentRoot: string;
+  mdAgentHost: AgentHostLabel | null;
   setMdSelectedAgentId: (agentId: string | null) => void;
   mdSelectedFile: string | null;
   setMdSelectedFile: (path: string | null) => void;

@@ -66,11 +66,18 @@ export function FileTreePanel({ workspace, agents, schedulerAgentId }: FileTreeP
         </div>
         {workspace.mdSelectedAgentId ? (
           <>
-            {workspace.mdAgentRoot ? (
-              <div className="mdFilesRoot" title={workspace.mdAgentRoot}>
-                <span aria-hidden="true">📂</span>
-                {/* Overflow is cut from the left so the deepest folder names stay visible. */}
-                <span className="mdFilesRootPath"><bdi>{workspace.mdAgentRoot}</bdi></span>
+            {workspace.mdAgentRoot || workspace.mdAgentHost ? (
+              <div className="mdFilesRoot" title={[workspace.mdAgentHost?.title, workspace.mdAgentRoot].filter(Boolean).join('\n')}>
+                {workspace.mdAgentHost ? (
+                  <span className="mdFilesHost"><span aria-hidden="true">{workspace.mdAgentHost.icon} </span>{workspace.mdAgentHost.name}</span>
+                ) : null}
+                {workspace.mdAgentRoot ? (
+                  <>
+                    <span aria-hidden="true">📂</span>
+                    {/* Overflow is cut from the left so the deepest folder names stay visible. */}
+                    <span className="mdFilesRootPath"><bdi>{workspace.mdAgentRoot}</bdi></span>
+                  </>
+                ) : null}
               </div>
             ) : null}
             <div className="mdFileSearchRow">

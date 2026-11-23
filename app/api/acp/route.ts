@@ -2006,7 +2006,8 @@ export async function POST(req: NextRequest) {
         const proc = procs.get(a.id);
         const authMethods = proc?.authMethods ?? [];
         const needsAuth = !!proc?.needsAuth;
-        const base = { id: a.id, name: a.name, owner: a.owner, canModify: userCanModify, canTalk: userCanTalk, public: a.public, relay: a.relay, noTools: a.noTools, relayConnectionName: a.relayConnectionName, relayConnectionLabel: relayNode?.label, cwd: a.cwd, models: a.models, defaultModelId: a.defaultModelId, authMethods, needsAuth, ...(a.id === defaultAgentId ? { isDefault: true } : {}) };
+        const hostName = a.relay ? relayNode?.label?.trim() || a.relayConnectionName || a.id : os.hostname();
+        const base = { id: a.id, name: a.name, owner: a.owner, canModify: userCanModify, canTalk: userCanTalk, public: a.public, relay: a.relay, noTools: a.noTools, relayConnectionName: a.relayConnectionName, relayConnectionLabel: relayNode?.label, hostName, cwd: a.cwd, models: a.models, defaultModelId: a.defaultModelId, authMethods, needsAuth, ...(a.id === defaultAgentId ? { isDefault: true } : {}) };
         if (userCanModify) {
           return [{ ...base, command: a.command, args: a.args, cwd: a.cwd, yolo: a.yolo, relayConnectionName: a.relayConnectionName, relayConnectionLabel: relayNode?.label }];
         }
