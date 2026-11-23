@@ -75,7 +75,7 @@ export function ChatPageClient() {
   const chatLoadingRef = useRef<HTMLDivElement | null>(null);
   const chatSelection = useChatSelectionTransition();
   const fileCommentsControllerRef = useRef<Pick<UseFileCommentsResult, 'resetForFileOpen'> | null>(null);
-  const runtime = useChatRuntime({ userId, acp, agentsRef, agentsLoadingRef, chatAgentFilterRef, getSelectedModelIdForAgent, setInputProgrammatic, effectiveLastUsedAgentRef, rememberLastUsedAgent, authStatus, reloadAgents });
+  const runtime = useChatRuntime({ userId, acp, agentsRef, agentsLoadingRef, chatAgentFilterRef, getSelectedModelIdForAgent, switchComposerChat: composer.switchDraftChat, effectiveLastUsedAgentRef, rememberLastUsedAgent, authStatus, reloadAgents });
   const { messages, chatHistory, currentChatId, activeSidebarChatId, chatName, runVersion, shareDialog, expandedMessages, initialChatRestore, retryInitialChatRestore, cancelInitialChatRestore, orchestrationMode, pendingWorkflowPlan, dismissedFollowUpOrchId, setDismissedFollowUpOrchId, dismissedWorkflowBarOrchId, setChatHistory, setChatName, setCurrentChatId, setActiveSidebarChatId, setShareDialog, setExpandedMessages, setOrchestrationMode, setPendingWorkflowPlan, currentChatIdRef, sessionRunsRef, currentAgentSessionsRef, inputHistoryRef, orchestrationsRef, addMessage, updateMessage, notifyRunStateChanged, dispatchToAgent, saveCurrentChatToHistory, clearChatMessages, shareCurrentChat, handleStop, retryFailedSend, sendWorkflowFollowUpReply, answerAgentUserRequest, dismissAgentUserRequest, fileCommentCallbacksRef, panelCallbacksRef, loadChat: runtimeLoadChat, createNewChat: runtimeCreateNewChat, renameChatById: runtimeRenameChatById, deleteChatById: runtimeDeleteChatById, handleSend: runtimeHandleSend, loadChatIntoCache, getChatSidebarStatus } = runtime;
   const [showWorkflowPicker, setShowWorkflowPicker] = useState(false);
   const { chatContainerRef, attachChatContainer, showScrollToBottom, handleBeforeFileTabChange, prepareChatLoad, scrollToLatest, forgetChatScroll } = useChatScroll(currentChatId);
@@ -234,7 +234,7 @@ export function ChatPageClient() {
   }
   async function createNewChat() { cancelInitialChatRestore(); setOpenChatMenuId(null); await runtimeCreateNewChat(registry.selectedAgentFilter); }
   async function renameChatById(chatId: string, newName: string) { await runtimeRenameChatById(chatId, newName, () => { setRenamingChatId(null); setRenameValue(''); }); }
-  async function deleteChatById(chatId: string) { forgetChatScroll(chatId); await runtimeDeleteChatById(chatId, () => setOpenChatMenuId(null)); }
+  async function deleteChatById(chatId: string) { forgetChatScroll(chatId); await runtimeDeleteChatById(chatId, () => { composer.discardDraft(chatId); setOpenChatMenuId(null); }); }
   async function handleSend() { const draft = prepareSubmission(); if ((!draft.text && draft.attachments.length === 0) || agents.length === 0) return; scrollToLatest(); await runtimeHandleSend(draft.text, draft.attachments, inputHistoryIndexRef, inputDraftRef, draft.onStaged); }
   function selectMention(agentId: string) { const currentInput = inputRef.current, atIndex = currentInput.lastIndexOf('@'); setInputProgrammatic(`${currentInput.slice(0, atIndex)}@${agentId} `); setMentionSelectedIndex(0); }
   function insertSlashCommand(command: { name: string }) { setInputProgrammatic(`/${command.name} `); setSlashSelectedIndex(0); composerRef.current?.focus(); }

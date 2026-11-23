@@ -33,7 +33,6 @@ export type PersistenceContext = {
   setMessagesForChat: (chatId: string, messages: ChatMessage[]) => void;
   addMessage: (msg: Omit<ChatMessage, 'id' | 'ts'> & { id?: string; ts?: number }, chatId?: string) => string;
   resumeActiveTurn: (agentId: string, turn: any) => void;
-  onClearInput?: () => void;
   onClearAgentFilter?: () => void;
   onCloseChatsPanel?: () => void;
   onCloseAgentsPanel?: () => void;
@@ -165,7 +164,6 @@ export function createPersistenceHandlers(ctx: PersistenceContext) {
     }];
     ctx.setMessagesForChat(ctx.currentChatIdRef.current, initial);
     ctx.setExpandedMessages({});
-    ctx.onClearInput?.();
     if (opts?.clearAgentFilter !== false) ctx.onClearAgentFilter?.();
   }
 
@@ -239,7 +237,6 @@ export function createPersistenceHandlers(ctx: PersistenceContext) {
     ctx.setChatName(targetName);
     ctx.setCurrentChatId(chatId);
     ctx.setExpandedMessages({});
-    ctx.onClearInput?.();
 
     // Backfill input history from loaded messages if none exists for this chat
     if (ctx.inputHistoryRef && !ctx.inputHistoryRef.current[chatId]) {

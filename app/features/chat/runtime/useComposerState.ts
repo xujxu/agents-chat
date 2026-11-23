@@ -41,6 +41,25 @@ function measureTextareaContentHeight(el: HTMLTextAreaElement, width: number): n
   return measureTextarea.scrollHeight;
 }
 
+type PastedLink = { text: string; href: string };
+type ComposerDraft = { text: string; links: PastedLink[]; attachments: ChatAttachment[] };
+
+/** Saved drafts are a chat-id → text map; older builds stored one plain string for the whole app. */
+function readSavedDrafts(): { drafts: Record<string, ComposerDraft>; legacyText: string } {
+  const raw = window.localStorage.getItem(STORAGE_CHAT_INPUT) || '';
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const drafts: Record<string, ComposerDraft> = {};
+      for (const [chatId, text] of Object.entries(parsed)) {
+        if (typeof text === 'string' && text) drafts[chatId] = { text, links: [], attachments: [] };
+      }
+      return { drafts, legacyText: '' };
+    }
+  } catch { /* plain-string value from an older build */ }
+  return { drafts: {}, legacyText: raw };
+}
+
 export function useComposerState() {
   const [input, setInput] = useState('');
   const inputRef = useRef('');
@@ -57,6 +76,35 @@ export function useComposerState() {
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [isDraggingAttachment, setIsDraggingAttachment] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const attachmentsRef = useRef(attachments);
+  attachmentsRef.current = attachments;
+  // Unsent text and attachments of chats other than the open one, keyed by chat id.
+  const draftsRef = useRef<Record<string, ComposerDraft> | null>(null);
+  const legacyDraftRef = useRef('');
+  const draftChatIdRef = useRef<string | null>(null);
+
+  const loadDrafts = useCallback(() => {
+    if (!draftsRef.current) {
+      const saved = readSavedDrafts();
+      draftsRef.current = saved.drafts;
+      legacyDraftRef.current = saved.legacyText;
+    }
+    return draftsRef.current;
+  }, []);
+
+  const persistDrafts = useCallback(() => {
+    const drafts = loadDrafts();
+    // Keep an older build's single draft on disk until a chat opens and takes it.
+    if (legacyDraftRef.current) return;
+    const texts: Record<string, string> = {};
+    for (const [chatId, draft] of Object.entries(drafts)) if (draft.text) texts[chatId] = draft.text;
+    const openChatId = draftChatIdRef.current;
+    if (openChatId) {
+      if (inputRef.current) texts[openChatId] = inputRef.current;
+      else delete texts[openChatId];
+    }
+    try { window.localStorage.setItem(STORAGE_CHAT_INPUT, JSON.stringify(texts)); } catch { /* ignore */ }
+  }, [loadDrafts]);
 
   const resizeComposer = useCallback(() => {
     const el = composerRef.current;
@@ -84,6 +132,40 @@ export function useComposerState() {
       resizeComposer();
     }
   }, [resizeComposer]);
+
+  /** Keeps the unsent text and attachments of the chat being left, and shows the ones of the chat being opened. */
+  const switchDraftChat = useCallback((chatId: string) => {
+    const previousChatId = draftChatIdRef.current;
+    if (previousChatId === chatId) return;
+    const drafts = loadDrafts();
+    if (previousChatId) {
+      const text = inputRef.current;
+      const draftAttachments = attachmentsRef.current;
+      if (text.trim() || draftAttachments.length) drafts[previousChatId] = { text, links: pastedLinksRef.current, attachments: draftAttachments };
+      else delete drafts[previousChatId];
+    }
+    draftChatIdRef.current = chatId;
+    const draft = chatId ? drafts[chatId] : undefined;
+    if (chatId) delete drafts[chatId];
+    let text = draft?.text || '';
+    if (chatId && !draft && legacyDraftRef.current) { text = legacyDraftRef.current; legacyDraftRef.current = ''; }
+    inputHistoryIndexRef.current = -1;
+    inputDraftRef.current = '';
+    setInputProgrammatic(text);
+    pastedLinksRef.current = draft?.links || [];
+    setAttachments(draft?.attachments || []);
+    setAttachmentError(null);
+    persistDrafts();
+  }, [loadDrafts, persistDrafts, setInputProgrammatic]);
+
+  const discardDraft = useCallback((chatId: string) => {
+    delete loadDrafts()[chatId];
+    if (draftChatIdRef.current === chatId) {
+      setInputProgrammatic('');
+      setAttachments([]);
+    }
+    persistDrafts();
+  }, [loadDrafts, persistDrafts, setInputProgrammatic]);
 
   const markComposerTyping = useCallback((el: HTMLTextAreaElement) => {
     const main = el.closest('.chatMain');
@@ -141,9 +223,23 @@ export function useComposerState() {
       if (index !== -1) text = `${text.slice(0, index)}[${linkText}](${href})${text.slice(index + linkText.length)}`;
     }
     const submittedIds = new Set(attachments.map(attachment => attachment.id));
+    const chatId = draftChatIdRef.current;
+    const rawText = inputRef.current;
     return {
       text, attachments,
       onStaged() {
+        if (draftChatIdRef.current !== chatId && chatId) {
+          // The user switched chats before the send finished; don't bring the sent text back there.
+          const drafts = loadDrafts();
+          const draft = drafts[chatId];
+          if (draft) {
+            if (draft.text === rawText) { draft.text = ''; draft.links = []; }
+            draft.attachments = draft.attachments.filter(attachment => !submittedIds.has(attachment.id));
+            if (!draft.text.trim() && !draft.attachments.length) delete drafts[chatId];
+            persistDrafts();
+          }
+          return;
+        }
         if (inputRevisionRef.current === revision) setInputProgrammatic('');
         setAttachments(current => current.filter(attachment => !submittedIds.has(attachment.id)));
       },
@@ -210,9 +306,6 @@ export function useComposerState() {
 
   useEffect(() => {
     setMounted(true);
-    const savedInput = window.localStorage.getItem(STORAGE_CHAT_INPUT);
-    if (savedInput) setInputProgrammatic(savedInput);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => () => {
@@ -224,12 +317,12 @@ export function useComposerState() {
 
   useEffect(() => {
     if (!mounted) return;
-    window.localStorage.setItem(STORAGE_CHAT_INPUT, input);
-  }, [input, mounted]);
+    persistDrafts();
+  }, [input, mounted, persistDrafts]);
 
   return {
     input, inputRef, composerRef, fileInputRef, inputHistoryIndexRef, inputDraftRef, pastedLinksRef,
-    attachments, attachmentError, isDraggingAttachment, mounted, setInputProgrammatic,
+    attachments, attachmentError, isDraggingAttachment, mounted, setInputProgrammatic, switchDraftChat, discardDraft,
     composerInputHandler, resizeComposer, addFilesToComposer, removeAttachment, clearAttachments, prepareSubmission,
     handleAttachmentPaste, handleComposerDragOver, handleComposerDragLeave, handleComposerDrop,
   };
