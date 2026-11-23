@@ -6,6 +6,7 @@ import { getFileIcon } from '../fileWorkspaceHelpers';
 import type { FileTreeNode } from '../fileWorkspaceTypes';
 import type { UseFileWorkspaceStateResult } from '../hooks/useFileWorkspaceState';
 import { SelectPicker } from '../../ui/SelectPicker';
+import { CopyPathButton } from './CopyPathButton';
 
 type FileTreePanelProps = {
   workspace: UseFileWorkspaceStateResult;
@@ -76,6 +77,7 @@ export function FileTreePanel({ workspace, agents, schedulerAgentId }: FileTreeP
                     <span aria-hidden="true">📂</span>
                     {/* Overflow is cut from the left so the deepest folder names stay visible. */}
                     <span className="mdFilesRootPath"><bdi>{workspace.mdAgentRoot}</bdi></span>
+                    <CopyPathButton path={workspace.mdAgentRoot} label="Copy folder path" className="mdFilesRootCopy" />
                   </>
                 ) : null}
               </div>
