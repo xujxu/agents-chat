@@ -33,7 +33,7 @@ export type UseChatRuntimeParams = {
   agentsLoadingRef: React.MutableRefObject<boolean>;
   chatAgentFilterRef: React.MutableRefObject<string | null>;
   getSelectedModelIdForAgent: (agentId: string) => string;
-  setInputProgrammatic: (value: string) => void;
+  switchComposerChat: (chatId: string) => void;
   // Resolves the effective "last used agent" for a chat based on the current
   // scope setting: per-user value (any chat) or per-chat value (only the
   // matching chat — no fallback to per-user).
@@ -61,7 +61,7 @@ export function useChatRuntime({
   agentsLoadingRef,
   chatAgentFilterRef,
   getSelectedModelIdForAgent,
-  setInputProgrammatic,
+  switchComposerChat,
   effectiveLastUsedAgentRef,
   rememberLastUsedAgent,
   authStatus,
@@ -93,6 +93,7 @@ export function useChatRuntime({
   const chatMessagesRef = useRef<Record<string, ChatMessage[]>>({});
   const currentChatIdRef = useRef(currentChatId);
   currentChatIdRef.current = currentChatId;
+  useEffect(() => switchComposerChat(currentChatId), [currentChatId, switchComposerChat]);
   const chatNameRef = useRef(chatName);
   chatNameRef.current = chatName;
   const sessionRunsRef = useRef<Record<string, SessionRunContext>>({});
@@ -231,7 +232,6 @@ export function useChatRuntime({
     setChatHistory, setChatName, setChatCounter, setCurrentChatId, setActiveSidebarChatId,
     setShareDialog, setExpandedMessages, setMessagesForChat, addMessage,
     resumeActiveTurn: (agentId, turn) => resumeActiveTurnRef.current(agentId, turn),
-    onClearInput: () => setInputProgrammatic(''),
     onClearAgentFilter: () => panelCallbacksRef.current.setSelectedAgentFilter?.(null),
     onCloseChatsPanel: () => panelCallbacksRef.current.setShowChatsPanel?.(false),
     onCloseAgentsPanel: () => panelCallbacksRef.current.setShowAgentsPanel?.(false),

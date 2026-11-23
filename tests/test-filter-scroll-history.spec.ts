@@ -203,6 +203,52 @@ test.describe('Agent Filter Persistence', () => {
     }
   });
 
+  test('each chat keeps its own unsent draft across chat and agent switches and a reload', async ({ page }) => {
+    const request = page.context().request;
+    const now = Date.now();
+    const chat = (id: string, name: string, agentId: string, ts: number) => ({ id: `${id}-${now}`, name, ts, agentId, agentSessions: {},
+      messages: [{ id: `${id}-u1`, type: 'user', content: `@${agentId} hello from ${name}`, ts: 1 }] });
+    for (const c of [chat('draft-a1', 'Draft A1', 'alpha', now), chat('draft-a2', 'Draft A2', 'alpha', now - 1000), chat('draft-b1', 'Draft B1', 'beta', now)]) {
+      expect((await request.post(`${BASE}/api/chats`, { data: { chat: c } })).ok()).toBeTruthy();
+    }
+    const composer = page.locator('textarea.composerTextarea');
+    const open = async (name: string) => {
+      await page.locator('.chatHistoryName', { hasText: name }).click();
+      await expect(page.locator('.message', { hasText: `hello from ${name}` })).toBeVisible({ timeout: 10000 });
+      await expect(composer).toBeVisible({ timeout: 10000 });
+    };
+
+    await selectChatAgentFilter(page, 'alpha');
+    await open('Draft A1');
+    await composer.fill('unsent note for A1');
+    await open('Draft A2');
+    await expect(composer).toHaveValue('');
+    await composer.fill('unsent note for A2');
+    await selectChatAgentFilter(page, 'beta');
+    await open('Draft B1');
+    await expect(composer).toHaveValue('');
+
+    await selectChatAgentFilter(page, 'alpha');
+    await open('Draft A1');
+    await expect(composer).toHaveValue('unsent note for A1');
+    await open('Draft A2');
+    await expect(composer).toHaveValue('unsent note for A2');
+
+    await page.waitForTimeout(500);
+    await page.reload({ waitUntil: 'networkidle' });
+    await expect(composer).toHaveValue('unsent note for A2', { timeout: 15000 });
+    await open('Draft A1');
+    await expect(composer).toHaveValue('unsent note for A1');
+
+    // Sending a draft removes it for good.
+    await page.click('button[aria-label="Send message"]');
+    await expect(page.locator('.message.user', { hasText: 'unsent note for A1' })).toBeVisible({ timeout: 10000 });
+    await expect(composer).toHaveValue('');
+    await open('Draft A2');
+    await open('Draft A1');
+    await expect(composer).toHaveValue('');
+  });
+
   test('should preserve agent filter when deleting a chat', async ({ page }) => {
     const select = chatAgentFilterTrigger(page);
     await selectChatAgentFilter(page, 'alpha');
