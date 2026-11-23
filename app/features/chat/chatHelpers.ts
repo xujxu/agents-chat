@@ -18,6 +18,20 @@ export function normalizeChatHistory(chats: ChatHistoryEntry[]): ChatHistoryEntr
   return Array.from(byId.values());
 }
 
+/**
+ * A chat reopened from this browser's cache may be behind the server (another device kept
+ * chatting). The server copy wins, except for this browser's unsaved changes (`unsavedIds`) and
+ * its local notices; saved messages the server no longer has were removed elsewhere.
+ */
+export function mergeReopenedChatMessages(server: ChatMessage[], cached: ChatMessage[], unsavedIds: Set<string>): ChatMessage[] {
+  const local = new Map(cached.map(message => [message.id, message]));
+  const merged = new Map(server.map(message => [message.id, unsavedIds.has(message.id) ? local.get(message.id) || message : message]));
+  for (const message of cached) {
+    if (!merged.has(message.id) && (message.type === 'system' || unsavedIds.has(message.id))) merged.set(message.id, message);
+  }
+  return [...merged.values()].sort((a, b) => a.ts - b.ts);
+}
+
 /** Moves `entry` to the end of the history, keeping the existing chat agent when `entry` has none (a lost agent routes sends to the default agent). */
 export function replaceChatHistoryEntry(history: ChatHistoryEntry[], entry: ChatHistoryEntry): ChatHistoryEntry[] {
   const agentId = entry.agentId || history.find(chat => chat.id === entry.id)?.agentId;

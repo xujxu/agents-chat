@@ -1,6 +1,6 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { ChatHistoryEntry, ChatMessage, ShareDialog } from '../chatTypes';
-import { migrateFailedSendWarnings, normalizeChatHistory, lastSessionId } from '../chatHelpers';
+import { mergeReopenedChatMessages, migrateFailedSendWarnings, normalizeChatHistory, lastSessionId } from '../chatHelpers';
 import { postChatJson, type IncrementalChatSaver } from './incrementalChatSaver';
 import { STORAGE_INPUT_HISTORY } from './sessionPersistence';
 import {
@@ -200,14 +200,20 @@ export function createPersistenceHandlers(ctx: PersistenceContext) {
         return 'failed';
       }
       if (data.ok && data.chat) {
-        ctx.chatSaver.hydrate(chatId, data.chat.messages || []);
-        agentSessions = data.chat.agentSessions || {};
+        const serverMessages: ChatMessage[] = data.chat.messages || [];
         const cachedMessages = ctx.chatMessagesRef.current[chatId];
+        // Read before the server copy updates the save baseline: these are this browser's unsaved changes.
+        const unsavedIds = new Set((cachedMessages || [])
+          .filter(m => m.type !== 'system' && !ctx.chatSaver.isDurable(chatId, [m])).map(m => m.id));
+        ctx.chatSaver.hydrate(chatId, serverMessages);
+        if (cachedMessages) await ctx.chatSaver.refreshFromServer(chatId, serverMessages);
+        if (!isCurrentSelection()) return 'superseded';
+        agentSessions = data.chat.agentSessions || {};
         if (cachedMessages) {
-          targetMessages = cachedMessages;
+          targetMessages = mergeReopenedChatMessages(serverMessages, cachedMessages, unsavedIds);
         } else {
           const isReviewChat = typeof chatId === 'string' && chatId.startsWith('comment-review:');
-          const migration = migrateFailedSendWarnings(data.chat.messages || [], agentSessions, {
+          const migration = migrateFailedSendWarnings(serverMessages, agentSessions, {
             inferLatestUserFailure: !isReviewChat,
           });
           targetMessages = migration.messages;
