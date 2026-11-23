@@ -133,6 +133,49 @@ test.describe('Agent Filter Persistence', () => {
     await expect(page.locator('.chatHistoryName', { hasText: 'Created elsewhere' })).toBeVisible({ timeout: 10000 });
   });
 
+  test('should preserve agent filter when creating new chat', async ({ page }) => {
+    const select = chatAgentFilterTrigger(page);
+    await selectChatAgentFilter(page, 'alpha');
+    await page.waitForTimeout(500);
+
+    // Should show empty homepage for alpha (no chats yet)
+    await expect(page.locator('.emptyHomepage')).toBeVisible();
+
+    // Create a new chat — filter should remain on alpha
+    await page.click('button.emptyHomepageNewChat');
+    await page.waitForSelector('.chatContainer', { timeout: 10000 });
+
+    await expect(select).toHaveAttribute('data-value', 'alpha');
+  });
+
+  test('should preserve agent filter when selecting an existing chat', async ({ page }) => {
+    // First create a chat under "All"
+    await page.click('button.emptyHomepageNewChat');
+    await page.waitForSelector('.chatContainer', { timeout: 10000 });
+    await sendMessage(page, '@alpha hello');
+
+    // Create a second chat
+    await page.click('button.newChatButton');
+    await page.waitForTimeout(1000);
+
+    // Now switch to alpha filter
+    const select = chatAgentFilterTrigger(page);
+    await selectChatAgentFilter(page, 'alpha');
+    await page.waitForTimeout(500);
+
+    // There should be at least one chat under alpha (the first one we created)
+    const chatRows = page.locator('.chatHistoryRow');
+    const count = await chatRows.count();
+    if (count > 0) {
+      // Click on the chat
+      await chatRows.first().click();
+      await page.waitForTimeout(500);
+
+      // Filter should still be on alpha
+      await expect(select).toHaveAttribute('data-value', 'alpha');
+    }
+  });
+
   test('each chat keeps its own unsent draft across chat and agent switches and a reload', async ({ page }) => {
     const request = page.context().request;
     const now = Date.now();
@@ -177,49 +220,6 @@ test.describe('Agent Filter Persistence', () => {
     await open('Draft A2');
     await open('Draft A1');
     await expect(composer).toHaveValue('');
-  });
-
-  test('should preserve agent filter when creating new chat', async ({ page }) => {
-    const select = chatAgentFilterTrigger(page);
-    await selectChatAgentFilter(page, 'alpha');
-    await page.waitForTimeout(500);
-
-    // Should show empty homepage for alpha (no chats yet)
-    await expect(page.locator('.emptyHomepage')).toBeVisible();
-
-    // Create a new chat — filter should remain on alpha
-    await page.click('button.emptyHomepageNewChat');
-    await page.waitForSelector('.chatContainer', { timeout: 10000 });
-
-    await expect(select).toHaveAttribute('data-value', 'alpha');
-  });
-
-  test('should preserve agent filter when selecting an existing chat', async ({ page }) => {
-    // First create a chat under "All"
-    await page.click('button.emptyHomepageNewChat');
-    await page.waitForSelector('.chatContainer', { timeout: 10000 });
-    await sendMessage(page, '@alpha hello');
-
-    // Create a second chat
-    await page.click('button.newChatButton');
-    await page.waitForTimeout(1000);
-
-    // Now switch to alpha filter
-    const select = chatAgentFilterTrigger(page);
-    await selectChatAgentFilter(page, 'alpha');
-    await page.waitForTimeout(500);
-
-    // There should be at least one chat under alpha (the first one we created)
-    const chatRows = page.locator('.chatHistoryRow');
-    const count = await chatRows.count();
-    if (count > 0) {
-      // Click on the chat
-      await chatRows.first().click();
-      await page.waitForTimeout(500);
-
-      // Filter should still be on alpha
-      await expect(select).toHaveAttribute('data-value', 'alpha');
-    }
   });
 
   test('should preserve agent filter when deleting a chat', async ({ page }) => {
