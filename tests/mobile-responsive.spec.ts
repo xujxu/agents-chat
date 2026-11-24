@@ -864,7 +864,8 @@ test('copies folder and file paths from the mobile Files drawer and editor', asy
   const breadcrumb = page.locator('.mdEditorFilePath');
   await expect(breadcrumb.locator('.mdPathName')).toBeInViewport({ ratio: 1 });
   const copyFile = breadcrumb.getByRole('button', { name: 'Copy full path' });
-  await expect(copyFile).toBeInViewport({ ratio: 1 });
+  // Linux WebKit clips a sub-pixel of the button; tap() below still fails if anything covers it.
+  await expect(copyFile).toBeInViewport({ ratio: 0.95 });
   expect(await page.locator('.mdEditorToolbar').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   await copyFile.tap();
   expect(await copied()).toEqual([root, `${root}/docs`, `${root}/docs/${longFolder}/setup-guide.md`]);
