@@ -2751,6 +2751,14 @@ test.describe('File Comments UI', () => {
     await expect(page.locator('.mdFilesRoot').getByRole('button', { name: 'Copied path' })).toBeVisible();
 
     await page.locator('.mdFileSearch').fill('setup');
+    const docsRow = page.locator('.mdTreeRow', { has: page.locator('.mdTreeDir', { hasText: 'docs' }) });
+    const copyDocs = docsRow.getByRole('button', { name: 'Copy path', exact: true });
+    await expect(copyDocs).toHaveCSS('opacity', '0');
+    await docsRow.hover();
+    await expect(copyDocs).toHaveCSS('opacity', '1');
+    await expect(copyDocs).toHaveAttribute('title', `Copy path: ${root}\\docs`);
+    await copyDocs.click();
+    await expect(docsRow.getByRole('button', { name: 'Copied path' })).toBeVisible();
     await page.locator('.mdTreeFile', { hasText: 'setup-guide.md' }).click();
     const breadcrumb = page.locator('.mdEditorFilePath');
     const fullPath = `${root}\\docs\\${longFolder}\\setup-guide.md`;
@@ -2766,7 +2774,7 @@ test.describe('File Comments UI', () => {
 
     await breadcrumb.getByRole('button', { name: 'Copy full path' }).click();
     await expect(breadcrumb.getByRole('button', { name: 'Copied path' })).toBeVisible();
-    expect(await page.evaluate(() => (window as unknown as { __copied: string[] }).__copied)).toEqual([root, fullPath]);
+    expect(await page.evaluate(() => (window as unknown as { __copied: string[] }).__copied)).toEqual([root, `${root}\\docs`, fullPath]);
   });
 
   test('file path names the machine hosting a remote agent', async ({ page }) => {

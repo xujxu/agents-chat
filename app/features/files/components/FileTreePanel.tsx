@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import type { Agent } from '../../agents/agentTypes';
-import { getFileIcon } from '../fileWorkspaceHelpers';
+import { getAgentFilePathParts, getFileIcon } from '../fileWorkspaceHelpers';
 import type { FileTreeNode } from '../fileWorkspaceTypes';
 import type { UseFileWorkspaceStateResult } from '../hooks/useFileWorkspaceState';
 import { SelectPicker } from '../../ui/SelectPicker';
@@ -15,36 +15,48 @@ type FileTreePanelProps = {
 };
 
 export function FileTreePanel({ workspace, agents, schedulerAgentId }: FileTreePanelProps) {
+  const copyButton = (node: FileTreeNode) => (
+    <CopyPathButton
+      path={getAgentFilePathParts(workspace.mdAgentRoot, node.path).fullPath}
+      label="Copy path"
+      className="mdTreeCopy"
+    />
+  );
   const renderNodes = (nodes: FileTreeNode[], depth: number): ReactNode[] => {
     return nodes.map(node => {
       if (node.isDir) {
         const expanded = Boolean(workspace.mdFileQuery.trim()) || workspace.mdExpandedDirs.has(node.path);
         return (
           <div key={node.path}>
-            <button
-              className="mdTreeDir"
-              style={{ paddingLeft: `${depth * 14}px` }}
-              onClick={() => workspace.toggleMdDir(node.path)}
-            >
-              <span className="mdTreeArrow">{expanded ? '▾' : '▸'}</span>
-              <span className="mdTreeDirIcon">📁</span>
-              <span className="mdTreeLabel">{node.name}</span>
-            </button>
+            <div className="mdTreeRow">
+              <button
+                className="mdTreeDir"
+                style={{ paddingLeft: `${depth * 14}px` }}
+                onClick={() => workspace.toggleMdDir(node.path)}
+              >
+                <span className="mdTreeArrow">{expanded ? '▾' : '▸'}</span>
+                <span className="mdTreeDirIcon">📁</span>
+                <span className="mdTreeLabel">{node.name}</span>
+              </button>
+              {copyButton(node)}
+            </div>
             {expanded && node.children.length > 0 && renderNodes(node.children, depth + 1)}
           </div>
         );
       }
       return (
-        <button
-          key={node.path}
-          className={`mdTreeFile ${workspace.mdSelectedFile === node.path ? 'active' : ''}`}
-          style={{ paddingLeft: `${depth * 14}px` }}
-          title={node.path}
-          onClick={() => void workspace.openMdFile(node.path)}
-        >
-          <span className="mdTreeFileIcon">{getFileIcon(node.name)}</span>
-          <span className="mdTreeLabel">{node.name}</span>
-        </button>
+        <div key={node.path} className="mdTreeRow">
+          <button
+            className={`mdTreeFile ${workspace.mdSelectedFile === node.path ? 'active' : ''}`}
+            style={{ paddingLeft: `${depth * 14}px` }}
+            title={node.path}
+            onClick={() => void workspace.openMdFile(node.path)}
+          >
+            <span className="mdTreeFileIcon">{getFileIcon(node.name)}</span>
+            <span className="mdTreeLabel">{node.name}</span>
+          </button>
+          {copyButton(node)}
+        </div>
       );
     });
   };

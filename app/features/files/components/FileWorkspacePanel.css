@@ -7,6 +7,13 @@
 .mdTreeLabel{overflow:hidden;text-overflow:ellipsis;min-width:0;}
 .mdTreeDir:hover, .mdTreeFile:hover{background:var(--accent-soft);}
 .mdTreeFile.active{background:var(--accent-soft);color:var(--accent);}
+/* The copy-path button overlays the row's right edge, so the tree buttons keep their own styles. */
+.mdTreeRow{position:relative;}
+.mdTreeRow > .mdTreeDir, .mdTreeRow > .mdTreeFile{padding-right:28px;}
+.mdTreeRow:hover > .mdTreeDir, .mdTreeRow:hover > .mdTreeFile{background:var(--accent-soft);}
+.mdPathCopy.mdTreeCopy{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:20px;height:20px;margin:0;font-size:12px;opacity:0;}
+.mdTreeRow:hover .mdTreeCopy, .mdTreeCopy:focus-visible, .mdTreeCopy.copied, .mdTreeCopy.failed{opacity:1;}
+@media (hover: none){ .mdPathCopy.mdTreeCopy{opacity:.6;} }
 .mdTreeArrow{font-size:14px;width:16px;flex-shrink:0;color:var(--text-soft);}
 .mdDiffToggle{margin-top:4px;min-height:var(--control-height-sm, 26px);padding:0 10px;font-size:12px;border:1px solid var(--border);border-radius:var(--control-radius, 8px);background:transparent;color:var(--text-soft);cursor:pointer;width:100%;text-align:center;}
 .mdDiffToggle:hover{background:var(--hover-bg);}
