@@ -186,7 +186,13 @@
 @media (max-width: 900px) {
   .mdEditorToolbar{align-items:flex-start;gap:8px;padding:8px 10px;}
   .mdEditorToolbarRight{align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px;}
-  .mobileDesktopHint{order:3;flex-basis:100%;text-align:right;}
+  .mdEditorToolbarLeft{overflow:hidden;}
+  .mdEditorToolbarRight{min-width:0;}
+  /* contain:inline-size stops the wrapped hint's text from widening the right group over the breadcrumb */
+  .mobileDesktopHint{order:3;flex-basis:100%;text-align:right;contain:inline-size;}
+  .mdPathFolders{flex-shrink:1000;}
+  .mdPathName{flex-shrink:1;min-width:0;overflow:hidden;text-overflow:ellipsis;}
+  .mdPathHost{max-width:96px;}
   .fileContentWithLines{font-size:12px;}
   .mobileMarkdownViewer{padding:16px 14px calc(24px + env(safe-area-inset-bottom));overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
   .mdFileSearch,.mdFileRefresh{min-height:44px;}

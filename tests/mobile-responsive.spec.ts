@@ -818,6 +818,58 @@ test('closes the drawer after selecting a file and preserves the Files tree when
   await expect(page.locator('textarea.composerTextarea')).toHaveValue('draft retained behind file');
 });
 
+test('copies folder and file paths from the mobile Files drawer and editor', async ({ page }) => {
+  const longFolder = 'a-very-long-folder-name-that-keeps-going'.repeat(2);
+  await page.route('**/api/markdown**', async (route) => {
+    const path = new URL(route.request().url()).searchParams.get('path');
+    if (path) {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({ json: { files: [{ path: `docs/${longFolder}/setup-guide.md`, name: 'setup-guide.md', mtime: '2026-09-14T00:00:00.000Z' }] } });
+  });
+  await page.evaluate(() => {
+    const copied: string[] = [];
+    (window as unknown as { __copied: string[] }).__copied = copied;
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { copied.push(text); } } });
+  });
+  const copied = () => page.evaluate(() => (window as unknown as { __copied: string[] }).__copied);
+  const root = TEST_AGENT.cwd;
+
+  await page.getByRole('button', { name: 'Open navigation' }).click();
+  await page.getByRole('tab', { name: 'Files' }).click();
+  await page.getByRole('button', { name: 'Files agent' }).click();
+  await page.getByRole('option', { name: 'Alpha Agent' }).click();
+
+  const rootLine = page.locator('.mdFilesRoot');
+  await expect(rootLine.locator('.mdFilesRootPath')).toHaveText(root);
+  const copyFolder = rootLine.getByRole('button', { name: 'Copy folder path' });
+  await expect(copyFolder).toBeInViewport({ ratio: 1 });
+  await copyFolder.tap();
+  await expect(rootLine.getByRole('button', { name: 'Copied path' })).toBeVisible();
+
+  // Touch screens cannot hover, so tree copy buttons stay visible and tappable.
+  const docsRow = page.locator('.mdTreeRow', { has: page.locator('.mdTreeDir', { hasText: 'docs' }) });
+  const copyDocs = docsRow.getByRole('button', { name: 'Copy path', exact: true });
+  expect(Number(await copyDocs.evaluate((element) => getComputedStyle(element).opacity))).toBeGreaterThan(0);
+  await expect(copyDocs).toBeInViewport({ ratio: 1 });
+  await copyDocs.tap();
+  expect(await copied()).toEqual([root, `${root}/docs`]);
+
+  await page.locator('.mdTreeDir', { hasText: 'docs' }).tap();
+  await page.locator('.mdTreeDir', { hasText: longFolder }).tap();
+  await page.locator('.mdTreeFile', { hasText: 'setup-guide.md' }).tap();
+  await expect(page.locator('.mobileMarkdownViewer')).toBeVisible();
+
+  const breadcrumb = page.locator('.mdEditorFilePath');
+  await expect(breadcrumb.locator('.mdPathName')).toBeInViewport({ ratio: 1 });
+  const copyFile = breadcrumb.getByRole('button', { name: 'Copy full path' });
+  await expect(copyFile).toBeInViewport({ ratio: 1 });
+  expect(await page.locator('.mdEditorToolbar').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await copyFile.tap();
+  expect(await copied()).toEqual([root, `${root}/docs`, `${root}/docs/${longFolder}/setup-guide.md`]);
+});
+
 test('searches, refreshes, and previews images from the mobile Files drawer', async ({ page }) => {
   await page.getByRole('button', { name: 'Open navigation' }).click();
   await page.getByRole('tab', { name: 'Files' }).click();
