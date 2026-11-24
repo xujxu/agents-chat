@@ -7,6 +7,13 @@
 .mdTreeLabel{overflow:hidden;text-overflow:ellipsis;min-width:0;}
 .mdTreeDir:hover, .mdTreeFile:hover{background:var(--accent-soft);}
 .mdTreeFile.active{background:var(--accent-soft);color:var(--accent);}
+/* The copy-path button overlays the row's right edge, so the tree buttons keep their own styles. */
+.mdTreeRow{position:relative;}
+.mdTreeRow > .mdTreeDir, .mdTreeRow > .mdTreeFile{padding-right:28px;}
+.mdTreeRow:hover > .mdTreeDir, .mdTreeRow:hover > .mdTreeFile{background:var(--accent-soft);}
+.mdPathCopy.mdTreeCopy{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:20px;height:20px;margin:0;font-size:12px;opacity:0;}
+.mdTreeRow:hover .mdTreeCopy, .mdTreeCopy:focus-visible, .mdTreeCopy.copied, .mdTreeCopy.failed{opacity:1;}
+@media (hover: none){ .mdPathCopy.mdTreeCopy{opacity:.6;} }
 .mdTreeArrow{font-size:14px;width:16px;flex-shrink:0;color:var(--text-soft);}
 .mdDiffToggle{margin-top:4px;min-height:var(--control-height-sm, 26px);padding:0 10px;font-size:12px;border:1px solid var(--border);border-radius:var(--control-radius, 8px);background:transparent;color:var(--text-soft);cursor:pointer;width:100%;text-align:center;}
 .mdDiffToggle:hover{background:var(--hover-bg);}
@@ -24,8 +31,24 @@
 .mdEditorInline{display:flex;flex-direction:row;height:100%;overflow:hidden;position:relative;}
 .mdEditorContent{display:flex;flex-direction:column;flex:1;min-width:0;overflow:hidden;}
 .mdEditorToolbar{display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--border);background:var(--header-bg);backdrop-filter:blur(18px);flex-shrink:0;}
-.mdEditorToolbarLeft{display:flex;align-items:center;gap:10px;min-width:0;}
-.mdEditorFilePath{font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mdEditorToolbarLeft{display:flex;align-items:center;gap:10px;min-width:0;flex:1 1 auto;}
+.mdEditorFilePath{display:flex;align-items:center;min-width:0;font-size:14px;color:var(--text);white-space:nowrap;}
+.mdPathIcon{flex-shrink:0;margin-right:6px;}
+/* Folders shrink first, so the file name stays readable and the middle of a long path is cut. */
+.mdPathFolders{min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--text-soft);font-weight:400;}
+.mdPathSep{flex-shrink:0;color:var(--text-soft);opacity:.7;white-space:pre;}
+.mdPathName{flex-shrink:0;font-weight:600;}
+.mdPathCopy{flex-shrink:0;margin-left:6px;width:24px;height:24px;display:inline-grid;place-items:center;padding:0;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--text-soft);font-size:13px;line-height:1;cursor:pointer;}
+.mdPathCopy:hover{background:var(--hover-bg);border-color:var(--border);color:var(--text);}
+.mdPathCopy.copied{color:var(--accent);}
+.mdPathCopy.failed{color:var(--danger);}
+.mdFilesRoot{display:flex;align-items:center;gap:6px;min-width:0;padding:0 2px;color:var(--text-soft);font-size:11px;}
+.mdFilesRoot > span[aria-hidden]{flex-shrink:0;}
+.mdPathHost,.mdFilesHost{flex-shrink:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 6px;border:1px solid var(--border);border-radius:999px;color:var(--text-soft);font-size:12px;}
+.mdPathHost{max-width:180px;}
+.mdFilesHost{max-width:50%;font-size:11px;padding:0 6px;}
+.mdFilesRootPath{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;direction:rtl;text-align:left;}
+.mdPathCopy.mdFilesRootCopy{width:20px;height:20px;margin-left:auto;font-size:12px;}
 .mdEditorToolbarRight{display:flex;gap:8px;flex-shrink:0;}
 .mdEditorBtn{padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:var(--accent);color:#fff;font-size:13px;cursor:pointer;white-space:nowrap;}
 .mdEditorBtn:hover:not(:disabled){opacity:0.85;}
@@ -163,7 +186,13 @@
 @media (max-width: 900px) {
   .mdEditorToolbar{align-items:flex-start;gap:8px;padding:8px 10px;}
   .mdEditorToolbarRight{align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px;}
-  .mobileDesktopHint{order:3;flex-basis:100%;text-align:right;}
+  .mdEditorToolbarLeft{overflow:hidden;}
+  .mdEditorToolbarRight{min-width:0;}
+  /* contain:inline-size stops the wrapped hint's text from widening the right group over the breadcrumb */
+  .mobileDesktopHint{order:3;flex-basis:100%;text-align:right;contain:inline-size;}
+  .mdPathFolders{flex-shrink:1000;}
+  .mdPathName{flex-shrink:1;min-width:0;overflow:hidden;text-overflow:ellipsis;}
+  .mdPathHost{max-width:96px;}
   .fileContentWithLines{font-size:12px;}
   .mobileMarkdownViewer{padding:16px 14px calc(24px + env(safe-area-inset-bottom));overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
   .mdFileSearch,.mdFileRefresh{min-height:44px;}

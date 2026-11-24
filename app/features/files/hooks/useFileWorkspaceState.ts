@@ -13,6 +13,7 @@ import {
   isImageFile,
   normalizeFileEditorMode,
   parseFileWorkspaceState,
+  getAgentHostLabel,
 } from '../fileWorkspaceHelpers';
 import type { FilePreviewKind, FileWorkspaceState, LeftSidebarTab, MdConflictState, MdEditorMode } from '../fileWorkspaceTypes';
 import type { MarkdownFileEntry, UseFileWorkspaceStateDeps, UseFileWorkspaceStateResult } from './fileWorkspaceHookTypes';
@@ -344,6 +345,7 @@ export function useFileWorkspaceState({
     scrollTop: workspaceScrollTop,
   };
   const diffLines = mdConflict ? buildSimpleLineDiff(mdConflict.serverContent, mdConflict.mineContent) : [];
+  const mdSelectedAgent = agents.find(agent => agent.id === mdSelectedAgentId);
 
   return {
     workspace,
@@ -364,6 +366,8 @@ export function useFileWorkspaceState({
     mdFilesError,
     mdFileError,
     mdSelectedAgentId,
+    mdAgentRoot: mdSelectedAgent?.cwd || '',
+    mdAgentHost: getAgentHostLabel(mdSelectedAgent),
     setMdSelectedAgentId,
     mdSelectedFile,
     setMdSelectedFile,

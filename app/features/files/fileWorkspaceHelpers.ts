@@ -1,3 +1,4 @@
+import type { Agent } from '../agents/agentTypes';
 import type { DiffLine, ExtractedAgentFileComment, FileTreeNode, FileWorkspaceState, LeftSidebarTab, MdEditorMode } from './fileWorkspaceTypes';
 
 export const FILE_REVIEW_LINE_HEIGHT = 20;
@@ -19,6 +20,29 @@ export function getFileIcon(name: string): string {
     txt: '📄', csv: '📊', env: '🔒', gitignore: '👁️',
   };
   return icons[ext] || '📄';
+}
+
+/** Splits a file opened from the agent's folder into breadcrumb parts and its full path, using the root's separator. */
+export function getAgentFilePathParts(root: string, relativePath: string) {
+  const separator = root.includes('\\') && !root.includes('/') ? '\\' : '/';
+  const segments = relativePath.split(/[\\/]+/).filter(Boolean);
+  const name = segments.pop() || relativePath;
+  const trimmedRoot = root.replace(/[\\/]+$/, '');
+  const relative = [...segments, name].join(separator);
+  return { root, folders: segments, name, fullPath: root ? `${trimmedRoot}${separator}${relative}` : relative };
+}
+
+export type AgentHostLabel = { icon: string; name: string; title: string };
+
+/** Names the machine hosting an agent's files: a relay node (🌐) or this server (🖥). */
+export function getAgentHostLabel(agent?: Pick<Agent, 'id' | 'relay' | 'relayConnectionName' | 'relayConnectionLabel' | 'hostName'>): AgentHostLabel | null {
+  if (!agent) return null;
+  if (agent.relay) {
+    const name = agent.hostName?.trim() || agent.relayConnectionLabel?.trim() || agent.relayConnectionName || agent.id;
+    return { icon: '🌐', name, title: `Remote node: ${name}` };
+  }
+  const name = agent.hostName?.trim();
+  return name ? { icon: '🖥', name, title: `Server: ${name}` } : null;
 }
 
 export function isLeftSidebarTab(value: unknown): value is LeftSidebarTab {

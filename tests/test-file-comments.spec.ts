@@ -2710,6 +2710,105 @@ test.describe('File Comments UI', () => {
     expect(commentToggleStyle).toEqual(activeFileStyle);
   });
 
+  test('file editor shows the full path as a breadcrumb and copies it', async ({ page }) => {
+    const agentId = 'path-breadcrumb-agent';
+    const root = 'Q:\\Repos\\Agents-Chat';
+    const longFolder = 'a-very-long-folder-name-that-keeps-going'.repeat(4);
+    const filePath = `docs/${longFolder}/setup-guide.md`;
+
+    await page.addInitScript(() => {
+      const copied: string[] = [];
+      (window as unknown as { __copied: string[] }).__copied = copied;
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { copied.push(text); } } });
+    });
+    await page.route('**/api/acp', async route => {
+      const body = route.request().postDataJSON() as { action?: string } | null;
+      if (body?.action === 'list-agents') {
+        await route.fulfill({ json: { ok: true, agents: [{ id: agentId, name: 'Path Agent', cwd: root }] } });
+        return;
+      }
+      await route.fulfill({ json: { ok: true } });
+    });
+    await page.route('**/api/markdown?**', async route => {
+      const requestedPath = new URL(route.request().url()).searchParams.get('path');
+      if (requestedPath) {
+        await route.fulfill({ json: { path: requestedPath, content: '# Setup', kind: 'markdown', mtime: new Date().toISOString() } });
+        return;
+      }
+      await route.fulfill({ json: { files: [{ path: filePath, name: 'setup-guide.md', mtime: new Date().toISOString() }] } });
+    });
+    await page.route('**/api/comments**', route => route.fulfill({ json: { ok: true, comments: [] } }));
+
+    await login(page);
+    await page.click('button.leftSidebarTab:has-text("Files")');
+    await selectFilesAgent(page, agentId);
+    await expect(page.locator('.mdFilesRootPath')).toHaveText(root);
+    await expect(page.locator('.mdFilesRoot')).toHaveAttribute('title', root);
+    const copyFolder = page.locator('.mdFilesRoot').getByRole('button', { name: 'Copy folder path' });
+    await expect(copyFolder).toHaveAttribute('title', `Copy folder path: ${root}`);
+    await expect(copyFolder).toBeInViewport({ ratio: 1 });
+    await copyFolder.click();
+    await expect(page.locator('.mdFilesRoot').getByRole('button', { name: 'Copied path' })).toBeVisible();
+
+    await page.locator('.mdFileSearch').fill('setup');
+    const docsRow = page.locator('.mdTreeRow', { has: page.locator('.mdTreeDir', { hasText: 'docs' }) });
+    const copyDocs = docsRow.getByRole('button', { name: 'Copy path', exact: true });
+    await expect(copyDocs).toHaveCSS('opacity', '0');
+    await docsRow.hover();
+    await expect(copyDocs).toHaveCSS('opacity', '1');
+    await expect(copyDocs).toHaveAttribute('title', `Copy path: ${root}\\docs`);
+    await copyDocs.click();
+    await expect(docsRow.getByRole('button', { name: 'Copied path' })).toBeVisible();
+    await page.locator('.mdTreeFile', { hasText: 'setup-guide.md' }).click();
+    const breadcrumb = page.locator('.mdEditorFilePath');
+    const fullPath = `${root}\\docs\\${longFolder}\\setup-guide.md`;
+    await expect(breadcrumb).toHaveAttribute('title', fullPath);
+    await expect(breadcrumb.locator('.mdPathFolder')).toHaveText([root, 'docs', longFolder]);
+    await expect(breadcrumb.locator('.mdPathName')).toHaveText('setup-guide.md');
+
+    // A long path is cut in the folders; the file name and copy button stay fully visible.
+    const fits = (selector: string) => breadcrumb.locator(selector).evaluate(el => el.scrollWidth <= el.clientWidth);
+    expect(await breadcrumb.locator('.mdPathFolders').evaluate(el => el.scrollWidth > el.clientWidth)).toBe(true);
+    expect(await fits('.mdPathName')).toBe(true);
+    await expect(breadcrumb.locator('.mdPathCopy')).toBeInViewport({ ratio: 1 });
+
+    await breadcrumb.getByRole('button', { name: 'Copy full path' }).click();
+    await expect(breadcrumb.getByRole('button', { name: 'Copied path' })).toBeVisible();
+    expect(await page.evaluate(() => (window as unknown as { __copied: string[] }).__copied)).toEqual([root, `${root}\\docs`, fullPath]);
+  });
+
+  test('file path names the machine hosting a remote agent', async ({ page }) => {
+    const agentId = 'path-host-agent';
+    await page.route('**/api/acp', async route => {
+      const body = route.request().postDataJSON() as { action?: string } | null;
+      if (body?.action === 'list-agents') {
+        await route.fulfill({ json: { ok: true, agents: [{ id: agentId, name: 'Remote Agent', relay: true, relayConnectionName: 'node-7', hostName: 'DevBox', cwd: '/srv/repo' }] } });
+        return;
+      }
+      await route.fulfill({ json: { ok: true } });
+    });
+    await page.route('**/api/markdown?**', async route => {
+      const requestedPath = new URL(route.request().url()).searchParams.get('path');
+      if (requestedPath) {
+        await route.fulfill({ json: { path: requestedPath, content: '# Notes', kind: 'markdown', mtime: new Date().toISOString() } });
+        return;
+      }
+      await route.fulfill({ json: { files: [{ path: 'notes.md', name: 'notes.md', mtime: new Date().toISOString() }] } });
+    });
+    await page.route('**/api/comments**', route => route.fulfill({ json: { ok: true, comments: [] } }));
+
+    await login(page);
+    await page.click('button.leftSidebarTab:has-text("Files")');
+    await selectFilesAgent(page, agentId);
+    await expect(page.locator('.mdFilesRoot .mdFilesHost')).toHaveText('🌐 DevBox');
+    await expect(page.locator('.mdFilesRoot')).toHaveAttribute('title', 'Remote node: DevBox\n/srv/repo');
+
+    await page.locator('.mdTreeFile', { hasText: 'notes.md' }).click();
+    const breadcrumb = page.locator('.mdEditorFilePath');
+    await expect(breadcrumb.locator('.mdPathHost')).toHaveText('🌐 DevBox');
+    await expect(breadcrumb).toHaveAttribute('title', 'DevBox: /srv/repo/notes.md');
+  });
+
   test('html files use preview only without review mode', async ({ page }) => {
     await page.route('**/api/acp', async route => {
       const body = route.request().postDataJSON() as { action?: string } | null;

@@ -3,11 +3,12 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { markdownToHtml, mdComponents } from '../../messages/markdownHelpers';
-import { FILE_REVIEW_LINE_HEIGHT, buildSimpleLineDiff, getFileIcon, isHtmlFile, isMarkdownFile } from '../fileWorkspaceHelpers';
+import { FILE_REVIEW_LINE_HEIGHT, buildSimpleLineDiff, isHtmlFile, isMarkdownFile } from '../fileWorkspaceHelpers';
 import type { FileComment } from '../fileWorkspaceTypes';
 import type { UseFileCommentsResult } from '../hooks/useFileComments';
 import type { UseFileWorkspaceStateResult } from '../hooks/useFileWorkspaceState';
 import type { UseLiveEditorSelectionResult } from '../hooks/useLiveEditorSelection';
+import { FilePathBreadcrumb } from './FilePathBreadcrumb';
 
 type FileEditorPanelProps = {
   workspace: UseFileWorkspaceStateResult;
@@ -156,7 +157,7 @@ export function FileEditorPanel({ workspace, comments, selection, mobileReadOnly
       )}
       <div className="mdEditorToolbar">
         <div className="mdEditorToolbarLeft">
-          <span className="mdEditorFilePath">{getFileIcon(filePath)} {filePath}</span>
+          <FilePathBreadcrumb host={workspace.mdAgentHost} root={workspace.mdAgentRoot} filePath={filePath} />
           {workspace.mdDirty && <span className="mdDirtyBadge">● Unsaved</span>}
         </div>
         <div className="mdEditorToolbarRight">

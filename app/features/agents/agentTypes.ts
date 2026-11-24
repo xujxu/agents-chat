@@ -21,6 +21,8 @@ export type Agent = {
   relay?: boolean;
   relayConnectionName?: string;
   relayConnectionLabel?: string;
+  /** Machine whose files the agent works on: the relay node's label, or this server's hostname. */
+  hostName?: string;
   owner?: string;
   canModify?: boolean;
   canTalk?: boolean;

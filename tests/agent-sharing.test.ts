@@ -196,4 +196,22 @@ test('agent sharing: invites, share links and expiry', async (t) => {
     assert.equal(agents.find((a) => a.id === 'shared')?.canTalk, false);
     assert.equal(getDefaultAgentId(agents), getDefaultAgentId(withoutFlag(agents)));
   });
+
+  await t.test('list-agents names the machine hosting each agent', async () => {
+    const acp = await import('../app/api/acp/route');
+    const { hostname } = await import('node:os');
+    configStore.createNode({ name: 'node-7', label: 'DevBox', owner: 'admin@contoso.com' });
+    configStore.createAgent({ id: 'remote', name: 'Remote', owner: 'admin@contoso.com', public: true, relay: true, relayConnectionName: 'node-7' });
+    configStore.createAgent({ id: 'remote-unlabeled', name: 'Remote 2', owner: 'admin@contoso.com', public: true, relay: true, relayConnectionName: 'node-unknown' });
+    const cookie = await encode({ token: { email: 'bob@contoso.com', sub: 'bob', provider: 'azure-ad' }, secret: process.env.NEXTAUTH_SECRET! });
+    const res = await acp.POST(new NextRequest('http://localhost/api/acp', {
+      method: 'POST',
+      headers: { cookie: `next-auth.session-token=${cookie}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'list-agents' }),
+    }));
+    const hosts = Object.fromEntries(((await res.json()).agents as { id: string; hostName?: string }[]).map((a) => [a.id, a.hostName]));
+    assert.equal(hosts.remote, 'DevBox');
+    assert.equal(hosts['remote-unlabeled'], 'node-unknown');
+    assert.equal(hosts.open, hostname());
+  });
 });
