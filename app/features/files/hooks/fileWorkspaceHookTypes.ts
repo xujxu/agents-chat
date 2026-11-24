@@ -18,6 +18,8 @@ export type UseFileWorkspaceStateDeps = {
   mounted: boolean;
   schedulerAgentId: string;
   onBeforeTabChange?: (tab: LeftSidebarTab) => void;
+  /** Agent of the chat the user is looking at; the Files tab follows it when opened. */
+  getCurrentAgentId?: () => string | null;
   onFileOpened?: (payload: FileOpenedPayload) => void | Promise<void>;
 };
 

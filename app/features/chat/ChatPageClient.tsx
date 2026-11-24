@@ -74,7 +74,7 @@ export function ChatPageClient() {
   const getSelectedModelIdForAgent = useCallback((agentId: string) => getSelectedModelIdRef.current(agentId), []);
   const chatLoadingRef = useRef<HTMLDivElement | null>(null);
   const chatSelection = useChatSelectionTransition();
-  const fileCommentsControllerRef = useRef<Pick<UseFileCommentsResult, 'resetForFileOpen'> | null>(null);
+  const fileCommentsControllerRef = useRef<Pick<UseFileCommentsResult, 'resetForFileOpen'> | null>(null), currentAgentIdRef = useRef<string | null>(null);
   const runtime = useChatRuntime({ userId, acp, agentsRef, agentsLoadingRef, chatAgentFilterRef, getSelectedModelIdForAgent, switchComposerChat: composer.switchDraftChat, effectiveLastUsedAgentRef, rememberLastUsedAgent, authStatus, reloadAgents });
   const { messages, chatHistory, currentChatId, activeSidebarChatId, chatName, runVersion, shareDialog, expandedMessages, initialChatRestore, retryInitialChatRestore, cancelInitialChatRestore, orchestrationMode, pendingWorkflowPlan, dismissedFollowUpOrchId, setDismissedFollowUpOrchId, dismissedWorkflowBarOrchId, setChatHistory, setChatName, setCurrentChatId, setActiveSidebarChatId, setShareDialog, setExpandedMessages, setOrchestrationMode, setPendingWorkflowPlan, currentChatIdRef, sessionRunsRef, currentAgentSessionsRef, inputHistoryRef, orchestrationsRef, addMessage, updateMessage, notifyRunStateChanged, dispatchToAgent, saveCurrentChatToHistory, clearChatMessages, shareCurrentChat, handleStop, retryFailedSend, sendWorkflowFollowUpReply, answerAgentUserRequest, dismissAgentUserRequest, fileCommentCallbacksRef, panelCallbacksRef, loadChat: runtimeLoadChat, createNewChat: runtimeCreateNewChat, renameChatById: runtimeRenameChatById, deleteChatById: runtimeDeleteChatById, handleSend: runtimeHandleSend, loadChatIntoCache, getChatSidebarStatus } = runtime;
   const [showWorkflowPicker, setShowWorkflowPicker] = useState(false);
@@ -134,7 +134,7 @@ export function ChatPageClient() {
   };
   panelCallbacksRef.current = { setSelectedAgentFilter: registry.setSelectedAgentFilter, setShowChatsPanel, setShowAgentsPanel, setOpenChatMenuId, setRenamingChatId, setRenameValue };
 
-  const fileWorkspace = useFileWorkspaceState({ agents, agentsLoading, mounted, schedulerAgentId: SCHEDULER_AGENT_ID, onBeforeTabChange: handleBeforeFileTabChange, onFileOpened: async ({ agentId, filePath, restoreScrollTop }) => {
+  const fileWorkspace = useFileWorkspaceState({ agents, agentsLoading, mounted, schedulerAgentId: SCHEDULER_AGENT_ID, onBeforeTabChange: handleBeforeFileTabChange, getCurrentAgentId: () => currentAgentIdRef.current, onFileOpened: async ({ agentId, filePath, restoreScrollTop }) => {
     await fileCommentsControllerRef.current?.resetForFileOpen(agentId, filePath, restoreScrollTop);
     if (mobile.isMobileLayout) mobile.close();
   } });
@@ -159,7 +159,7 @@ export function ChatPageClient() {
   const currentChatPrimaryAgentId = useMemo(() => chatHistory.find((chat) => chat.id === currentChatId)?.agentId || null, [chatHistory, currentChatId]);
   const rememberedComposerAgentId = getExistingAgentId(effectiveLastUsedAgentFor(currentChatId || null), agents);
   const effectiveComposerAgentId = mentionedAgentIds.length === 0 ? rememberedComposerAgentId || getExistingAgentId(currentChatPrimaryAgentId, agents) || getDefaultAgentId(agents) : null;
-  const composerTargetAgentIds = mentionedAgentIds.length > 0 ? mentionedAgentIds : effectiveComposerAgentId ? [effectiveComposerAgentId] : [];
+  currentAgentIdRef.current = rememberedComposerAgentId || getExistingAgentId(currentChatPrimaryAgentId, agents) || getExistingAgentId(registry.selectedAgentFilter, agents) || getDefaultAgentId(agents); const composerTargetAgentIds = mentionedAgentIds.length > 0 ? mentionedAgentIds : effectiveComposerAgentId ? [effectiveComposerAgentId] : [];
   const singleComposerAgentId = composerTargetAgentIds.length === 1 ? composerTargetAgentIds[0] : null;
   const slashMatch = useMemo(() => (singleComposerAgentId ? input.match(/^\/(\w*)$/) : null), [input, singleComposerAgentId]);
   const slashCommandsState = useSlashCommands({ acp, agentId: singleComposerAgentId, chatId: currentChatId || null });

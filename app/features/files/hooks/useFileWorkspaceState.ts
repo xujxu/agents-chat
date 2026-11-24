@@ -27,6 +27,7 @@ export function useFileWorkspaceState({
   mounted,
   schedulerAgentId,
   onBeforeTabChange,
+  getCurrentAgentId,
   onFileOpened,
 }: UseFileWorkspaceStateDeps): UseFileWorkspaceStateResult {
   const [leftSidebarTab, setLeftSidebarTabState] = useState<LeftSidebarTab>('chats');
@@ -77,27 +78,33 @@ export function useFileWorkspaceState({
     return buildFileTree(visibleFiles);
   }, [mdFileQuery, mdFilesList]);
 
+  const mdFilesRequestRef = useRef(0);
   const loadMdFiles = useCallback(async (agentId: string, diff = false) => {
+    const requestId = ++mdFilesRequestRef.current;
+    const isStale = () => requestId !== mdFilesRequestRef.current;
     setMdFilesLoading(true);
     setMdFilesError(null);
     try {
       const url = `/api/markdown?agentId=${encodeURIComponent(agentId)}${diff ? '&diff=true' : ''}`;
       const res = await fetch(url);
+      if (isStale()) return;
       if (res.status === 403) {
         setMdFilesError('unauthorized');
         return;
       }
       const data = await res.json();
+      if (isStale()) return;
       if (!res.ok || !Array.isArray(data.files)) {
         throw new Error(data.error || 'Unable to load files');
       }
       setMdFilesList(data.files);
       setMdExpandedDirs(new Set());
     } catch (err) {
+      if (isStale()) return;
       console.error('Failed to load files', err);
       setMdFilesError(err instanceof Error ? err.message : 'Unable to load files');
     } finally {
-      setMdFilesLoading(false);
+      if (!isStale()) setMdFilesLoading(false);
     }
   }, []);
 
@@ -241,18 +248,28 @@ export function useFileWorkspaceState({
     return mdEditContent;
   }, [mdEditContent, mdEditorMode, mdFileContent]);
 
+  // Opening Files shows the current chat's agent, unless a file is already open (keep the user's work).
+  const followCurrentAgent = useCallback(() => {
+    const agentId = getCurrentAgentId?.();
+    if (!agentId || agentId === mdSelectedAgentId || mdEditorOpen) return;
+    if (!agents.some(a => a.id === agentId && (a.cwd || a.relay) && a.id !== schedulerAgentId)) return;
+    selectMdAgent(agentId);
+  }, [agents, getCurrentAgentId, mdEditorOpen, mdSelectedAgentId, schedulerAgentId, selectMdAgent]);
+
   const switchLeftSidebarTab = useCallback((tab: LeftSidebarTab) => {
     if (tab === leftSidebarTab) return;
     onBeforeTabChange?.(tab);
     if (tab !== 'files') syncLiveToMarkdown();
+    else followCurrentAgent();
     setLeftSidebarTabState(tab);
-  }, [leftSidebarTab, onBeforeTabChange, syncLiveToMarkdown]);
+  }, [followCurrentAgent, leftSidebarTab, onBeforeTabChange, syncLiveToMarkdown]);
 
   const setLeftSidebarTab = useCallback((tab: LeftSidebarTab) => {
     if (tab === leftSidebarTab) return;
     onBeforeTabChange?.(tab);
+    if (tab === 'files') followCurrentAgent();
     setLeftSidebarTabState(tab);
-  }, [leftSidebarTab, onBeforeTabChange]);
+  }, [followCurrentAgent, leftSidebarTab, onBeforeTabChange]);
 
   const saveMdFile = useCallback(async (contentOverride?: string, mtimeOverride?: string | null) => {
     if (!mdSelectedAgentId || !mdSelectedFile) return;

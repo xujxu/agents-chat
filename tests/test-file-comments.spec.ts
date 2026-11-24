@@ -7,7 +7,7 @@
 
 import { test, expect, Page } from '@playwright/test';
 import { createFileComment, deleteFileComment, updateFileCommentStatus } from '../lib/chatStore';
-import { selectFilesAgent, filesAgentTrigger } from './themed-picker-helpers';
+import { selectFilesAgent, filesAgentTrigger, expectFilesAgentSelected } from './themed-picker-helpers';
 
 const BASE = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3010';
 const ADMIN_USER = 'admin';
@@ -2807,6 +2807,58 @@ test.describe('File Comments UI', () => {
     const breadcrumb = page.locator('.mdEditorFilePath');
     await expect(breadcrumb.locator('.mdPathHost')).toHaveText('🌐 DevBox');
     await expect(breadcrumb).toHaveAttribute('title', 'DevBox: /srv/repo/notes.md');
+  });
+
+  test('Files tab opens on the current agent folder without picking it again', async ({ page }) => {
+    const agents = [
+      { id: 'current-agent', name: 'Current Agent', cwd: '/srv/current', isDefault: true },
+      { id: 'other-agent', name: 'Other Agent', cwd: '/srv/other' },
+    ];
+    await page.route('**/api/acp', async route => {
+      const body = route.request().postDataJSON() as { action?: string } | null;
+      if (body?.action === 'list-agents') {
+        await route.fulfill({ json: { ok: true, agents } });
+        return;
+      }
+      await route.fulfill({ json: { ok: true } });
+    });
+    await page.route('**/api/markdown?**', async route => {
+      const url = new URL(route.request().url());
+      const requestedPath = url.searchParams.get('path');
+      if (requestedPath) {
+        await route.fulfill({ json: { path: requestedPath, content: '# Notes', kind: 'markdown', mtime: new Date().toISOString() } });
+        return;
+      }
+      const agentId = url.searchParams.get('agentId');
+      // The current agent's list answers slowly so a quick manual switch must not be overwritten by it.
+      if (agentId === 'current-agent') await new Promise(resolve => setTimeout(resolve, 600));
+      await route.fulfill({ json: { files: [{ path: `${agentId}.md`, name: `${agentId}.md`, mtime: new Date().toISOString() }] } });
+    });
+    await page.route('**/api/comments**', route => route.fulfill({ json: { ok: true, comments: [] } }));
+
+    await login(page);
+    await page.click('button.leftSidebarTab:has-text("Files")');
+    await expectFilesAgentSelected(page, 'current-agent');
+    await expect(page.locator('.mdFilesRootPath')).toHaveText('/srv/current');
+    await expect(page.locator('.mdTreeFile', { hasText: 'current-agent.md' })).toBeVisible();
+
+    // An open file keeps its agent when leaving and returning to Files.
+    await selectFilesAgent(page, 'other-agent');
+    await page.locator('.mdTreeFile', { hasText: 'other-agent.md' }).click();
+    await expect(page.locator('.mdEditorFilePath .mdPathName')).toHaveText('other-agent.md');
+    await page.click('button.leftSidebarTab:has-text("Chats")');
+    await page.click('button.leftSidebarTab:has-text("Files")');
+    await expectFilesAgentSelected(page, 'other-agent');
+
+    // With no file open, Files follows the current agent again; a quick manual switch still wins.
+    await page.locator('.mdEditorToolbarRight').getByRole('button', { name: 'Close' }).click();
+    await page.click('button.leftSidebarTab:has-text("Chats")');
+    await page.click('button.leftSidebarTab:has-text("Files")');
+    await expectFilesAgentSelected(page, 'current-agent');
+    await selectFilesAgent(page, 'other-agent');
+    await page.waitForTimeout(900);
+    await expect(page.locator('.mdTreeFile', { hasText: 'other-agent.md' })).toBeVisible();
+    await expect(page.locator('.mdTreeFile', { hasText: 'current-agent.md' })).toHaveCount(0);
   });
 
   test('html files use preview only without review mode', async ({ page }) => {
