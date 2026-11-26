@@ -38,8 +38,8 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
   '.tiff': 'image/tiff',
 };
 
-// Binary/non-text extensions to exclude from file listing
-const SKIP_EXTENSIONS = new Set([
+// Binary files are listed so the tree matches the folder, but they can't be previewed or saved as text.
+const UNPREVIEWABLE_EXTENSIONS = new Set([
   '.exe', '.dll', '.so', '.dylib', '.bin', '.obj', '.o', '.a', '.lib',
   '.zip', '.tar', '.gz', '.bz2', '.7z', '.rar', '.xz',
   '.mp3', '.mp4', '.wav', '.avi', '.mov', '.mkv', '.webm', '.flac',
@@ -47,8 +47,13 @@ const SKIP_EXTENSIONS = new Set([
   '.woff', '.woff2', '.ttf', '.eot', '.otf',
   '.pyc', '.pyo', '.class', '.jar',
   '.db', '.sqlite', '.sqlite3',
-  '.lock', '.map',
 ]);
+
+function unpreviewableError(filePath: string) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (!UNPREVIEWABLE_EXTENSIONS.has(ext)) return null;
+  return NextResponse.json({ error: `Preview isn't available for ${ext} files. Open it on the host machine.` }, { status: 415 });
+}
 
 /**
  * Resolve agent cwd and validate that a relative path is safely contained within it.
@@ -93,8 +98,6 @@ async function collectFiles(
       if (SKIP_DIRS.has(entry.name)) continue;
       await collectFiles(path.join(dir, entry.name), baseCwd, depth + 1, result);
     } else if (entry.isFile()) {
-      const ext = path.extname(entry.name).toLowerCase();
-      if (SKIP_EXTENSIONS.has(ext)) continue;
       const fullPath = path.join(dir, entry.name);
       try {
         const stat = await fs.stat(fullPath);
@@ -134,6 +137,11 @@ export async function GET(req: NextRequest) {
   }
 
   const agentCwd = agent.cwd;
+  const requestedPath = req.nextUrl.searchParams.get('path');
+  if (requestedPath) {
+    const unsupported = unpreviewableError(requestedPath);
+    if (unsupported) return unsupported;
+  }
 
   // ── Relay agents: proxy file operations via RPC ──
   if (agent.relay) {
@@ -220,8 +228,6 @@ export async function GET(req: NextRequest) {
         );
         const files: { path: string; name: string; mtime: string }[] = [];
         for (const relPath of changedPaths) {
-          const ext = path.extname(relPath).toLowerCase();
-          if (SKIP_EXTENSIONS.has(ext)) continue;
           const fullPath = path.resolve(agentCwd, relPath);
           if (!existsSync(fullPath)) continue;
           try {
@@ -329,6 +335,10 @@ export async function POST(req: NextRequest) {
   if (!canUseAgent(token, agent)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
+
+  // Writing text over a binary file would corrupt it.
+  const unsupported = unpreviewableError(filePath);
+  if (unsupported) return unsupported;
 
   // ── Relay agents: proxy write via RPC ──
   if (agent.relay) {
