@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { signOut, useSession } from 'next-auth/react';
+import { signOut, useStableSession } from './hooks/useStableSession';
 import { acpApi } from './chatApi';
 import { getDefaultAgentId, getExistingAgentId, getMentionedAgentIds, SCHEDULER_AGENT_ID } from './chatHelpers';
 import { useAgentRegistry } from './runtime/useAgentRegistry';
@@ -47,7 +47,7 @@ const CHAT_ACTION_MENU_WIDTH = 132;
 const CHAT_ACTION_MENU_HEIGHT = 124;
 
 export function ChatPageClient() {
-  const { data: session, status: authStatus } = useSession();
+  const { data: session, status: authStatus } = useStableSession();
   const isAdmin = (session?.user as any)?.role === 'admin';
   const userId = (session?.user as any)?.email || (session?.user as any)?.name || 'anonymous';
   const acp = useCallback((body: Record<string, unknown>) => acpApi({ ...body, userId }), [userId]);
