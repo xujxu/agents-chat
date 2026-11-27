@@ -33,18 +33,28 @@ const SKIP_DIRS = new Set([
   '.git', 'node_modules', '.next', 'dist', 'build', 'coverage',
   '.data', '.cache', '__pycache__', '.venv', 'venv', 'vendor',
 ]);
-const SKIP_EXTENSIONS = new Set([
+// Binary files are listed so the tree matches the folder, but they can't be previewed or saved as text.
+const UNPREVIEWABLE_EXTENSIONS = new Set([
   '.exe', '.dll', '.so', '.dylib', '.bin', '.obj', '.o', '.a', '.lib',
   '.zip', '.tar', '.gz', '.bz2', '.7z', '.rar', '.xz',
-  '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.svg', '.webp', '.tiff',
   '.mp3', '.mp4', '.wav', '.avi', '.mov', '.mkv', '.webm', '.flac',
   '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
   '.woff', '.woff2', '.ttf', '.eot', '.otf',
   '.pyc', '.pyo', '.class', '.jar',
   '.db', '.sqlite', '.sqlite3',
-  '.lock', '.map',
 ]);
+const IMAGE_MIME_TYPES = {
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
+  '.bmp': 'image/bmp', '.ico': 'image/x-icon', '.svg': 'image/svg+xml', '.webp': 'image/webp',
+  '.tif': 'image/tiff', '.tiff': 'image/tiff',
+};
+const MAX_IMAGE_PREVIEW_BYTES = 10 * 1024 * 1024;
 const MAX_DEPTH = 8;
+
+function unpreviewableError(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  return UNPREVIEWABLE_EXTENSIONS.has(ext) ? { error: `Preview isn't available for ${ext} files. Open it on the host machine.` } : null;
+}
 
 async function collectFiles(dir, rootCwd, depth, result) {
   if (depth > MAX_DEPTH) return;
@@ -55,8 +65,6 @@ async function collectFiles(dir, rootCwd, depth, result) {
       if (SKIP_DIRS.has(entry.name)) continue;
       await collectFiles(path.join(dir, entry.name), rootCwd, depth + 1, result);
     } else if (entry.isFile()) {
-      const ext = path.extname(entry.name).toLowerCase();
-      if (SKIP_EXTENSIONS.has(ext)) continue;
       const fullPath = path.join(dir, entry.name);
       try {
         const stat = await fsPromises.stat(fullPath);
@@ -96,8 +104,6 @@ async function handleFsListFiles(params) {
       );
       const files = [];
       for (const relPath of changedPaths) {
-        const ext = path.extname(relPath).toLowerCase();
-        if (SKIP_EXTENSIONS.has(ext)) continue;
         const fullPath = path.resolve(cwd, relPath);
         if (!fs.existsSync(fullPath)) continue;
         try {
@@ -126,10 +132,18 @@ async function handleFsReadTextFile(params) {
   const target = resolveAndValidate(cwd, filePath);
   if (!target) return { error: 'invalid path' };
   if (!fs.existsSync(target)) return { error: 'file not found' };
+  const unsupported = unpreviewableError(filePath);
+  if (unsupported) return unsupported;
   try {
-    const content = await fsPromises.readFile(target, 'utf-8');
     const stat = await fsPromises.stat(target);
     const ext = path.extname(target).toLowerCase();
+    const imageMimeType = IMAGE_MIME_TYPES[ext];
+    if (imageMimeType) {
+      if (stat.size > MAX_IMAGE_PREVIEW_BYTES) return { error: 'image is too large to preview' };
+      const bytes = await fsPromises.readFile(target);
+      return { content: `data:${imageMimeType};base64,${bytes.toString('base64')}`, mtime: stat.mtime.toISOString(), kind: 'image' };
+    }
+    const content = await fsPromises.readFile(target, 'utf-8');
     const kind = ext === '.html' || ext === '.htm' ? 'html' : ext === '.md' ? 'markdown' : 'text';
     return { content, mtime: stat.mtime.toISOString(), kind };
   } catch {
@@ -142,6 +156,8 @@ async function handleFsWriteTextFile(params) {
   const filePath = params.path;
   const content = params.content;
   if (!filePath || content === undefined) return { error: 'missing path or content' };
+  const unsupported = unpreviewableError(filePath);
+  if (unsupported) return unsupported;
   const target = resolveAndValidate(cwd, filePath);
   if (!target) return { error: 'invalid path' };
 

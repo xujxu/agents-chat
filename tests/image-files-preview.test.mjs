@@ -5,8 +5,8 @@ const routeSource = readFileSync(new URL('../app/api/markdown/route.ts', import.
 const fileEditorSource = readFileSync(new URL('../app/features/files/components/FileEditorPanel.tsx', import.meta.url), 'utf8');
 const fileHelpersSource = readFileSync(new URL('../app/features/files/fileWorkspaceHelpers.ts', import.meta.url), 'utf8');
 
-const skipExtensionsMatch = routeSource.match(/const SKIP_EXTENSIONS = new Set\(\[([\s\S]*?)\]\);/);
-assert.ok(skipExtensionsMatch, 'Files API should define skipped binary extensions explicitly');
+const skipExtensionsMatch = routeSource.match(/const UNPREVIEWABLE_EXTENSIONS = new Set\(\[([\s\S]*?)\]\);/);
+assert.ok(skipExtensionsMatch, 'Files API should define unpreviewable binary extensions explicitly');
 for (const extension of ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp']) {
   assert.doesNotMatch(
     skipExtensionsMatch[1],
