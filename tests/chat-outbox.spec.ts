@@ -395,6 +395,13 @@ test('a session check that fails during an outage keeps unsaved messages for the
   await composer.fill(text);
   await composer.press('Enter');
   await expect.poll(async () => (await recordsContaining(page, text)).length).toBeGreaterThan(0);
+  // Wait for the final save (which marks the message failed) to settle, so no
+  // in-flight save holds a lease when the page reloads.
+  await expect.poll(async () => {
+    const records = await recordsContaining(page, text);
+    return records.some(record => record.operation.chat.messages.some(message => message.sendStatus === 'failed'))
+      && records.every(record => !record.leaseOwner && Boolean(record.error));
+  }).toBe(true);
   expect((await recordsContaining(page, text)).map(record => record.userId)).not.toContain('anonymous');
   await page.unroute('**/api/auth/session', abort);
   await page.unroute('**/api/chats**', abortSaves);
