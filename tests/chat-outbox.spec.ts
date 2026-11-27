@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
@@ -335,6 +335,24 @@ test('IndexedDB reports blocked opens and closes a connection that succeeds afte
   expect(result.closed).toBe(true);
 });
 
+function recordsContaining(page: Page, text: string) {
+  return page.evaluate(content => new Promise<ChatOutboxEntry[]>((resolve, reject) => {
+    const request = indexedDB.open('agents-chat-outbox', 1);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const database = request.result;
+      const transaction = database.transaction('operations', 'readonly');
+      const rows = transaction.objectStore('operations').getAll();
+      transaction.oncomplete = () => {
+        resolve((rows.result as ChatOutboxEntry[]).filter(record =>
+          record.operation.chat.messages.some(message => message.content === content)));
+        database.close();
+      };
+      transaction.onabort = () => { reject(transaction.error); database.close(); };
+    };
+  }), text);
+}
+
 test('authenticated pending outbox survives a failed save and reload without dispatching', async ({ page }) => {
   const fixture = await installMobileChatFixture(page);
   await loginMobileFixture(page);
@@ -345,19 +363,7 @@ test('authenticated pending outbox survives a failed save and reload without dis
   await composer.fill(text);
   await composer.press('Enter');
   await expect(page.getByTestId('chat-outbox')).toBeVisible();
-  const pendingRecords = () => page.evaluate(() => new Promise<ChatOutboxEntry[]>((resolve, reject) => {
-    const request = indexedDB.open('agents-chat-outbox', 1);
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => {
-      const database = request.result;
-      const transaction = database.transaction('operations', 'readonly');
-      const rows = transaction.objectStore('operations').getAll();
-      transaction.oncomplete = () => { resolve(rows.result as ChatOutboxEntry[]); database.close(); };
-      transaction.onabort = () => { reject(transaction.error); database.close(); };
-    };
-  }));
-  const matchingRecords = async () => (await pendingRecords()).filter(record =>
-    record.operation.chat.messages.some(message => message.content === text));
+  const matchingRecords = () => recordsContaining(page, text);
   await expect.poll(async () => (await matchingRecords()).length).toBeGreaterThan(0);
   await expect.poll(async () => (await matchingRecords()).every(record =>
     !record.leaseOwner && Boolean(record.error))).toBe(true);
@@ -370,4 +376,28 @@ test('authenticated pending outbox survives a failed save and reload without dis
   expect(after.map(record => record.operation)).toEqual(before.map(record => record.operation));
   expect(after.map(record => record.userId)).toEqual(before.map(record => record.userId));
   expect(fixture.acpRequests.filter(request => request.action === 'send')).toHaveLength(0);
+});
+
+test('a session check that fails during an outage keeps unsaved messages for the signed-in user', async ({ page }) => {
+  await installMobileChatFixture(page);
+  await loginMobileFixture(page);
+  const abort = (route: Route) => route.abort('connectionrefused');
+  const abortSaves = (route: Route) =>
+    route.request().method() === 'POST' ? route.abort('connectionrefused') : route.fallback();
+  await page.route('**/api/auth/session', abort);
+  await page.route('**/api/chats**', abortSaves);
+  // Returning to the tab makes next-auth refetch the session; the failed fetch clears it.
+  const sessionCheck = page.waitForRequest('**/api/auth/session');
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await sessionCheck;
+  const text = 'Sent while the server was down';
+  const composer = page.locator('textarea.composerTextarea');
+  await composer.fill(text);
+  await composer.press('Enter');
+  await expect.poll(async () => (await recordsContaining(page, text)).length).toBeGreaterThan(0);
+  expect((await recordsContaining(page, text)).map(record => record.userId)).not.toContain('anonymous');
+  await page.unroute('**/api/auth/session', abort);
+  await page.unroute('**/api/chats**', abortSaves);
+  await page.reload();
+  await expect.poll(async () => (await recordsContaining(page, text)).length, { timeout: 15_000 }).toBe(0);
 });
